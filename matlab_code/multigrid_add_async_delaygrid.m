@@ -11,12 +11,22 @@ function [u, iter, model_time, solve_hist] = multigrid_add_async_delaygrid(A, u,
     G = cell(q,1);
     I = cell(q,1);
     e_write = cell(q,1);
-    last_correct_read = ones(q,1);
+    
+    if (strcmp(async_type, 'general') == 1)
+        last_correct_read = cell(q,1);
+    elseif (strcmp(async_type, 'general-atomic') == 1)
+        last_correct_read = ones(q,1);
+    end
     
     u_hist = u;
     
     r = (b - A{1}*u);
     for k = 1:q
+        
+        if (strcmp(async_type, 'general') == 1)
+            last_correct_read{k} = ones(N(1),1);
+        end
+        
         if (strcmp(mg_type, 'multadd') == 1)
             d{k} = (1./diag(A{k}));
 
@@ -52,10 +62,11 @@ function [u, iter, model_time, solve_hist] = multigrid_add_async_delaygrid(A, u,
                         u_read = zeros(N(1),1);
                         if (strcmp(async_type, 'general') == 1)
                             %randi_low = num_correct-max_read_delay+1;
-                            randi_low = max([last_correct_read(k) num_correct-max_read_delay+1]);
                             randi_high = num_correct+1;
                             for i = 1:N(1)
+                                randi_low = max([last_correct_read{k}(i) num_correct-max_read_delay+1]);
                                 c_read = randi([randi_low randi_high]);
+                                last_correct_read{k}(i) = c_read;
                                 u_read(i) = u_hist(i,c_read);
                             end
                         elseif (strcmp(async_type, 'general-atomic') == 1)
@@ -125,7 +136,9 @@ function [u, iter, model_time, solve_hist] = multigrid_add_async_delaygrid(A, u,
                 u = u + e_write{k};
                 u_hist = [u_hist u];
                 num_correct = num_correct + 1;
-                last_correct_read(k) = num_correct;
+                if (strcmp(async_type, 'general-atomic') == 1)
+                    last_correct_read(k) = num_correct;
+                end
             end
             
             model_time = model_time + 1;
