@@ -1,4 +1,6 @@
-function [u, iter, model_time, solve_hist] = multigrid_add_async_delaygrid(A, u, b, P, R, N, q, max_iter, num_relax, max_grid_wait, max_read_delay)
+function [u, iter, model_time, solve_hist] = ...
+    multigrid_add_async_delaygrid(A, u, b, P, R, N, q, max_iter, num_relax, max_grid_wait, max_grid_read_delay, max_smooth_wait, max_smooth_read_delay)
+
     global smooth_flag;
     global async_flag;
     global mg_type;
@@ -61,17 +63,17 @@ function [u, iter, model_time, solve_hist] = multigrid_add_async_delaygrid(A, u,
                     if (async_flag == 1)
                         u_read = zeros(N(1),1);
                         if (strcmp(async_type, 'general') == 1)
-                            %randi_low = num_correct-max_read_delay+1;
+                            %randi_low = num_correct-max_grid_read_delay+1;
                             randi_high = num_correct+1;
                             for i = 1:N(1)
-                                randi_low = max([last_correct_read{k}(i) num_correct-max_read_delay+1]);
+                                randi_low = max([last_correct_read{k}(i) num_correct-max_grid_read_delay+1]);
                                 c_read = randi([randi_low randi_high]);
                                 last_correct_read{k}(i) = c_read;
                                 u_read(i) = u_hist(i,c_read);
                             end
                         elseif (strcmp(async_type, 'general-atomic') == 1)
-                            %randi_low = num_correct-max_read_delay+1;
-                            randi_low = max([last_correct_read(k) num_correct-max_read_delay+1]);
+                            %randi_low = num_correct-max_grid_read_delay+1;
+                            randi_low = max([last_correct_read(k) num_correct-max_grid_read_delay+1]);
                             randi_high = num_correct+1;
                             c_read = randi([randi_low randi_high]);
                             u_read = u_hist(:,c_read);
@@ -101,6 +103,12 @@ function [u, iter, model_time, solve_hist] = multigrid_add_async_delaygrid(A, u,
                             elseif (strcmp(smooth_flag, 'wJacobi') == 1)
                                 e = Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, omega);
                                 e = Jacobi(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax, omega);
+                            elseif (strcmp(smooth_flag, 'async-Jacobi') == 1)
+                                e = async_Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, 1);
+                                e = async_Jacobi(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, 1);
+                            elseif (strcmp(smooth_flag, 'async-wJacobi') == 1)
+                                e = async_Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, omega);
+                                e = async_Jacobi(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, omega);
                             else
                                 e = GS_lower(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax);
                                 e = GS_lower(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax);
