@@ -13,7 +13,7 @@ function [A, P, R, N, q] = setup_multigrid_2D(a)
     R = cell(q,1);
     P = cell(q,1);
     for i = (q-1):-1:1
-        P{i} = prolong(sqrt(N(i)));
+        P{i} = prolong_2D(sqrt(N(i)));
         R{i+1} = P{i}'/4;
     end
     R{1} = speye(N(1));
