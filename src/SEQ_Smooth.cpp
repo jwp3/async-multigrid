@@ -17,7 +17,6 @@ void SEQ_Jacobi(AllData *all_data,
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
 
    double smooth_weight = all_data->input.smooth_weight;
-   double one_minus_weight = 1.0 - smooth_weight;
 
    for (int i = 0; i < n; i++) u_prev[i] = u[i];
    for (int k = 0; k < num_sweeps; k++){

@@ -18,71 +18,95 @@ void HypreParToSeq(void *amg_vdata,
    hypre_ParAMGData *amg_data = (hypre_ParAMGData*)amg_vdata;
   // printf("%d\n", hypre_ParAMGDataNumLevels(amg_data));
    
-   hypre_ParCSRMatrix **parA_array;
-   hypre_ParCSRMatrix **parP_array;
-   hypre_ParCSRMatrix **parR_array;
+   hypre_ParCSRMatrix **parA;
+   hypre_ParCSRMatrix **parP;
+   hypre_ParCSRMatrix **parR;
 
-   parA_array = hypre_ParAMGDataAArray(amg_data);
-   parP_array = hypre_ParAMGDataPArray(amg_data);
-   parR_array = hypre_ParAMGDataRArray(amg_data);
+   parA = hypre_ParAMGDataAArray(amg_data);
+   parP = hypre_ParAMGDataPArray(amg_data);
+   parR = hypre_ParAMGDataRArray(amg_data);
 
    all_data->grid.num_levels = (int)hypre_ParAMGDataNumLevels(amg_data);
    all_data->grid.n = (int *)malloc(all_data->grid.num_levels * sizeof(int));
 
-   all_data->matrix.A_array =
+   all_data->matrix.A =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix));
-   all_data->matrix.P_array =
+   all_data->matrix.P =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix));
-   all_data->matrix.R_array =
+   all_data->matrix.R =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix));
 
-   all_data->vector.f_array =
+   all_data->vector.f =
       (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
-   all_data->vector.u_array =
+   all_data->vector.u =
       (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
-   all_data->vector.u_prev_array =
+   all_data->vector.u_prev =
       (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
-   all_data->vector.y_array =
+   all_data->vector.u_coarse =
       (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
-   all_data->vector.r_array =
+   all_data->vector.u_coarse_prev =
       (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
-   all_data->vector.e_array =
+   all_data->vector.u_fine =
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+   all_data->vector.u_fine_prev =
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+   all_data->vector.y =
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+   all_data->vector.r =
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+   all_data->vector.r_coarse =
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+   all_data->vector.r_fine =
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+   all_data->vector.e =
       (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
 
-      all_data->matrix.A_array[level] = hypre_ParCSRMatrixDiag(parA_array[level]);      
+      all_data->matrix.A[level] = hypre_ParCSRMatrixDiag(parA[level]);      
       if (level < all_data->grid.num_levels-1){
-         all_data->matrix.P_array[level] = hypre_ParCSRMatrixDiag(parP_array[level]);
-         all_data->matrix.R_array[level] = hypre_ParCSRMatrixDiag(parR_array[level]);
+         all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
+         all_data->matrix.R[level] = hypre_ParCSRMatrixDiag(parR[level]);
       }
 
-      n = hypre_CSRMatrixNumRows(all_data->matrix.A_array[level]);
-      nnz = hypre_CSRMatrixNumNonzeros(all_data->matrix.A_array[level]);
+      n = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+      nnz = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
 
-      all_data->vector.f_array[level] =
+      all_data->vector.f[level] =
          (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u_array[level] =
+      all_data->vector.u[level] =
          (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u_prev_array[level] =
+      all_data->vector.u_prev[level] =
          (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.y_array[level] =
+      all_data->vector.u_coarse[level] =
          (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.r_array[level] =
+      all_data->vector.u_coarse_prev[level] =
          (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.e_array[level] =
+      all_data->vector.u_fine[level] =
+         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      all_data->vector.u_fine_prev[level] =
+         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      all_data->vector.y[level] =
+         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      all_data->vector.r[level] =
+         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      all_data->vector.r_coarse[level] =
+         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      all_data->vector.r_fine[level] =
+         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      all_data->vector.e[level] =
          (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
 
       all_data->grid.n[level] = n;
 
       if (level == 0){
-         for (int i = 0; i < n; i++) all_data->vector.f_array[level][i] = 1;
+         for (int i = 0; i < n; i++) all_data->vector.f[level][i] = 1;
       }
       if (level == all_data->grid.num_levels-1){
          
-         HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A_array[level]);
-         HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A_array[level]);
-         HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A_array[level]);
+         HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
+         HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A[level]);
+         HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
 
          all_data->pardiso.csr.n = n;
          all_data->pardiso.csr.nnz = nnz;

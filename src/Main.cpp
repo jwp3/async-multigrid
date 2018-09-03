@@ -55,11 +55,13 @@ int main (int argc, char *argv[])
    AllData all_data;
    all_data.input.num_pre_smooth_sweeps = 1;
    all_data.input.num_post_smooth_sweeps = 1;
+   all_data.input.num_fine_smooth_sweeps = 1;
+   all_data.input.num_coarse_smooth_sweeps = 1;
    all_data.input.num_cycles = 20;
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
    all_data.input.print_reshist_flag = 1;
-   all_data.input.smooth_weight = 1;
+   all_data.input.smooth_weight = .8;
 
 
    /* Parse command line */
@@ -87,6 +89,14 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          all_data.input.num_cycles = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-num_smooth_sweeps") == 0)
+      {
+         arg_index++;
+         all_data.input.num_pre_smooth_sweeps = atoi(argv[arg_index]);
+         all_data.input.num_post_smooth_sweeps = atoi(argv[arg_index]);
+         all_data.input.num_fine_smooth_sweeps = atoi(argv[arg_index]);
+         all_data.input.num_coarse_smooth_sweeps = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-mxl") == 0)
       {
@@ -236,9 +246,10 @@ int main (int argc, char *argv[])
       HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
 
       SEQ_Setup(solver, &all_data);
-      SEQ_Vcycle(&all_data);
+     // SEQ_Vcycle(&all_data);
+      SEQ_AFACx_Vcycle(&all_data);
 
-      HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
+     // HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
 
       /* Run info - needed logging turned on */
       HYPRE_BoomerAMGGetNumIterations(solver, &num_iterations);

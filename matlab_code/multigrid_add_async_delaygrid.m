@@ -1,4 +1,4 @@
-function [u, model_time, grid_wait_list, solve_hist] = ...
+function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
     multigrid_add_async_delaygrid(A, u, b, P, R, N, q, max_iter, num_relax, max_grid_wait, max_grid_read_delay, max_smooth_wait, max_smooth_read_delay, grid_wait_list)
 
     global smooth_type;
@@ -103,7 +103,7 @@ function [u, model_time, grid_wait_list, solve_hist] = ...
                         else
                             f = e;
                             if (strcmp(smooth_type, 'Jacobi') == 1)
-                                e = Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, 2*num_relax, 1);
+                                e = Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, 1);
                                 e = Jacobi(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax, 1);
                             elseif (strcmp(smooth_type, 'wJacobi') == 1)
                                 e = Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, 2*num_relax, omega);
@@ -115,7 +115,7 @@ function [u, model_time, grid_wait_list, solve_hist] = ...
                                 e = async_Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, omega);
                                 e = async_Jacobi(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, omega);
                             else
-                                e = GS_lower(A{k+1}, zeros(N(k+1),1), R{k+1}*e, 2*num_relax);
+                                e = GS_lower(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax);
                                 e = GS_lower(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax);
                             end
                         end

@@ -45,6 +45,8 @@ typedef struct{
 typedef struct{
    int num_pre_smooth_sweeps;
    int num_post_smooth_sweeps;
+   int num_fine_smooth_sweeps;
+   int num_coarse_smooth_sweeps;
    int num_cycles;
    double tol;
    int format_output_flag;
@@ -55,12 +57,18 @@ typedef struct{
 }InputData;
 
 typedef struct{
-   HYPRE_Real **f_array;
-   HYPRE_Real **u_array;
-   HYPRE_Real **u_prev_array;
-   HYPRE_Real **y_array;
-   HYPRE_Real **r_array;
-   HYPRE_Real **e_array;
+   HYPRE_Real **f;
+   HYPRE_Real **u;
+   HYPRE_Real **u_prev;
+   HYPRE_Real **u_fine;
+   HYPRE_Real **u_fine_prev;
+   HYPRE_Real **u_coarse;
+   HYPRE_Real **u_coarse_prev;
+   HYPRE_Real **y;
+   HYPRE_Real **r;
+   HYPRE_Real **r_fine;
+   HYPRE_Real **r_coarse;
+   HYPRE_Real **e;
 }VectorData;
 
 typedef struct{
@@ -94,9 +102,9 @@ typedef struct{
 }PardisoData;
 
 typedef struct{
-   hypre_CSRMatrix **A_array;
-   hypre_CSRMatrix **P_array;
-   hypre_CSRMatrix **R_array;
+   hypre_CSRMatrix **A;
+   hypre_CSRMatrix **P;
+   hypre_CSRMatrix **R;
 }MatrixData;
 
 typedef struct{
