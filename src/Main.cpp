@@ -32,6 +32,7 @@ int main (int argc, char *argv[])
    int ilower, iupper;
    int local_size, extra;
 
+   double start;
 
    HYPRE_IJMatrix A;
    HYPRE_ParCSRMatrix parcsr_A;
@@ -208,7 +209,7 @@ int main (int argc, char *argv[])
    HYPRE_IJVectorInitialize(x);
 
    double *rhs_values, *x_values;
-   int    *rows;
+   int *rows;
 
    rhs_values =  (double*) calloc(local_size, sizeof(double));
    x_values =  (double*) calloc(local_size, sizeof(double));
@@ -244,7 +245,9 @@ int main (int argc, char *argv[])
    HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
    HYPRE_BoomerAMGSetAggNumLevels(solver, agg_num_levels);
 
+   start = omp_get_wtime();
    HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
+   all_data.output.hypre_setup_wtime = omp_get_wtime() - start;
 
    if (hypre_solve_flag){
       HYPRE_BoomerAMGSetNumSweeps(solver, 1);
@@ -256,7 +259,7 @@ int main (int argc, char *argv[])
       HYPRE_BoomerAMGGetNumIterations(solver, &num_iterations);
       HYPRE_BoomerAMGGetFinalRelativeResidualNorm(solver, &final_res_norm);
       if (all_data.input.format_output_flag){
-         printf("HYPRE Solve Stats:\n");
+         printf("HYPRE solve stats:\n");
          printf("\tIterations = %d\n", num_iterations);
          printf("\tRelative residual 2-norm = %e\n", final_res_norm);
       }
@@ -265,9 +268,32 @@ int main (int argc, char *argv[])
       }
    }
 
-   SEQ_Setup(solver, &all_data);
    omp_set_num_threads(all_data.input.num_threads);
+   start = omp_get_wtime();
+   SEQ_Setup(solver, &all_data);
+   all_data.output.setup_wtime = omp_get_wtime() - start;
+   start = omp_get_wtime();
    SMEM_Solve(&all_data);
+   all_data.output.solve_wtime = omp_get_wtime() - start;
+
+   char print_str[1000];
+   if (all_data.input.format_output_flag == 0){
+      strcpy(print_str, "\nSetup stats:\n"
+                        "\tHypre setup time = %e\n"
+                        "\tRemaining setup time = %e\n"
+                        "\tTotal setup time = %e\n"
+                        "\nSolve stats:\n"
+                        "\tTotal solve time = %e\n");
+   }
+   else{
+      strcpy(print_str, "%e %e %e %e\n");
+   }
+
+   printf(print_str,
+          all_data.output.hypre_setup_wtime,
+          all_data.output.setup_wtime,
+          all_data.output.hypre_setup_wtime + all_data.output.hypre_setup_wtime,
+          all_data.output.solve_wtime);
 
    HYPRE_BoomerAMGDestroy(solver);
 

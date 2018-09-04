@@ -41,7 +41,10 @@ typedef struct{
    double *residual_wtime;
    double *restrict_wtime;
    double *prolong_wtime;
+   double setup_wtime;
+   double hypre_setup_wtime;
    double solve_wtime;
+   double hypre_solve_wtime;
    double r_norm2;
    double r0_norm2;
 }OutputData;

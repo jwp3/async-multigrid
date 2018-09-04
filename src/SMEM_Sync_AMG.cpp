@@ -17,7 +17,8 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                               all_data->vector.f[fine_grid],
                                               all_data->vector.u[fine_grid],
                                               all_data->vector.u_prev[fine_grid],
-                                              all_data->input.num_pre_smooth_sweeps);
+                                              all_data->input.num_pre_smooth_sweeps,
+                                              fine_grid);
          }
          else{
             SMEM_Sync_Parfor_Jacobi(all_data,
@@ -82,7 +83,8 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                               all_data->vector.f[fine_grid],
                                               all_data->vector.u[fine_grid],
                                               all_data->vector.u_prev[fine_grid],
-                                              all_data->input.num_post_smooth_sweeps);
+                                              all_data->input.num_post_smooth_sweeps,
+                                              fine_grid);
          }
          else{
             SMEM_Sync_Parfor_Jacobi(all_data,
@@ -152,7 +154,8 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                                  all_data->vector.r[coarse_grid],
                                                  all_data->vector.u_coarse[coarse_grid],
                                                  all_data->vector.u_coarse_prev[coarse_grid],
-                                                 all_data->input.num_coarse_smooth_sweeps);
+                                                 all_data->input.num_coarse_smooth_sweeps,
+                                                 coarse_grid);
             }
             else {
                SMEM_Sync_Parfor_Jacobi(all_data,
@@ -178,7 +181,8 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                                  all_data->vector.r_fine[fine_grid],
                                                  all_data->vector.u_fine[fine_grid],
                                                  all_data->vector.u_fine_prev[fine_grid],
-                                                 all_data->input.num_fine_smooth_sweeps);
+                                                 all_data->input.num_fine_smooth_sweeps,
+                                                 fine_grid);
             }
             else {
                SMEM_Sync_Parfor_Jacobi(all_data,

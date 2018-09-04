@@ -38,28 +38,16 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
                                        HYPRE_Real *f,
                                        HYPRE_Real *u,
                                        HYPRE_Real *u_prev,
-                                       int num_sweeps)
+                                       int num_sweeps,
+                                       int level)
 {
    HYPRE_Int ii;
    HYPRE_Real res;
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
-   int num_threads = all_data->input.num_threads;
    int t = omp_get_thread_num();
-
-   int ns, ne;
-   int size = n/num_threads;
-   int rest = n - size*num_threads;
-   if (t < rest)
-   {
-      ns = t*size + t;
-      ne = (t + 1)*size + t + 1;
-   }
-   else
-   {
-      ns = t*size + rest;
-      ne = (t + 1)*size + rest;
-   }
+   int ns = all_data->grid.ns[level][t];
+   int ne = all_data->grid.ne[level][t];
 
    for (int k = 0; k < num_sweeps; k++){
       #pragma omp for

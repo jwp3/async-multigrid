@@ -15,6 +15,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
                                        HYPRE_Real *f,
                                        HYPRE_Real *u,
                                        HYPRE_Real *u_prev,
-                                       int num_sweeps);
+                                       int num_sweeps,
+                                       int level);
 
 #endif

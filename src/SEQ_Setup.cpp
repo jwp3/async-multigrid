@@ -35,38 +35,42 @@ void HypreParToSeq(void *amg_vdata,
 
    all_data->grid.num_levels = (int)hypre_ParAMGDataNumLevels(amg_data);
    all_data->grid.n = (int *)malloc(all_data->grid.num_levels * sizeof(int));
+   if (all_data->input.num_threads > 1){
+      all_data->grid.ns = (int **)malloc(all_data->grid.num_levels * sizeof(int *));
+      all_data->grid.ne = (int **)malloc(all_data->grid.num_levels * sizeof(int *));
+   }
 
    all_data->matrix.A =
-      (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix));
+      (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
    all_data->matrix.P =
-      (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix));
+      (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
    all_data->matrix.R =
-      (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix));
+      (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
 
    all_data->vector.f =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.u =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.u_prev =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.u_coarse =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.u_coarse_prev =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.u_fine =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.u_fine_prev =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.y =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.r =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.r_coarse =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.r_fine =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.e =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real));
+      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
 
@@ -107,6 +111,30 @@ void HypreParToSeq(void *amg_vdata,
          (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
 
       all_data->grid.n[level] = n;
+      if (all_data->input.num_threads > 1){
+         all_data->grid.ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+         all_data->grid.ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+      
+         #pragma omp parallel
+         {
+            int num_threads = all_data->input.num_threads;
+            int t = omp_get_thread_num();
+
+            int ns, ne;
+            int size = n/num_threads;
+            int rest = n - size*num_threads;
+            if (t < rest)
+            {
+               all_data->grid.ns[level][t] = t*size + t;
+               all_data->grid.ne[level][t] = (t + 1)*size + t + 1;
+            }
+            else
+            {
+               all_data->grid.ns[level][t] = t*size + rest;
+               all_data->grid.ne[level][t] = (t + 1)*size + rest;
+            }
+         }
+      }
 
       if (level == 0){
          for (int i = 0; i < n; i++) all_data->vector.f[level][i] = 1;
