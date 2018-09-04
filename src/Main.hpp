@@ -27,7 +27,7 @@
 
 #define JACOBI 0
 #define GAUSS_SEIDEL 1
-#define ASYNC_GS 2
+#define HYBRID_JACOBI_GAUSS_SEIDEL 2
 
 #define MULT 0
 #define AFACX 1
@@ -120,6 +120,8 @@ typedef struct{
 typedef struct{
    int num_levels;
    int *n;
+   int **ns;
+   int **ne;
 }GridData;
 
 typedef struct{

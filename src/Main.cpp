@@ -54,6 +54,7 @@ int main (int argc, char *argv[])
    HYPRE_Int agg_num_levels = 0;
    HYPRE_Int coarsen_type = 10;
    int hypre_print_level = 0;
+   int hypre_solve_flag = 0;
 
    AllData all_data;
    all_data.input.num_pre_smooth_sweeps = 1;
@@ -64,7 +65,7 @@ int main (int argc, char *argv[])
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
    all_data.input.print_reshist_flag = 1;
-   all_data.input.smooth_weight = 1;
+   all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
    all_data.input.solver = MULT;
 
@@ -83,12 +84,29 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-smoother") == 0)
       {
          arg_index++;
-         all_data.input.smoother = atoi(argv[arg_index]);
+         if (strcmp(argv[arg_index], "j") == 0){
+            all_data.input.smoother = JACOBI;
+         }
+         else if (strcmp(argv[arg_index], "gs") == 0){
+            all_data.input.smoother = GAUSS_SEIDEL;
+         }
+         else if (strcmp(argv[arg_index], "hybrid_jgs") == 0){
+            all_data.input.smoother = HYBRID_JACOBI_GAUSS_SEIDEL;
+         }
       }
       else if (strcmp(argv[arg_index], "-solver") == 0)
       {
          arg_index++;
          all_data.input.solver = atoi(argv[arg_index]);
+         if (strcmp(argv[arg_index], "mult") == 0){
+            all_data.input.solver = MULT;
+         }
+         else if (strcmp(argv[arg_index], "mult_add") == 0){
+            all_data.input.solver = MULT_ADD;
+         }
+         else if (strcmp(argv[arg_index], "afacx") == 0){
+            all_data.input.solver = AFACX;
+         }
       }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
@@ -121,6 +139,10 @@ int main (int argc, char *argv[])
       {
          hypre_print_level = 3;
       }
+      else if (strcmp(argv[arg_index], "-hypre_solve") == 0)
+      {
+         hypre_solve_flag = 3;
+      }
       else if (strcmp(argv[arg_index], "-help") == 0)
       {
          print_usage = 1;
@@ -149,13 +171,9 @@ int main (int argc, char *argv[])
       return (0);
    }
 
-   /* Preliminaries: want at least one processor per row */
    if (n*n < num_procs) n = (int)sqrt((double)num_procs) + 1;
-   N = n*n; /* global number of rows */
+   N = n*n;
 
-   /* Each processor knows only of its own rows - the range is denoted by ilower
-      and upper.  Here we partition the rows. We account for the fact that
-      N may not divide evenly by the number of processors. */
    local_size = N/num_procs;
    extra = N - local_size*num_procs;
 
@@ -166,44 +184,21 @@ int main (int argc, char *argv[])
    iupper += hypre_min(myid+1, extra);
    iupper = iupper - 1;
 
-   /* How many rows do I have? */
    local_size = iupper - ilower + 1;
 
-   /* Create the matrix.
-      Note that this is a square matrix, so we indicate the row partition
-      size twice (since number of rows = number of cols) */
    HYPRE_IJMatrixCreate(MPI_COMM_WORLD, ilower, iupper, ilower, iupper, &A);
 
-   /* Choose a parallel csr format storage (see the User's Manual) */
    HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
 
-   /* Initialize before setting coefficients */
    HYPRE_IJMatrixInitialize(A);
 
    Laplacian_2D_5pt(&A, n, N, ilower, iupper);
 
-   /* Assemble after setting the coefficients */
    HYPRE_IJMatrixAssemble(A);
 
-   /* Note: for the testing of small problems, one may wish to read
-      in a matrix in IJ format (for the format, see the output files
-      from the -print_system option).
-      In this case, one would use the following routine:
-      HYPRE_IJMatrixRead( <filename>, MPI_COMM_WORLD,
-                          HYPRE_PARCSR, &A );
-      <filename>  = IJ.A.out to read in what has been printed out
-      by -print_system (processor numbers are omitted).
-      A call to HYPRE_IJMatrixRead is an *alternative* to the
-      following sequence of HYPRE_IJMatrix calls:
-      Create, SetObjectType, Initialize, SetValues, and Assemble
-   */
-
-
-   /* Get the parcsr matrix object to use */
    HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
 
 
-   /* Create the rhs and solution */
    HYPRE_IJVectorCreate(MPI_COMM_WORLD, ilower, iupper,&b);
    HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
    HYPRE_IJVectorInitialize(b);
@@ -240,12 +235,10 @@ int main (int argc, char *argv[])
    HYPRE_IJVectorAssemble(x);
    HYPRE_IJVectorGetObject(x, (void **) &par_x);
    
-   /* Create solver */
    HYPRE_BoomerAMGCreate(&solver);
 
-   /* Set some parameters (See Reference Manual for more parameters) */
-   HYPRE_BoomerAMGSetPrintLevel(solver, hypre_print_level);  /* print solve info + parameters */
-   HYPRE_BoomerAMGSetOldDefault(solver); /* Falgout coarsening with modified classical interpolaiton */
+   HYPRE_BoomerAMGSetPrintLevel(solver, hypre_print_level);
+   HYPRE_BoomerAMGSetOldDefault(solver);
 
    HYPRE_BoomerAMGSetCoarsenType(solver, coarsen_type);
    HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
@@ -253,13 +246,28 @@ int main (int argc, char *argv[])
 
    HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
 
+   if (hypre_solve_flag){
+      HYPRE_BoomerAMGSetNumSweeps(solver, 1);
+      HYPRE_BoomerAMGSetRelaxType(solver, 1);
+      HYPRE_BoomerAMGSetTol(solver, 1e-7);
+      HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
+      int num_iterations;
+      double final_res_norm;
+      HYPRE_BoomerAMGGetNumIterations(solver, &num_iterations);
+      HYPRE_BoomerAMGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+      if (all_data.input.format_output_flag){
+         printf("HYPRE Solve Stats:\n");
+         printf("\tIterations = %d\n", num_iterations);
+         printf("\tRelative residual 2-norm = %e\n", final_res_norm);
+      }
+      else{
+         printf("%d, %e\n", num_iterations, final_res_norm);
+      }
+   }
+
    SEQ_Setup(solver, &all_data);
    omp_set_num_threads(all_data.input.num_threads);
    SMEM_Solve(&all_data);
-
-  // HYPRE_BoomerAMGSetRelaxType(solver, 1);   /* G-S/Jacobi hybrid relaxation */
-  // HYPRE_BoomerAMGSetTol(solver, 1e-7);      /* conv. tolerance */
-  // HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
 
    HYPRE_BoomerAMGDestroy(solver);
 

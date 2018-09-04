@@ -11,12 +11,22 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
       for (int level = 0; level < all_data->grid.num_levels-1; level++){
          fine_grid = level;
          coarse_grid = level + 1;
-         SMEM_Sync_Parfor_Jacobi(all_data,
-                                 all_data->matrix.A[fine_grid],
-                                 all_data->vector.f[fine_grid],
-                                 all_data->vector.u[fine_grid],
-                                 all_data->vector.u_prev[fine_grid],
-                                 all_data->input.num_pre_smooth_sweeps);
+         if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
+            SMEM_Sync_HybridJacobiGaussSeidel(all_data,
+                                              all_data->matrix.A[fine_grid],
+                                              all_data->vector.f[fine_grid],
+                                              all_data->vector.u[fine_grid],
+                                              all_data->vector.u_prev[fine_grid],
+                                              all_data->input.num_pre_smooth_sweeps);
+         }
+         else{
+            SMEM_Sync_Parfor_Jacobi(all_data,
+                                    all_data->matrix.A[fine_grid],
+                                    all_data->vector.f[fine_grid],
+                                    all_data->vector.u[fine_grid],
+                                    all_data->vector.u_prev[fine_grid],
+                                    all_data->input.num_pre_smooth_sweeps);
+         }
          SMEM_Sync_Parfor_Residual(all_data,
                                    all_data->matrix.A[fine_grid],
                                    all_data->vector.f[fine_grid],
@@ -66,12 +76,22 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
          for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
             all_data->vector.u[fine_grid][i] += all_data->vector.e[fine_grid][i];
          }
-         SMEM_Sync_Parfor_Jacobi(all_data,
-                    all_data->matrix.A[fine_grid],
-                    all_data->vector.f[fine_grid],
-                    all_data->vector.u[fine_grid],
-                    all_data->vector.u_prev[fine_grid],
-                    all_data->input.num_post_smooth_sweeps);
+         if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
+            SMEM_Sync_HybridJacobiGaussSeidel(all_data,
+                                              all_data->matrix.A[fine_grid],
+                                              all_data->vector.f[fine_grid],
+                                              all_data->vector.u[fine_grid],
+                                              all_data->vector.u_prev[fine_grid],
+                                              all_data->input.num_post_smooth_sweeps);
+         }
+         else{
+            SMEM_Sync_Parfor_Jacobi(all_data,
+                                    all_data->matrix.A[fine_grid],
+                                    all_data->vector.f[fine_grid],
+                                    all_data->vector.u[fine_grid],
+                                    all_data->vector.u_prev[fine_grid],
+                                    all_data->input.num_post_smooth_sweeps);
+         }
       }
    }
 }
@@ -85,9 +105,9 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
          fine_grid = level;
          coarse_grid = level + 1;
          SMEM_Sync_Parfor_MatVec(all_data,
-                    all_data->matrix.R[fine_grid],
-                    all_data->vector.r[fine_grid],
-                    all_data->vector.r[coarse_grid]);
+                                 all_data->matrix.R[fine_grid],
+                                 all_data->vector.r[fine_grid],
+                                 all_data->vector.r[coarse_grid]);
       }
    }
 
@@ -126,12 +146,22 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                all_data->vector.u_coarse[coarse_grid][i] = 0;
             }
 
-            SMEM_Sync_Parfor_Jacobi(all_data,
-                                    all_data->matrix.A[coarse_grid],
-                                    all_data->vector.r[coarse_grid],
-                                    all_data->vector.u_coarse[coarse_grid],
-                                    all_data->vector.u_coarse_prev[coarse_grid],
-                                    all_data->input.num_coarse_smooth_sweeps);
+            if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
+               SMEM_Sync_HybridJacobiGaussSeidel(all_data,
+                                                 all_data->matrix.A[coarse_grid],
+                                                 all_data->vector.r[coarse_grid],
+                                                 all_data->vector.u_coarse[coarse_grid],
+                                                 all_data->vector.u_coarse_prev[coarse_grid],
+                                                 all_data->input.num_coarse_smooth_sweeps);
+            }
+            else {
+               SMEM_Sync_Parfor_Jacobi(all_data,
+                                       all_data->matrix.A[coarse_grid],
+                                       all_data->vector.r[coarse_grid],
+                                       all_data->vector.u_coarse[coarse_grid],
+                                       all_data->vector.u_coarse_prev[coarse_grid],
+                                       all_data->input.num_coarse_smooth_sweeps);
+            }
             SMEM_Sync_Parfor_MatVec(all_data,
                                     all_data->matrix.P[fine_grid],
                                     all_data->vector.u_coarse[coarse_grid],
@@ -142,13 +172,22 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                       all_data->vector.e[fine_grid],
                                       all_data->vector.y[fine_grid],
                                       all_data->vector.r_fine[fine_grid]);
-            SMEM_Sync_Parfor_Jacobi(all_data,
-                                    all_data->matrix.A[fine_grid],
-                                    all_data->vector.r_fine[fine_grid],
-                                    all_data->vector.u_fine[fine_grid],
-                                    all_data->vector.u_fine_prev[fine_grid],
-                                    all_data->input.num_fine_smooth_sweeps);
-
+            if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
+               SMEM_Sync_HybridJacobiGaussSeidel(all_data,
+                                                 all_data->matrix.A[fine_grid],
+                                                 all_data->vector.r_fine[fine_grid],
+                                                 all_data->vector.u_fine[fine_grid],
+                                                 all_data->vector.u_fine_prev[fine_grid],
+                                                 all_data->input.num_fine_smooth_sweeps);
+            }
+            else {
+               SMEM_Sync_Parfor_Jacobi(all_data,
+                                       all_data->matrix.A[fine_grid],
+                                       all_data->vector.r_fine[fine_grid],
+                                       all_data->vector.u_fine[fine_grid],
+                                       all_data->vector.u_fine_prev[fine_grid],
+                                       all_data->input.num_fine_smooth_sweeps);
+            }
          }
 
 
@@ -162,9 +201,9 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                fine_grid = inner_level - 1;
                coarse_grid = inner_level;
                SMEM_Sync_Parfor_MatVec(all_data,
-                          all_data->matrix.P[fine_grid],
-                          all_data->vector.e[coarse_grid],
-                          all_data->vector.e[fine_grid]);
+                                       all_data->matrix.P[fine_grid],
+                                       all_data->vector.e[coarse_grid],
+                                       all_data->vector.e[fine_grid]);
             }
          }
          fine_grid = 0;

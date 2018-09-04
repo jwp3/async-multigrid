@@ -1,6 +1,5 @@
 #include "Main.hpp"
 
-
 void SEQ_Jacobi(AllData *all_data,
                 hypre_CSRMatrix *A,
                 HYPRE_Real *f,
