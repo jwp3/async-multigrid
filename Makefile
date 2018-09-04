@@ -2,10 +2,14 @@ SRC_DIR=src/
 
 CPP_FILES = $(SRC_DIR)Laplacian.cpp \
 	    $(SRC_DIR)Misc.cpp \
-	    $(SRC_DIR)SEQ_AMG.cpp \
-	    $(SRC_DIR)SEQ_Smooth.cpp \
-	    $(SRC_DIR)SEQ_MatVec.cpp \
 	    $(SRC_DIR)SEQ_Setup.cpp \
+	    $(SRC_DIR)SEQ_MatVec.cpp \
+            $(SRC_DIR)SEQ_Smooth.cpp \
+            $(SRC_DIR)SEQ_AMG.cpp \
+            $(SRC_DIR)SMEM_MatVec.cpp \
+            $(SRC_DIR)SMEM_Smooth.cpp \
+            $(SRC_DIR)SMEM_Sync_AMG.cpp \
+            $(SRC_DIR)SMEM_Solve.cpp \
 
 CPP_COMPILE=g++ -fopenmp -O3
 ICPC_COMPILE=icpc -qopenmp -std=c++11 -O3 -Wall

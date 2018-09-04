@@ -21,6 +21,7 @@
 #include "SEQ_MatVec.hpp"
 #include "SEQ_AMG.hpp"
 #include "SEQ_Setup.hpp"
+#include "SMEM_Solve.hpp"
 
 
 int main (int argc, char *argv[])
@@ -31,8 +32,6 @@ int main (int argc, char *argv[])
    int ilower, iupper;
    int local_size, extra;
 
-   int solver_id;
-   int max_levels;
 
    HYPRE_IJMatrix A;
    HYPRE_ParCSRMatrix parcsr_A;
@@ -48,9 +47,13 @@ int main (int argc, char *argv[])
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
-   /* Default problem parameters */
    n = 33;
-   solver_id = 0;
+   /* Hypre parameters */
+   int max_levels = 20;
+   int solver_id = 0;
+   HYPRE_Int agg_num_levels = 0;
+   HYPRE_Int coarsen_type = 10;
+   int hypre_print_level = 0;
 
    AllData all_data;
    all_data.input.num_pre_smooth_sweeps = 1;
@@ -61,7 +64,9 @@ int main (int argc, char *argv[])
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
    all_data.input.print_reshist_flag = 1;
-   all_data.input.smooth_weight = .8;
+   all_data.input.smooth_weight = 1;
+   all_data.input.smoother = JACOBI;
+   all_data.input.solver = MULT;
 
 
    /* Parse command line */
@@ -75,15 +80,15 @@ int main (int argc, char *argv[])
          arg_index++;
          n = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-solver") == 0)
-      {
-         arg_index++;
-         solver_id = atoi(argv[arg_index]);
-      }
       else if (strcmp(argv[arg_index], "-smoother") == 0)
       {
          arg_index++;
          all_data.input.smoother = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-solver") == 0)
+      {
+         arg_index++;
+         all_data.input.solver = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
@@ -103,6 +108,19 @@ int main (int argc, char *argv[])
          arg_index++;
          max_levels = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-num_threads") == 0)
+      {
+         arg_index++;
+         all_data.input.num_threads = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-format_output") == 0)
+      {
+         all_data.input.format_output_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-hypre_print") == 0)
+      {
+         hypre_print_level = 3;
+      }
       else if (strcmp(argv[arg_index], "-help") == 0)
       {
          print_usage = 1;
@@ -110,6 +128,9 @@ int main (int argc, char *argv[])
       }
       arg_index++;
    }
+
+   omp_set_num_threads(1);
+   mkl_set_num_threads(1);
 
    if ((print_usage) && (myid == 0))
    {
@@ -191,29 +212,26 @@ int main (int argc, char *argv[])
    HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
    HYPRE_IJVectorInitialize(x);
 
-   /* Set the rhs values to h^2 and the solution to zero */
+   double *rhs_values, *x_values;
+   int    *rows;
+
+   rhs_values =  (double*) calloc(local_size, sizeof(double));
+   x_values =  (double*) calloc(local_size, sizeof(double));
+   rows = (int*) calloc(local_size, sizeof(int));
+
+   for (int i = 0; i < local_size; i++)
    {
-      double *rhs_values, *x_values;
-      int    *rows;
-
-      rhs_values =  (double*) calloc(local_size, sizeof(double));
-      x_values =  (double*) calloc(local_size, sizeof(double));
-      rows = (int*) calloc(local_size, sizeof(int));
-
-      for (int i = 0; i < local_size; i++)
-      {
-         rhs_values[i] = 1;
-         x_values[i] = 0.0;
-         rows[i] = ilower + i;
-      }
-
-      HYPRE_IJVectorSetValues(b, local_size, rows, rhs_values);
-      HYPRE_IJVectorSetValues(x, local_size, rows, x_values);
-
-      free(x_values);
-      free(rhs_values);
-      free(rows);
+      rhs_values[i] = 1;
+      x_values[i] = 0.0;
+      rows[i] = ilower + i;
    }
+
+   HYPRE_IJVectorSetValues(b, local_size, rows, rhs_values);
+   HYPRE_IJVectorSetValues(x, local_size, rows, x_values);
+
+   free(x_values);
+   free(rhs_values);
+   free(rows);
 
 
    HYPRE_IJVectorAssemble(b);
@@ -221,50 +239,29 @@ int main (int argc, char *argv[])
 
    HYPRE_IJVectorAssemble(x);
    HYPRE_IJVectorGetObject(x, (void **) &par_x);
+   
+   /* Create solver */
+   HYPRE_BoomerAMGCreate(&solver);
 
-   if (solver_id == 0)
-   {
+   /* Set some parameters (See Reference Manual for more parameters) */
+   HYPRE_BoomerAMGSetPrintLevel(solver, hypre_print_level);  /* print solve info + parameters */
+   HYPRE_BoomerAMGSetOldDefault(solver); /* Falgout coarsening with modified classical interpolaiton */
 
-      int num_iterations;
-      double final_res_norm;
+   HYPRE_BoomerAMGSetCoarsenType(solver, coarsen_type);
+   HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
+   HYPRE_BoomerAMGSetAggNumLevels(solver, agg_num_levels);
 
-      
-      /* Create solver */
-      HYPRE_BoomerAMGCreate(&solver);
+   HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
 
-      /* Set some parameters (See Reference Manual for more parameters) */
-      HYPRE_BoomerAMGSetPrintLevel(solver, 3);  /* print solve info + parameters */
-      HYPRE_BoomerAMGSetOldDefault(solver); /* Falgout coarsening with modified classical interpolaiton */
-      HYPRE_BoomerAMGSetRelaxType(solver, 1);   /* G-S/Jacobi hybrid relaxation */
-      HYPRE_BoomerAMGSetRelaxOrder(solver, 1);   /* uses C/F relaxation */
-      HYPRE_BoomerAMGSetNumSweeps(solver, 1);   /* Sweeeps on each level */
-      HYPRE_BoomerAMGSetMaxLevels(solver, 20);  /* maximum number of levels */
-      HYPRE_BoomerAMGSetTol(solver, 1e-7);      /* conv. tolerance */
+   SEQ_Setup(solver, &all_data);
+   omp_set_num_threads(all_data.input.num_threads);
+   SMEM_Solve(&all_data);
 
-      HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
+  // HYPRE_BoomerAMGSetRelaxType(solver, 1);   /* G-S/Jacobi hybrid relaxation */
+  // HYPRE_BoomerAMGSetTol(solver, 1e-7);      /* conv. tolerance */
+  // HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
 
-      HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
-
-      SEQ_Setup(solver, &all_data);
-     // SEQ_Vcycle(&all_data);
-      SEQ_AFACx_Vcycle(&all_data);
-
-     // HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
-
-      /* Run info - needed logging turned on */
-      HYPRE_BoomerAMGGetNumIterations(solver, &num_iterations);
-      HYPRE_BoomerAMGGetFinalRelativeResidualNorm(solver, &final_res_norm);
-      if (myid == 0)
-      {
-         printf("\n");
-         printf("Iterations = %d\n", num_iterations);
-         printf("Final Relative Residual Norm = %e\n", final_res_norm);
-         printf("\n");
-      }
-
-      /* Destroy solver */
-      HYPRE_BoomerAMGDestroy(solver);
-   }
+   HYPRE_BoomerAMGDestroy(solver);
 
    /* Clean up */
    HYPRE_IJMatrixDestroy(A);

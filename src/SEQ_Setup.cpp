@@ -5,6 +5,13 @@
 void HypreParToSeq(void *amg_vdata,
                    AllData *all_data);
 
+void StdVector_to_CSR(hypre_CSRMatrix *A,
+                      std::vector<std::vector<HYPRE_Int>> j_vector,
+                      std::vector<std::vector<HYPRE_Real>> data_vector);
+
+void CSR_Transpose(hypre_CSRMatrix *A,
+                   hypre_CSRMatrix *AT);
+
 void SEQ_Setup(void *amg_vdata,
                AllData *all_data)
 {
@@ -66,7 +73,9 @@ void HypreParToSeq(void *amg_vdata,
       all_data->matrix.A[level] = hypre_ParCSRMatrixDiag(parA[level]);      
       if (level < all_data->grid.num_levels-1){
          all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
-         all_data->matrix.R[level] = hypre_ParCSRMatrixDiag(parR[level]);
+         all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+         CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
+        // all_data->matrix.R[level] = hypre_ParCSRMatrixDiag(parR[level]);
       }
 
       n = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
@@ -174,4 +183,73 @@ void HypreParToSeq(void *amg_vdata,
          all_data->pardiso.info.phase = 33; 
       }
    }
+}
+
+void CSR_Transpose(hypre_CSRMatrix *A,
+                   hypre_CSRMatrix *AT)
+{
+   int j;
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+
+   HYPRE_Int A_num_rows = hypre_CSRMatrixNumRows(A);
+   HYPRE_Int A_num_cols = hypre_CSRMatrixNumCols(A);
+  
+   hypre_CSRMatrixNumRows(AT) = A_num_cols;
+   hypre_CSRMatrixNumCols(AT) = A_num_rows;
+   hypre_CSRMatrixNumNonzeros(AT) = hypre_CSRMatrixNumNonzeros(A);
+
+   std::vector<std::vector<HYPRE_Int>> 
+      j_vector(A_num_cols, std::vector<HYPRE_Int>(0));
+   std::vector<std::vector<HYPRE_Real>> 
+      data_vector(A_num_cols, std::vector<HYPRE_Real>(0));
+
+   
+   
+   for (int i = 0; i < A_num_rows; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         j = A_j[jj];
+         j_vector[j].push_back(i);
+         data_vector[j].push_back(A_data[jj]);
+      }
+   }
+   
+   StdVector_to_CSR(AT, j_vector, data_vector); 
+}
+
+void StdVector_to_CSR(hypre_CSRMatrix *A,
+                      std::vector<std::vector<HYPRE_Int>> j_vector,
+                      std::vector<std::vector<HYPRE_Real>> data_vector)
+{
+   int k;
+
+   HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
+   HYPRE_Int num_cols = hypre_CSRMatrixNumCols(A);
+   HYPRE_Int nnz = hypre_CSRMatrixNumNonzeros(A);
+
+   HYPRE_Int *A_i = (HYPRE_Int *)calloc(num_rows+1, sizeof(HYPRE_Int));
+   HYPRE_Int *A_j = (HYPRE_Int *)calloc(nnz, sizeof(HYPRE_Int));
+   HYPRE_Real *A_data = (HYPRE_Real *)calloc(nnz, sizeof(HYPRE_Real));
+
+
+   A_i[0] = 0;
+   for (int i = 0; i < num_rows; i++){
+      A_i[i+1] = A_i[i] + j_vector[i].size();
+   }
+
+   k = 0;
+   for (int i = 0; i < num_rows; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         A_j[k] = j_vector[i].back();
+         A_data[k] = data_vector[i].back();
+         j_vector[i].pop_back();
+         data_vector[i].pop_back();
+         k++;
+      }
+   }
+
+   hypre_CSRMatrixI(A) = A_i;
+   hypre_CSRMatrixJ(A) = A_j;
+   hypre_CSRMatrixData(A) = A_data;
 }

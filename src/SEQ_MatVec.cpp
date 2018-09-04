@@ -11,6 +11,8 @@ void SEQ_MatVec(AllData *all_data,
    HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
    HYPRE_Real *A_data = hypre_CSRMatrixData(A);
    HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
+   HYPRE_Int num_cols = hypre_CSRMatrixNumCols(A);
+
    
    for (int i = 0; i < num_rows; i++){
       Axi = 0.0;

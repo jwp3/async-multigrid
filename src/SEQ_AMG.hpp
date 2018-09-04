@@ -1,5 +1,5 @@
-#ifndef SEQ_MULTIGRID_HPP
-#define SEQ_MULTIGRID_HPP
+#ifndef SEQ_AMG_HPP
+#define SEQ_AMG_HPP
 
 #include "Main.hpp"
 

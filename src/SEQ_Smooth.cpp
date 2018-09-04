@@ -18,8 +18,8 @@ void SEQ_Jacobi(AllData *all_data,
 
    double smooth_weight = all_data->input.smooth_weight;
 
-   for (int i = 0; i < n; i++) u_prev[i] = u[i];
    for (int k = 0; k < num_sweeps; k++){
+      for (int i = 0; i < n; i++) u_prev[i] = u[i];
       for (int i = 0; i < n; i++){
          if (A_data[A_i[i]] != 0.0)
          {

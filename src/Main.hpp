@@ -25,9 +25,13 @@
 #include "HYPRE_parcsr_mv.h"
 #include "HYPRE_parcsr_ls.h"
 
-#define GAUSS_SEIDEL 0
-#define JACOBI 1
-#define IBLOCK_JACOBI_GS 2
+#define JACOBI 0
+#define GAUSS_SEIDEL 1
+#define ASYNC_GS 2
+
+#define MULT 0
+#define AFACX 1
+#define MULT_ADD 2
 
 typedef struct{
    int *smooth_relax;
@@ -54,6 +58,7 @@ typedef struct{
    int num_threads;
    double smooth_weight;
    int smoother;
+   int solver;
 }InputData;
 
 typedef struct{
