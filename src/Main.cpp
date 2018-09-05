@@ -58,6 +58,8 @@ int main (int argc, char *argv[])
    int hypre_solve_flag = 0;
 
    AllData all_data;
+   all_data.input.async_flag = 0;
+   all_data.input.thread_part_type = ONE_LEVEL;
    all_data.input.num_pre_smooth_sweeps = 1;
    all_data.input.num_post_smooth_sweeps = 1;
    all_data.input.num_fine_smooth_sweeps = 1;
@@ -108,6 +110,11 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "afacx") == 0){
             all_data.input.solver = AFACX;
          }
+         else if (strcmp(argv[arg_index], "async_afacx") == 0){
+            all_data.input.solver = ASYNC_AFACX;
+            all_data.input.async_flag = 1;
+            all_data.input.thread_part_type = ALL_LEVELS;
+         }
       }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
@@ -126,6 +133,17 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          max_levels = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-thread_level_part_type") == 0)
+      {
+         arg_index++;
+         all_data.input.num_threads = atoi(argv[arg_index]);
+         if (strcmp(argv[arg_index], "one_level") == 0){
+            all_data.input.thread_part_type = ONE_LEVEL;
+         }
+         else if (strcmp(argv[arg_index], "all_levels") == 0){
+            all_data.input.thread_part_type = ALL_LEVELS;
+         }
       }
       else if (strcmp(argv[arg_index], "-num_threads") == 0)
       {

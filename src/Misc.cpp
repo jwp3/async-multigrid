@@ -107,3 +107,36 @@ void QuicksortPair_int_dbl(int *x, double *y, int left, int right)
       QuicksortPair_int_dbl(x, y, j+1, right);
    }
 }
+
+/* untested barrier code */
+void SMEM_Barrier(AllData *all_data,
+                  int level)
+{
+   int root = all_data->thread.barrier_root;
+   int tid = omp_get_thread_num();
+   int t;
+
+   all_data->thread.barrier_flags[tid] = 1;
+   while (1){
+      if (tid == root){
+         int s = 0;
+         for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
+            t = all_data->thread.level_threads[level][i];
+            s += all_data->thread.barrier_flags[t];
+         }
+         if (s == all_data->thread.level_threads[level].size() - 1){
+            for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
+               t = all_data->thread.level_threads[level][i];
+               all_data->thread.barrier_flags[t] = all_data->thread.level_threads[level].size();
+            }
+            break;
+         }
+      }
+      else{
+         if (all_data->thread.barrier_flags[tid] == all_data->thread.level_threads[level].size()){
+            break;
+         }
+      }
+   }
+   all_data->thread.barrier_flags[tid] = 0;
+}

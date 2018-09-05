@@ -32,6 +32,10 @@
 #define MULT 0
 #define AFACX 1
 #define MULT_ADD 2
+#define ASYNC_AFACX 3
+
+#define ONE_LEVEL 0
+#define ALL_LEVELS 1
 
 typedef struct{
    int *smooth_relax;
@@ -55,13 +59,15 @@ typedef struct{
    int num_fine_smooth_sweeps;
    int num_coarse_smooth_sweeps;
    int num_cycles;
+   int num_threads;
    double tol;
    int format_output_flag;
    int print_reshist_flag;
-   int num_threads;
    double smooth_weight;
    int smoother;
    int solver;
+   int async_flag;
+   int thread_part_type;
 }InputData;
 
 typedef struct{
@@ -116,15 +122,21 @@ typedef struct{
 }MatrixData;
 
 typedef struct{
-   int *thread_lev;
-   int *n;
+   std::vector<std::vector<int>> thread_levels;
+   std::vector<std::vector<int>> level_threads;
+   int barrier_root;
+   int *barrier_flags;
+   int **A_ns;
+   int **A_ne;
+   int **R_ns;
+   int **R_ne;
+   int **P_ns;
+   int **P_ne;
 }ThreadData;
 
 typedef struct{
    int num_levels;
    int *n;
-   int **ns;
-   int **ne;
 }GridData;
 
 typedef struct{

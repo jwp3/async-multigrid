@@ -17,7 +17,7 @@ void SMEM_Solve(AllData *all_data)
       Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
    if (all_data->input.print_reshist_flag == 1 &&
        all_data->input.format_output_flag == 0){
-      printf("Iters\tRel. Res. 2-norm\n"
+      printf("\nIters\tRel. Res. 2-norm\n"
              "-----\t----------------\n");
    }
    if (all_data->input.print_reshist_flag == 1){

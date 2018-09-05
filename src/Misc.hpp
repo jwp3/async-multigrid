@@ -15,4 +15,7 @@ double SumDbl(double *x, int n);
 
 void QuicksortPair_int_dbl(int *x, double *y, int left, int right);
 
+void SMEM_Barrier(AllData *all_data,
+                  int level);
+
 #endif
