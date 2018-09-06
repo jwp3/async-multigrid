@@ -28,11 +28,16 @@ void SMEM_Solve(AllData *all_data)
      
       }
       else if (all_data->input.solver == AFACX){
-         if (all_data->input.num_threads == 1){
-            SEQ_AFACx_Vcycle(all_data);
+         if (all_data->input.thread_part_type == ALL_LEVELS){
+            SMEM_Sync_AFACx_Vcycle(all_data);
          }
          else{
-            SMEM_Sync_Parfor_AFACx_Vcycle(all_data);
+            if (all_data->input.num_threads == 1){
+               SEQ_AFACx_Vcycle(all_data);
+            }
+            else{
+               SMEM_Sync_Parfor_AFACx_Vcycle(all_data);
+            }
          }
       }
       else{

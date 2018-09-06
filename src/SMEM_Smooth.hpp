@@ -10,12 +10,30 @@ void SMEM_Sync_Parfor_Jacobi(AllData *all_data,
                              HYPRE_Real *u_prev,
                              int num_sweeps);
 
+void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
+                                              hypre_CSRMatrix *A,
+                                              HYPRE_Real *f,
+                                              HYPRE_Real *u,
+                                              HYPRE_Real *u_prev,
+                                              int num_sweeps,
+                                              int level);
+
+void SMEM_Sync_Jacobi(AllData *all_data,
+                      hypre_CSRMatrix *A,
+                      HYPRE_Real *f,
+                      HYPRE_Real *u,
+                      HYPRE_Real *u_prev,
+                      int num_sweeps,
+                      int thread_level,
+                      int ns, int ne);
+
 void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
                                        hypre_CSRMatrix *A,
                                        HYPRE_Real *f,
                                        HYPRE_Real *u,
                                        HYPRE_Real *u_prev,
                                        int num_sweeps,
-                                       int level);
+                                       int thread_level,
+                                       int ns, int ne);
 
 #endif

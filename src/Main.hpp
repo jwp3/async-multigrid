@@ -143,6 +143,7 @@ typedef struct{
    ThreadData thread;
    MatrixData data;
    VectorData vector;
+   VectorData *level_vector;
    MatrixData matrix;
    InputData input;
    OutputData output;

@@ -134,14 +134,13 @@ int main (int argc, char *argv[])
          arg_index++;
          max_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-thread_level_part_type") == 0)
+      else if (strcmp(argv[arg_index], "-thread_level_part") == 0)
       {
          arg_index++;
-         all_data.input.num_threads = atoi(argv[arg_index]);
-         if (strcmp(argv[arg_index], "one_level") == 0){
+         if (strcmp(argv[arg_index], "one") == 0){
             all_data.input.thread_part_type = ONE_LEVEL;
          }
-         else if (strcmp(argv[arg_index], "all_levels") == 0){
+         else if (strcmp(argv[arg_index], "all") == 0){
             all_data.input.thread_part_type = ALL_LEVELS;
          }
       }
@@ -286,10 +285,13 @@ int main (int argc, char *argv[])
       }
    }
 
-   omp_set_num_threads(all_data.input.num_threads);
+  // omp_set_num_threads(all_data.input.num_threads);
+   omp_set_num_threads(1);
    start = omp_get_wtime();
    SEQ_Setup(solver, &all_data);
    all_data.output.setup_wtime = omp_get_wtime() - start;
+  // MPI_Finalize();
+   return 0;
    start = omp_get_wtime();
    SMEM_Solve(&all_data);
    all_data.output.solve_wtime = omp_get_wtime() - start;

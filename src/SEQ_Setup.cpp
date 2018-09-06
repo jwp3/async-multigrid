@@ -18,8 +18,8 @@ void SEQ_Setup(void *amg_vdata,
                AllData *all_data)
 {
    SetupGrid(amg_vdata, all_data);
-   if (all_data->input.num_threads > 1 &&
-       all_data->input.thread_part_type == ALL_LEVELS){
+   if (all_data->input.thread_part_type == ALL_LEVELS){
+      all_data->input.num_threads = 30;
       SetupThreads(all_data);
    }
 }
@@ -27,7 +27,7 @@ void SEQ_Setup(void *amg_vdata,
 void SetupGrid(void *amg_vdata,
                AllData *all_data)
 {
-   HYPRE_Int n, nnz;
+   HYPRE_Int n;
    hypre_ParAMGData *amg_data = (hypre_ParAMGData*)amg_vdata;
   // printf("%d\n", hypre_ParAMGDataNumLevels(amg_data));
    
@@ -54,34 +54,41 @@ void SetupGrid(void *amg_vdata,
    all_data->matrix.R =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
 
-   all_data->vector.f =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+   if (all_data->input.thread_part_type == ALL_LEVELS){
+      all_data->level_vector =
+         (VectorData *)malloc(all_data->grid.num_levels * sizeof(VectorData));
+   }
+   else {
+      all_data->vector.u_prev =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.u_coarse =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.u_coarse_prev =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.u_fine =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.u_fine_prev =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.r_coarse =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.r_fine =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.e =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+   }
    all_data->vector.u =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.u_prev =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.u_coarse =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.u_coarse_prev =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.u_fine =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.u_fine_prev =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.y =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.r =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.r_coarse =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.r_fine =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-   all_data->vector.e =
-      (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+   all_data->vector.f =
+         (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
-
       all_data->matrix.A[level] = hypre_ParCSRMatrixDiag(parA[level]);      
+      n = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+      all_data->grid.n[level] = n;
       if (level < all_data->grid.num_levels-1){
          all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
          all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
@@ -89,61 +96,65 @@ void SetupGrid(void *amg_vdata,
         // all_data->matrix.R[level] = hypre_ParCSRMatrixDiag(parR[level]);
       }
 
-      n = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
-      nnz = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
-
-      all_data->vector.f[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u_prev[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u_coarse[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u_coarse_prev[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u_fine[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.u_fine_prev[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.y[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.r[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.r_coarse[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.r_fine[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-      all_data->vector.e[level] =
-         (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-
-      all_data->grid.n[level] = n;
-      if (all_data->input.num_threads > 1 &&
-          all_data->input.thread_part_type == ONE_LEVEL){
-         all_data->thread.A_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
-         all_data->thread.A_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
-      
-         #pragma omp parallel
-         {
-            int num_threads = all_data->input.num_threads;
-            int t = omp_get_thread_num();
-
-            int size = n/num_threads;
-            int rest = n - size*num_threads;
-            if (t < rest)
-            {
-               all_data->thread.A_ns[level][t] = t*size + t;
-               all_data->thread.A_ne[level][t] = (t + 1)*size + t + 1;
-            }
-            else
-            {
-               all_data->thread.A_ns[level][t] = t*size + rest;
-               all_data->thread.A_ne[level][t] = (t + 1)*size + rest;
+      if (all_data->input.thread_part_type == ONE_LEVEL){
+         all_data->vector.f[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.u[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.u_prev[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.u_coarse[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.u_coarse_prev[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.u_fine[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.u_fine_prev[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.y[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.r[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.r_coarse[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.r_fine[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         all_data->vector.e[level] =
+            (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+   
+         if (all_data->input.num_threads > 1){
+            all_data->thread.A_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+            all_data->thread.A_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+    
+            int num_threads = all_data->input.num_threads; 
+            for (int t = 0; t < num_threads; t++){ 
+               int size = n/num_threads;
+               int rest = n - size*num_threads;
+               if (t < rest)
+               {
+                  all_data->thread.A_ns[level][t] = t*size + t;
+                  all_data->thread.A_ne[level][t] = (t + 1)*size + t + 1;
+               }
+               else
+               {
+                  all_data->thread.A_ns[level][t] = t*size + rest;
+                  all_data->thread.A_ne[level][t] = (t + 1)*size + rest;
+               }
             }
          }
       }
 
       if (level == 0){
+         if (all_data->input.thread_part_type == ALL_LEVELS){
+            all_data->vector.f[level] =
+               (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->vector.r[level] =
+               (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->vector.u[level] =
+               (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->vector.y[level] =
+               (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+         }
          for (int i = 0; i < n; i++) all_data->vector.f[level][i] = 1;
       }
       if (level == all_data->grid.num_levels-1){
@@ -153,7 +164,7 @@ void SetupGrid(void *amg_vdata,
          HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
 
          all_data->pardiso.csr.n = n;
-         all_data->pardiso.csr.nnz = nnz;
+         all_data->pardiso.csr.nnz = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
 
          all_data->pardiso.csr.ja = (MKL_INT *)calloc(all_data->pardiso.csr.nnz, sizeof(MKL_INT));
          all_data->pardiso.csr.a = (double *)calloc(all_data->pardiso.csr.nnz, sizeof(double));
@@ -249,75 +260,102 @@ void SetupThreads(AllData *all_data)
       all_data->thread.barrier_root = tid;
    }
 
-   all_data->thread.A_ns = (int **)calloc(num_levels,  sizeof(int *));
-   all_data->thread.A_ne = (int **)calloc(num_levels,  sizeof(int *));
-   all_data->thread.R_ns = (int **)calloc(num_levels,  sizeof(int *));
-   all_data->thread.R_ne = (int **)calloc(num_levels,  sizeof(int *));
-   all_data->thread.P_ns = (int **)calloc(num_levels,  sizeof(int *));
-   all_data->thread.P_ne = (int **)calloc(num_levels,  sizeof(int *));
+   all_data->thread.A_ns = (int **)malloc(num_levels * sizeof(int *));
+   all_data->thread.A_ne = (int **)malloc(num_levels * sizeof(int *));
+   all_data->thread.R_ns = (int **)malloc(num_levels * sizeof(int *));
+   all_data->thread.R_ne = (int **)malloc(num_levels * sizeof(int *));
+   all_data->thread.P_ns = (int **)malloc(num_levels * sizeof(int *));
+   all_data->thread.P_ne = (int **)malloc(num_levels * sizeof(int *));
   
    for (int level = 0; level < num_levels; level++){
-      all_data->thread.A_ns[level] = (int *)calloc(num_threads, sizeof(int));
-      all_data->thread.A_ne[level] = (int *)calloc(num_threads, sizeof(int));
-      all_data->thread.R_ns[level] = (int *)calloc(num_threads, sizeof(int));
-      all_data->thread.R_ne[level] = (int *)calloc(num_threads, sizeof(int));
-      all_data->thread.P_ns[level] = (int *)calloc(num_threads, sizeof(int));
-      all_data->thread.P_ne[level] = (int *)calloc(num_threads, sizeof(int));
+      all_data->thread.A_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+      all_data->thread.A_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+      all_data->thread.R_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+      all_data->thread.R_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+      all_data->thread.P_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+      all_data->thread.P_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
 
+      all_data->level_vector[level].f = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].u = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].u_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].u_coarse =(HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].u_coarse_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].u_fine = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].u_fine_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].r = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].r_coarse = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].r_fine = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->level_vector[level].e = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+   }
+
+   for (int level = 0; level < num_levels; level++){
       num_level_threads = all_data->thread.level_threads[level].size();
-     // printf("level %d:\n", level);
-      for (int inner_level = level; inner_level > -1; inner_level--){
-        // printf("\tlevel %d:", inner_level);
-         for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
-            int t = all_data->thread.level_threads[level][i];
-  
-            int shift_t = t - all_data->thread.level_threads[level][0];
+     // printf("level %d/%d %d:\n", level, num_levels-1, omp_get_num_threads());
+     // fflush(stdout);
+      for (int inner_level = 0; inner_level < level+1; inner_level++){
+         if (inner_level < num_levels){
             int n = all_data->grid.n[inner_level];
-            int size = n/num_level_threads;
-            int rest = n - size*num_level_threads;
-            if (shift_t < rest)
-            {
-               all_data->thread.A_ns[inner_level][t] = shift_t*size + shift_t;
-               all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
-            }
-            else
-            {
-               all_data->thread.A_ns[inner_level][t] = shift_t*size + rest;
-               all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + rest;
-            }
-           // printf(" (%d,%d,%d)", t, all_data->thread.A_ns[inner_level][t], all_data->thread.A_ne[inner_level][t]);
-
-            if (inner_level < num_levels-1){
-               n = hypre_CSRMatrixNumRows(all_data->matrix.P[inner_level]);
-               size = n/num_level_threads;
-               rest = n - size*num_level_threads;
-               if (t < rest)
-               {
-                  all_data->thread.P_ns[inner_level][t] = t*size + t;
-                  all_data->thread.P_ne[inner_level][t] = (t + 1)*size + t + 1;
+            all_data->level_vector[level].f[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].u[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].u_prev[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].u_coarse[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].u_coarse_prev[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].u_fine[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].u_fine_prev[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].y[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].r[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].r_coarse[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].r_fine[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            all_data->level_vector[level].e[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+           // printf("\tlevel %d:", inner_level);
+           // fflush(stdout);
+            for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
+               int t = all_data->thread.level_threads[level][i];
+  
+               int shift_t = t - all_data->thread.level_threads[level][0];
+               int size = n/num_level_threads;
+               int rest = n - size*num_level_threads;
+               if (shift_t < rest){
+                  all_data->thread.A_ns[inner_level][t] = shift_t*size + shift_t;
+                  all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
                }
-               else
-               {
-                  all_data->thread.P_ns[inner_level][t] = t*size + rest;
-                  all_data->thread.P_ne[inner_level][t] = (t + 1)*size + rest;
+               else{
+                  all_data->thread.A_ns[inner_level][t] = shift_t*size + rest;
+                  all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + rest;
                }
+               if (inner_level < num_levels-1){
+                  n = hypre_CSRMatrixNumRows(all_data->matrix.P[inner_level]);
+                  size = n/num_level_threads;
+                  rest = n - size*num_level_threads;
+                  if (shift_t < rest){
+                     all_data->thread.P_ns[inner_level][t] = shift_t*size + shift_t;
+                     all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
+                  }
+                  else{
+                     all_data->thread.P_ns[inner_level][t] = shift_t*size + rest;
+                     all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + rest;
+                  }
  
-               n = hypre_CSRMatrixNumRows(all_data->matrix.R[inner_level]);
-               size = n/num_level_threads;
-               rest = n - size*num_level_threads;
-               if (t < rest)
-               {
-                  all_data->thread.R_ns[inner_level][t] = t*size + t;
-                  all_data->thread.R_ne[inner_level][t] = (t + 1)*size + t + 1;
+                  n = hypre_CSRMatrixNumRows(all_data->matrix.R[inner_level]);
+                  size = n/num_level_threads;
+                  rest = n - size*num_level_threads;
+                  if (shift_t < rest){
+                     all_data->thread.R_ns[inner_level][t] = shift_t*size + shift_t;
+                     all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
+                  }
+                  else{
+                     all_data->thread.R_ns[inner_level][t] = shift_t*size + rest;
+                     all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + rest;
+                  }
                }
-               else
-               {
-                  all_data->thread.R_ns[inner_level][t] = t*size + rest;
-                  all_data->thread.R_ne[inner_level][t] = (t + 1)*size + rest;
-               }
+              // printf(" (%d,%d,%d)", t, all_data->thread.A_ns[inner_level][t], all_data->thread.A_ne[inner_level][t]);
+              // fflush(stdout);
+
             }
+           // printf("\n");
+           // fflush(stdout);
          }
-         printf("\n");
       }
    } 
 }
