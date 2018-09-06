@@ -179,11 +179,27 @@ void SetupGrid(void *amg_vdata,
          }
 
          for (int i = 0; i < n; i++){
-            QuicksortPair_int_dbl(all_data->pardiso.csr.ja,
-                                  all_data->pardiso.csr.a,
-                                  all_data->pardiso.csr.ia[i],
-                                  all_data->pardiso.csr.ia[i+1]-1);
+           // printf("before:");
+           // for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
+           // {
+           //    printf(" (%d, %e)", all_data->pardiso.csr.ja[jj], all_data->pardiso.csr.a[jj]);
+           // }
+           // printf("\n");
+            BubblesortPair_int_double(&all_data->pardiso.csr.ja[all_data->pardiso.csr.ia[i]],
+                                      &all_data->pardiso.csr.a[all_data->pardiso.csr.ia[i]],
+                                      all_data->pardiso.csr.ia[i+1] - all_data->pardiso.csr.ia[i]);
+           // QuicksortPair_int_double(all_data->pardiso.csr.ja,
+           //                       all_data->pardiso.csr.a,
+           //                       all_data->pardiso.csr.ia[i],
+           //                       all_data->pardiso.csr.ia[i+1]-1);
+           // printf("after:");
+           // for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
+           // {
+           //    printf(" (%d, %e)", all_data->pardiso.csr.ja[jj], all_data->pardiso.csr.a[jj]);
+           // }
+           // printf("\n");
          }
+         
 
          for (int i = 0; i < 64; i++){
             all_data->pardiso.info.iparm[i] = 0;
@@ -196,7 +212,7 @@ void SetupGrid(void *amg_vdata,
          all_data->pardiso.info.iparm[18] = -1;
          all_data->pardiso.info.iparm[0] = 1;         /* No solver default */
          all_data->pardiso.info.iparm[1] = 0;         /* Fill-in reordering from METIS */
-         all_data->pardiso.info.iparm[7] = 5;
+         all_data->pardiso.info.iparm[7] = 1;
          all_data->pardiso.info.iparm[9] = 13;        /* Perturb the pivot elements with 1E-13 */
          all_data->pardiso.info.iparm[10] = 1;        /* Use nonsymmetric permutation and scaling MPS */
          all_data->pardiso.info.iparm[12] = 1;

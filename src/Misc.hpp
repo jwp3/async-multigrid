@@ -13,7 +13,9 @@ int SumInt(int *x, int n);
 
 double SumDbl(double *x, int n);
 
-void QuicksortPair_int_dbl(int *x, double *y, int first, int last);
+void QuicksortPair_int_double(int *x, double *y, int first, int last);
+
+void BubblesortPair_int_double(int *x, double *y, int n);
 
 void SMEM_LevelBarrier(AllData *all_data,
                        int level);

@@ -238,18 +238,18 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
          for (int i = ns; i < ne; i++){
             all_data->level_vector[thread_level].r[fine_grid][i] = all_data->vector.r[fine_grid][i];
          }
-        // for (int level = 0; level < thread_level-1; level++){
-        //    fine_grid = level;
-        //    coarse_grid = level + 1;
-        //    ns = all_data->thread.R_ns[fine_grid][my_id];
-        //    ne = all_data->thread.R_ne[fine_grid][my_id];
-        //    SMEM_MatVec(all_data,
-        //                all_data->matrix.R[fine_grid],
-        //                all_data->level_vector[thread_level].r[fine_grid],
-        //                all_data->level_vector[thread_level].r[coarse_grid],
-        //                ns, ne);
-        //    SMEM_LevelBarrier(all_data, thread_level);
-        // }
+         for (int level = 0; level < thread_level-1; level++){
+            fine_grid = level;
+            coarse_grid = level + 1;
+            ns = all_data->thread.R_ns[fine_grid][my_id];
+            ne = all_data->thread.R_ne[fine_grid][my_id];
+            SMEM_MatVec(all_data,
+                        all_data->matrix.R[fine_grid],
+                        all_data->level_vector[thread_level].r[fine_grid],
+                        all_data->level_vector[thread_level].r[coarse_grid],
+                        ns, ne);
+            SMEM_LevelBarrier(all_data, thread_level);
+         }
 
         // if (thread_level == all_data->grid.num_levels-1){
         //    if (my_id == all_data->thread.level_threads[thread_level][0]){

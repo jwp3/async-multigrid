@@ -77,43 +77,62 @@ double SumDbl(double *x, int n)
    return sum;
 }
 
-void QuicksortPair_int_dbl(int *x, double *y, int first, int last)
+void SwapInt(int *xp, int *yp)
 {
-   int i, j, pivot, temp;
-   int temp_dbl;
+    int temp = *xp;
+    *xp = *yp;
+    *yp = temp;
+}
 
-   if(first < last){
-      pivot = first;
-      i = first;
-      j = last;
+void SwapDouble(double *xp, double *yp)
+{
+    double temp = *xp;
+    *xp = *yp;
+    *yp = temp;
+}
 
-      while(i<j){
-         while(x[i] <=x [pivot] && i < last){
-            i++;
-         }
-         while(x[j] > x[pivot]){
-            j--;
-         }
-         if(i < j){
-            temp = x[i];
-            x[i] = x[j];
-            x[j] = temp;
-         }
-      }
-
-      temp = x[pivot];
-      x[pivot] = x[j];
-      x[j] = temp;
-
-      temp_dbl = y[pivot];
-      y[pivot] = y[j];
-      y[j] = temp_dbl;
-
-      QuicksortPair_int_dbl(x,y,first,j-1);
-      QuicksortPair_int_dbl(x,y,j+1,last);
+void BubblesortPair_int_double(int *x, double *y, int n)
+{
+   for (int i = 0; i < n-1; i++){
+       for (int j = 0; j < n-i-1; j++){
+           if (x[j] > x[j+1]){
+              SwapInt(&x[j], &x[j+1]);
+              SwapDouble(&y[j], &y[j+1]);
+           }
+       }
    }
 }
 
+void QuicksortPair_int_double(int *x, double *y, int left, int right)
+{
+   int i = left, j = right+1, pivot = x[left], temp;
+   double temp_double;
+   if (left < right){
+      while(1){
+         do{
+            ++i;
+         }while((x[i] <= pivot) && (i <= right));
+         do{
+            --j;
+         }while(x[j] > pivot);
+         if (i >= j) break;
+         temp = x[i];
+         x[i] = x[j];
+         x[j] = temp;
+         temp_double = y[i];
+         y[i] = y[j];
+         y[j] = temp_double;
+      }
+      temp = x[left];
+      x[left] = x[j];
+      x[j] = temp;
+      temp_double = y[left];
+      y[left] = y[j];
+      y[j] = temp_double;
+      QuicksortPair_int_double(x, y, left, j-1);
+      QuicksortPair_int_double(x, y, j+1, right);
+   }
+}
 
 /* untested barrier code */
 void SMEM_LevelBarrier(AllData *all_data,

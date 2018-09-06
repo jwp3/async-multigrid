@@ -183,10 +183,8 @@ void SEQ_AFACx_Vcycle(AllData *all_data)
                        all_data->vector.u_fine[fine_grid],
                        all_data->vector.u_fine_prev[fine_grid],
                        all_data->input.num_fine_smooth_sweeps);
-
          }
       }
-
 
       this_grid = level;
       for (int i = 0; i < all_data->grid.n[this_grid]; i++){
