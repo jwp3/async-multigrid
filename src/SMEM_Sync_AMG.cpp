@@ -26,7 +26,8 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                     all_data->vector.f[fine_grid],
                                     all_data->vector.u[fine_grid],
                                     all_data->vector.u_prev[fine_grid],
-                                    all_data->input.num_pre_smooth_sweeps);
+                                    all_data->input.num_pre_smooth_sweeps,
+                                    fine_grid);
          }
          SMEM_Sync_Parfor_Residual(all_data,
                                    all_data->matrix.A[fine_grid],
@@ -92,7 +93,8 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                     all_data->vector.f[fine_grid],
                                     all_data->vector.u[fine_grid],
                                     all_data->vector.u_prev[fine_grid],
-                                    all_data->input.num_post_smooth_sweeps);
+                                    all_data->input.num_post_smooth_sweeps,
+                                    fine_grid);
          }
       }
    }
@@ -163,7 +165,8 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                        all_data->vector.r[coarse_grid],
                                        all_data->vector.u_coarse[coarse_grid],
                                        all_data->vector.u_coarse_prev[coarse_grid],
-                                       all_data->input.num_coarse_smooth_sweeps);
+                                       all_data->input.num_coarse_smooth_sweeps,
+                                       coarse_grid);
             }
             SMEM_Sync_Parfor_MatVec(all_data,
                                     all_data->matrix.P[fine_grid],
@@ -190,7 +193,8 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                        all_data->vector.r_fine[fine_grid],
                                        all_data->vector.u_fine[fine_grid],
                                        all_data->vector.u_fine_prev[fine_grid],
-                                       all_data->input.num_fine_smooth_sweeps);
+                                       all_data->input.num_fine_smooth_sweeps,
+                                       fine_grid);
             }
          }
 
@@ -223,37 +227,39 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
 {
    #pragma omp parallel
    {
-      int my_id = omp_get_thread_num();
+      int tid = omp_get_thread_num();
       int fine_grid, coarse_grid;
       int thread_level;
       int ns, ne;
 
-      for (int i = 0; i < all_data->thread.thread_levels[my_id].size(); i++){
-         thread_level = all_data->thread.thread_levels[my_id][i];
+      for (int i = 0; i < all_data->thread.thread_levels[tid].size(); i++){
+         thread_level = all_data->thread.thread_levels[tid][i];
 
          fine_grid = 0;
-         ns = all_data->thread.A_ns[fine_grid][my_id];
-         ne = all_data->thread.A_ne[fine_grid][my_id];
+         ns = all_data->thread.A_ns[fine_grid][tid];
+         ne = all_data->thread.A_ne[fine_grid][tid];
          for (int i = ns; i < ne; i++){
             all_data->level_vector[thread_level].r[fine_grid][i] = all_data->vector.r[fine_grid][i];
          }
          SMEM_LevelBarrier(all_data, thread_level); 
-         for (int level = 0; level < thread_level; level++){
+         for (int level = 0; level < thread_level+1; level++){
             if (level < all_data->grid.num_levels-1){
                fine_grid = level;
                coarse_grid = level + 1;
-               ns = all_data->thread.R_ns[fine_grid][my_id];
-               ne = all_data->thread.R_ne[fine_grid][my_id];
+               ns = all_data->thread.R_ns[fine_grid][tid];
+               ne = all_data->thread.R_ne[fine_grid][tid];
                SMEM_MatVec(all_data,
                            all_data->matrix.R[fine_grid],
                            all_data->level_vector[thread_level].r[fine_grid],
                            all_data->level_vector[thread_level].r[coarse_grid],
                            ns, ne);
+               SMEM_LevelBarrier(all_data, thread_level);
             }
          }
-
+         fine_grid = thread_level;
+         coarse_grid = thread_level + 1;
          if (thread_level == all_data->grid.num_levels-1){
-            if (my_id == all_data->thread.level_threads[thread_level][0]){
+            if (tid == all_data->thread.level_threads[thread_level][0]){
                PARDISO(all_data->pardiso.info.pt,
                        &(all_data->pardiso.info.maxfct),
                        &(all_data->pardiso.info.mnum),
@@ -273,16 +279,14 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
             }
          }
          else {
-            fine_grid = thread_level;
-            coarse_grid = thread_level + 1;
 
-            ns = all_data->thread.A_ns[fine_grid][my_id];
-            ne = all_data->thread.A_ne[fine_grid][my_id];
+            ns = all_data->thread.A_ns[fine_grid][tid];
+            ne = all_data->thread.A_ne[fine_grid][tid];
             for (int i = ns; i < ne; i++){
                all_data->level_vector[thread_level].u_fine[fine_grid][i] = 0;
             }
-            ns = all_data->thread.A_ns[coarse_grid][my_id];
-            ne = all_data->thread.A_ne[coarse_grid][my_id];
+            ns = all_data->thread.A_ns[coarse_grid][tid];
+            ne = all_data->thread.A_ne[coarse_grid][tid];
             for (int i = ns; i < ne; i++){
                all_data->level_vector[thread_level].u_coarse[coarse_grid][i] = 0;
             }
@@ -308,8 +312,8 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                                 thread_level,
                                 ns, ne);
             }
-            ns = all_data->thread.A_ns[fine_grid][my_id];
-            ne = all_data->thread.A_ne[fine_grid][my_id];
+            ns = all_data->thread.A_ns[fine_grid][tid];
+            ne = all_data->thread.A_ne[fine_grid][tid];
             SMEM_MatVec(all_data,
                         all_data->matrix.P[fine_grid],
                         all_data->level_vector[thread_level].u_coarse[coarse_grid],
@@ -345,19 +349,19 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
             }
          }
 
-         ns = all_data->thread.A_ns[thread_level][my_id];
-         ne = all_data->thread.A_ne[thread_level][my_id];
+         ns = all_data->thread.A_ns[thread_level][tid];
+         ne = all_data->thread.A_ne[thread_level][tid];
          for (int i = ns; i < ne; i++){
             all_data->level_vector[thread_level].e[thread_level][i] =
                all_data->level_vector[thread_level].u_fine[thread_level][i];
          }
          SMEM_LevelBarrier(all_data, thread_level);
          if (thread_level > 0){
-            for (int level = thread_level; level > 0; level--){
-               fine_grid = level - 1;
-               coarse_grid = level;
-               ns = all_data->thread.P_ns[fine_grid][my_id];
-               ne = all_data->thread.P_ne[fine_grid][my_id];
+            for (int level = thread_level-1; level > -1; level--){
+               fine_grid = level;
+               coarse_grid = level + 1;
+               ns = all_data->thread.P_ns[fine_grid][tid];
+               ne = all_data->thread.P_ne[fine_grid][tid];
                SMEM_MatVec(all_data,
                            all_data->matrix.P[fine_grid],
                            all_data->level_vector[thread_level].e[coarse_grid],
@@ -366,15 +370,14 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                SMEM_LevelBarrier(all_data, thread_level);
             }
          }
-        
+       
          fine_grid = 0;
-         ns = all_data->thread.A_ns[fine_grid][my_id];
-         ne = all_data->thread.A_ne[fine_grid][my_id];
+         ns = all_data->thread.A_ns[fine_grid][tid];
+         ne = all_data->thread.A_ne[fine_grid][tid];
          for (int i = ns; i < ne; i++){
             #pragma omp atomic
             all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
          }
       }
-      #pragma omp barrier
    }
 }

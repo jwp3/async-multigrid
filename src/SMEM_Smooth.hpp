@@ -8,7 +8,8 @@ void SMEM_Sync_Parfor_Jacobi(AllData *all_data,
                              HYPRE_Real *f,
                              HYPRE_Real *u,
                              HYPRE_Real *u_prev,
-                             int num_sweeps);
+                             int num_sweeps,
+                             int level);
 
 void SMEM_SemiAsync_Parfor_GaussSeidel(AllData *all_data,
                                       hypre_CSRMatrix *A,

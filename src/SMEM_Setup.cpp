@@ -257,30 +257,41 @@ void PartitionLevels(AllData *all_data)
    if (all_data->input.thread_part_type == ALL_LEVELS){ 
       int tid = 0;
       for (int level = 0; level < num_levels; level++){
+        // printf("level %d:\n\t", level);
          all_data->thread.barrier_flags[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
          if (num_threads == 1){
+           // printf("%d ", tid);
             all_data->thread.thread_levels[tid].push_back(level);
             all_data->thread.level_threads[level].push_back(tid);
             all_data->thread.barrier_root[level] = tid;
+            all_data->thread.barrier_flags[level][tid] = 2;
          }
          else{
             half_threads = (int)ceil(((double)num_threads)/2.0);
             for (int t = tid; t < tid + half_threads; t++){
+              // printf("%d ", t);
                all_data->thread.thread_levels[t].push_back(level);
                all_data->thread.level_threads[level].push_back(t);
+            }
+            for (int t = tid; t < tid + half_threads; t++){
+               all_data->thread.barrier_flags[level][t] = all_data->thread.level_threads[level].size()+1;
             }
             num_threads -= half_threads;
             tid += half_threads;
             all_data->thread.barrier_root[level] = tid-1;
          }
+        // printf("\n");
       }
    }
    else{
       for (int level = 0; level < num_levels; level++){
+         all_data->thread.barrier_flags[level] = (int *)malloc(num_threads * sizeof(int));
          for (int t = 0; t < num_threads; t++){
             all_data->thread.thread_levels[t].push_back(level);
             all_data->thread.level_threads[level].push_back(t);
+            all_data->thread.barrier_flags[level][t] = num_threads+1;
          }
+         all_data->thread.barrier_root[level] = 0;
       }
    }
 }
@@ -309,10 +320,12 @@ void PartitionGrids(AllData *all_data)
 
       for (int level = 0; level < num_levels; level++){
          num_level_threads = all_data->thread.level_threads[level].size();
+        // printf("level %d/%d:", level, num_levels-1);
          for (int inner_level = 0; inner_level < level+2; inner_level++){
             if (inner_level < num_levels){
-               int n = all_data->grid.n[inner_level];
+              // printf("\n\tlevel %d, n = %d: ", inner_level, all_data->grid.n[inner_level]);
                for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
+                  int n = all_data->grid.n[inner_level];
                   int t = all_data->thread.level_threads[level][i];
      
                   int shift_t = t - all_data->thread.level_threads[level][0];
@@ -351,9 +364,11 @@ void PartitionGrids(AllData *all_data)
                         all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + rest;
                      }
                   }
+                 // printf(" (%d,%d,%d)", shift_t, all_data->thread.A_ns[inner_level][t], all_data->thread.A_ne[inner_level][t]);
                }
             }
          }
+        // printf("\n");
       } 
    }
    else{
@@ -366,6 +381,7 @@ void PartitionGrids(AllData *all_data)
          all_data->thread.A_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
 
          int num_threads = all_data->input.num_threads;
+        // printf("level %d/%d:", level, num_levels-1);
          for (int t = 0; t < num_threads; t++){
             int size = n/num_threads;
             int rest = n - size*num_threads;
@@ -379,7 +395,9 @@ void PartitionGrids(AllData *all_data)
                all_data->thread.A_ns[level][t] = t*size + rest;
                all_data->thread.A_ne[level][t] = (t + 1)*size + rest;
             }
+           // printf(" (%d,%d,%d)", t, all_data->thread.A_ns[level][t], all_data->thread.A_ne[level][t]);
          }
+        // printf("\n");
       }
    }
 }

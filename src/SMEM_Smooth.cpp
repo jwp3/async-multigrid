@@ -6,18 +6,24 @@ void SMEM_Sync_Parfor_Jacobi(AllData *all_data,
                              HYPRE_Real *f,
                              HYPRE_Real *u,
                              HYPRE_Real *u_prev,
-                             int num_sweeps)
+                             int num_sweeps,
+                             int level)
 {
    HYPRE_Int ii;
    HYPRE_Real res;
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
 
+   int tid = omp_get_thread_num();
    double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
       #pragma omp for
+     // if (tid == all_data->thread.barrier_root[level]){
       for (int i = 0; i < n; i++) u_prev[i] = u[i];
+     // }
+     // SMEM_LevelBarrier(all_data, level);
+     // #pragma omp barrier
       #pragma omp for
       for (int i = 0; i < n; i++){
          if (A->data[A->i[i]] != 0.0)
@@ -117,6 +123,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
    HYPRE_Real res;
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
+   double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
       for (int i = ns; i < ne; i++) u_prev[i] = u[i];
@@ -130,7 +137,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
                ii = A->j[jj];
                res -= A->data[jj] * u_prev[ii];
             }
-            u[i] += res / A->data[A->i[i]];
+            u[i] += smooth_weight * res / A->data[A->i[i]];
          }
       }
       SMEM_LevelBarrier(all_data, thread_level);
