@@ -20,7 +20,7 @@
 #include "Laplacian.hpp"
 #include "SEQ_MatVec.hpp"
 #include "SEQ_AMG.hpp"
-#include "SEQ_Setup.hpp"
+#include "SMEM_Setup.hpp"
 #include "SMEM_Solve.hpp"
 
 
@@ -169,6 +169,10 @@ int main (int argc, char *argv[])
       arg_index++;
    }
 
+   if (all_data.input.solver == MULT){
+      all_data.input.thread_part_type = ONE_LEVEL;
+   }
+
    omp_set_num_threads(1);
    mkl_set_num_threads(1);
 
@@ -288,7 +292,7 @@ int main (int argc, char *argv[])
    omp_set_num_threads(all_data.input.num_threads);
   // omp_set_num_threads(1);
    start = omp_get_wtime();
-   SEQ_Setup(solver, &all_data);
+   SMEM_Setup(solver, &all_data);
    all_data.output.setup_wtime = omp_get_wtime() - start;
    start = omp_get_wtime();
    SMEM_Solve(&all_data);

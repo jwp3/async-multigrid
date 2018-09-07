@@ -138,31 +138,31 @@ void QuicksortPair_int_double(int *x, double *y, int left, int right)
 void SMEM_LevelBarrier(AllData *all_data,
                        int level)
 {
-   int root = all_data->thread.barrier_root;
+   int root = all_data->thread.barrier_root[level];
    int tid = omp_get_thread_num();
    int t;
 
-   all_data->thread.barrier_flags[tid] = 1;
+   all_data->thread.barrier_flags[level][tid] = 1;
    while (1){
       if (tid == root){
          int s = 0;
          for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
             t = all_data->thread.level_threads[level][i];
-            s += all_data->thread.barrier_flags[t];
+            s += all_data->thread.barrier_flags[level][t];
          }
-         if (s == all_data->thread.level_threads[level].size() - 1){
+         if (s == all_data->thread.level_threads[level].size()){
             for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
                t = all_data->thread.level_threads[level][i];
-               all_data->thread.barrier_flags[t] = all_data->thread.level_threads[level].size();
+               all_data->thread.barrier_flags[level][t] = all_data->thread.level_threads[level].size()+1;
             }
             break;
          }
       }
       else{
-         if (all_data->thread.barrier_flags[tid] == all_data->thread.level_threads[level].size()){
+         if (all_data->thread.barrier_flags[level][tid] == all_data->thread.level_threads[level].size()+1){
             break;
          }
       }
    }
-   all_data->thread.barrier_flags[tid] = 0;
+   all_data->thread.barrier_flags[level][tid] = 0;
 }

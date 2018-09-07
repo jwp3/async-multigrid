@@ -124,8 +124,8 @@ typedef struct{
 typedef struct{
    std::vector<std::vector<int>> thread_levels;
    std::vector<std::vector<int>> level_threads;
-   int barrier_root;
-   int *barrier_flags;
+   int *barrier_root;
+   int **barrier_flags;
    int **A_ns;
    int **A_ne;
    int **R_ns;
