@@ -69,6 +69,8 @@ void InitAlgebra(void *amg_vdata,
    all_data->vector.f =
          (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
+   all_data->grid.num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+
    if (all_data->input.thread_part_type == ALL_LEVELS){
 
       all_data->level_vector =
@@ -255,6 +257,7 @@ void PartitionLevels(AllData *all_data)
 
   
    if (all_data->input.thread_part_type == ALL_LEVELS){ 
+      all_data->thread.converge_flag = 0;
       int tid = 0;
       for (int level = 0; level < num_levels; level++){
         // printf("level %d:\n\t", level);

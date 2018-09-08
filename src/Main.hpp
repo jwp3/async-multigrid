@@ -132,11 +132,13 @@ typedef struct{
    int **R_ne;
    int **P_ns;
    int **P_ne;
+   int converge_flag;
 }ThreadData;
 
 typedef struct{
    int num_levels;
    int *n;
+   int *num_correct;
 }GridData;
 
 typedef struct{

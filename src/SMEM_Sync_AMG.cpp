@@ -232,8 +232,8 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
       int thread_level;
       int ns, ne;
 
-      for (int i = 0; i < all_data->thread.thread_levels[tid].size(); i++){
-         thread_level = all_data->thread.thread_levels[tid][i];
+      for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
+         thread_level = all_data->thread.thread_levels[tid][q];
 
          fine_grid = 0;
          ns = all_data->thread.A_ns[fine_grid][tid];
@@ -381,4 +381,10 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
          }
       }
    }
+  // int fine_grid = 0;
+  // for (int thread_level = all_data->grid.num_levels-1; thread_level > -1; thread_level--){
+  //    for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
+  //       all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+  //    }
+  // }
 }

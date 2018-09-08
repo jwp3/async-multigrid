@@ -134,10 +134,19 @@ void QuicksortPair_int_double(int *x, double *y, int left, int right)
    }
 }
 
-/* untested barrier code */
-void SMEM_LevelBarrier(AllData *all_data,
-                       int **barrier_flags,
-                       int level)
+int CheckConverge(AllData *all_data)
+{
+   for (int q = 0; q < all_data->grid.num_levels; q++){
+      if (all_data->grid.num_correct[q] < all_data->input.num_cycles){
+         return 0;
+      }
+   }
+   return 1;
+}
+
+int SMEM_LevelBarrier(AllData *all_data,
+                      int **barrier_flags,
+                      int level)
 {
    int root = all_data->thread.barrier_root[level];
    int tid = omp_get_thread_num();
@@ -152,18 +161,32 @@ void SMEM_LevelBarrier(AllData *all_data,
             s += barrier_flags[level][t];
          }
          if (s == all_data->thread.level_threads[level].size()){
+            int read_converge_flag = all_data->thread.converge_flag;
             for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
                t = all_data->thread.level_threads[level][i];
-               barrier_flags[level][t] = all_data->thread.level_threads[level].size();
+               if (read_converge_flag == 1){
+                  barrier_flags[level][t] = 2*all_data->thread.level_threads[level].size();
+               }
+               else{
+                  barrier_flags[level][t] = all_data->thread.level_threads[level].size();
+               }
             }
             #pragma omp flush (barrier_flags)
-            break;
+            if (read_converge_flag == 1){
+               return 1;
+            }
+            else{
+               return 0;
+            }
          }
       }
       else{
          #pragma omp flush (barrier_flags)
-         if (barrier_flags[level][tid] == all_data->thread.level_threads[level].size()){
-            break;
+         if (barrier_flags[level][tid] == 2*all_data->thread.level_threads[level].size()){
+            return 1;
+         }
+         else if(barrier_flags[level][tid] == all_data->thread.level_threads[level].size()){
+            return 0;
          }
       }
    }
