@@ -241,7 +241,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
          for (int i = ns; i < ne; i++){
             all_data->level_vector[thread_level].r[fine_grid][i] = all_data->vector.r[fine_grid][i];
          }
-         SMEM_LevelBarrier(all_data, thread_level); 
+         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level); 
          for (int level = 0; level < thread_level+1; level++){
             if (level < all_data->grid.num_levels-1){
                fine_grid = level;
@@ -253,7 +253,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                            all_data->level_vector[thread_level].r[fine_grid],
                            all_data->level_vector[thread_level].r[coarse_grid],
                            ns, ne);
-               SMEM_LevelBarrier(all_data, thread_level);
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             }
          }
          fine_grid = thread_level;
@@ -290,7 +290,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
             for (int i = ns; i < ne; i++){
                all_data->level_vector[thread_level].u_coarse[coarse_grid][i] = 0;
             }
-            SMEM_LevelBarrier(all_data, thread_level);
+            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
            
             if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
                SMEM_Sync_HybridJacobiGaussSeidel(all_data,
@@ -326,7 +326,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                           all_data->level_vector[thread_level].y[fine_grid],
                           all_data->level_vector[thread_level].r_fine[fine_grid],
                           ns, ne);
-            SMEM_LevelBarrier(all_data, thread_level);
+            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
                SMEM_Sync_HybridJacobiGaussSeidel(all_data,
                                                  all_data->matrix.A[fine_grid],
@@ -355,7 +355,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
             all_data->level_vector[thread_level].e[thread_level][i] =
                all_data->level_vector[thread_level].u_fine[thread_level][i];
          }
-         SMEM_LevelBarrier(all_data, thread_level);
+         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
          if (thread_level > 0){
             for (int level = thread_level-1; level > -1; level--){
                fine_grid = level;
@@ -367,7 +367,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                            all_data->level_vector[thread_level].e[coarse_grid],
                            all_data->level_vector[thread_level].e[fine_grid],
                            ns, ne);
-               SMEM_LevelBarrier(all_data, thread_level);
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             }
          }
        

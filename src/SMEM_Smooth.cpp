@@ -20,7 +20,7 @@ void SMEM_Sync_Parfor_Jacobi(AllData *all_data,
    for (int k = 0; k < num_sweeps; k++){
       #pragma omp for
      // if (tid == all_data->thread.barrier_root[level]){
-      for (int i = 0; i < n; i++) u_prev[i] = u[i];
+         for (int i = 0; i < n; i++) u_prev[i] = u[i];
      // }
      // SMEM_LevelBarrier(all_data, level);
      // #pragma omp barrier
@@ -127,7 +127,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
 
    for (int k = 0; k < num_sweeps; k++){
       for (int i = ns; i < ne; i++) u_prev[i] = u[i];
-      SMEM_LevelBarrier(all_data, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
       for (int i = ns; i < ne; i++){
          if (A->data[A->i[i]] != 0.0)
          {
@@ -140,7 +140,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
             u[i] += smooth_weight * res / A->data[A->i[i]];
          }
       }
-      SMEM_LevelBarrier(all_data, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
    }
 }
 
@@ -170,7 +170,7 @@ void SMEM_SemiAsync_GaussSeidel(AllData *all_data,
             u[i] += res / A->data[A->i[i]];
          }
       }
-      SMEM_LevelBarrier(all_data, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
    }
 }
 
@@ -191,7 +191,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
 
    for (int k = 0; k < num_sweeps; k++){
       for (int i = ns; i < ne; i++) u_prev[i] = u[i];
-      SMEM_LevelBarrier(all_data, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
       for (int i = ns; i < ne; i++){
          if (A->data[A->i[i]] != 0.0)
          {
@@ -209,6 +209,6 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
             u[i] += res / A->data[A->i[i]];
          }
       }
-      SMEM_LevelBarrier(all_data, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
    }
 }

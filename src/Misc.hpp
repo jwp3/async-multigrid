@@ -18,6 +18,7 @@ void QuicksortPair_int_double(int *x, double *y, int first, int last);
 void BubblesortPair_int_double(int *x, double *y, int n);
 
 void SMEM_LevelBarrier(AllData *all_data,
+                       int **barrier_flags,
                        int level);
 
 #endif

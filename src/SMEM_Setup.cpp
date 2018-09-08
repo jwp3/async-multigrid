@@ -264,7 +264,7 @@ void PartitionLevels(AllData *all_data)
             all_data->thread.thread_levels[tid].push_back(level);
             all_data->thread.level_threads[level].push_back(tid);
             all_data->thread.barrier_root[level] = tid;
-            all_data->thread.barrier_flags[level][tid] = 2;
+            all_data->thread.barrier_flags[level][tid] = 0;
          }
          else{
             half_threads = (int)ceil(((double)num_threads)/2.0);
@@ -274,7 +274,7 @@ void PartitionLevels(AllData *all_data)
                all_data->thread.level_threads[level].push_back(t);
             }
             for (int t = tid; t < tid + half_threads; t++){
-               all_data->thread.barrier_flags[level][t] = all_data->thread.level_threads[level].size()+1;
+               all_data->thread.barrier_flags[level][t] = 0;
             }
             num_threads -= half_threads;
             tid += half_threads;
@@ -289,7 +289,7 @@ void PartitionLevels(AllData *all_data)
          for (int t = 0; t < num_threads; t++){
             all_data->thread.thread_levels[t].push_back(level);
             all_data->thread.level_threads[level].push_back(t);
-            all_data->thread.barrier_flags[level][t] = num_threads+1;
+            all_data->thread.barrier_flags[level][t] = 0;
          }
          all_data->thread.barrier_root[level] = 0;
       }
