@@ -277,6 +277,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                        all_data->level_vector[thread_level].u_fine[thread_level],
                        &(all_data->pardiso.info.error));
             }
+            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
          }
          else {
 
