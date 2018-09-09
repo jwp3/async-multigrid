@@ -15,6 +15,7 @@ void SMEM_Async_AFACx(AllData *all_data)
       int ns, ne;
 
       while(1){
+     // for (int k = 0; k < all_data->input.num_cycles; k++){
          for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
             thread_level = all_data->thread.thread_levels[tid][q];
 
@@ -22,8 +23,6 @@ void SMEM_Async_AFACx(AllData *all_data)
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
             for (int i = ns; i < ne; i++){
-              // while(fabs(all_data->vector.r[fine_grid][i] - 
-              //       all_data->level_vector[thread_level].r[fine_grid][i]) < 1e-15);
                all_data->level_vector[thread_level].r[fine_grid][i] = all_data->vector.r[fine_grid][i];
             }
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level); 
@@ -93,7 +92,7 @@ void SMEM_Async_AFACx(AllData *all_data)
                                    all_data->level_vector[thread_level].r[coarse_grid],
                                    all_data->level_vector[thread_level].u_coarse[coarse_grid],
                                    all_data->level_vector[thread_level].u_coarse_prev[coarse_grid],
-                                   all_data->input.num_coarse_smooth_sweeps,
+                                   2*all_data->input.num_coarse_smooth_sweeps,
                                    thread_level,
                                    ns, ne);
                }
@@ -104,6 +103,7 @@ void SMEM_Async_AFACx(AllData *all_data)
                            all_data->level_vector[thread_level].u_coarse[coarse_grid],
                            all_data->level_vector[thread_level].e[fine_grid],
                            ns, ne);
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                SMEM_Residual(all_data,
                              all_data->matrix.A[fine_grid],
                              all_data->level_vector[thread_level].r[fine_grid],
@@ -163,13 +163,7 @@ void SMEM_Async_AFACx(AllData *all_data)
                #pragma omp atomic
                all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
             }
-            if (tid == all_data->thread.barrier_root[thread_level]){
-               all_data->grid.num_correct[thread_level]++;
-            }
             if (thread_level == 0){
-               fine_grid = 0;
-               ns = all_data->thread.A_ns[fine_grid][tid];
-               ne = all_data->thread.A_ne[fine_grid][tid];
                for (int i = ns; i < ne; i++){
                   all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
                }
@@ -182,6 +176,10 @@ void SMEM_Async_AFACx(AllData *all_data)
                              all_data->vector.r[fine_grid],
                              ns, ne);
             }
+            if (tid == all_data->thread.barrier_root[thread_level]){
+               all_data->grid.num_correct[thread_level]++;
+            }
+
             if (tid == 0){
                if (CheckConverge(all_data) == 1){
                   all_data->thread.converge_flag = 1;

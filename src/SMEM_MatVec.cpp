@@ -78,6 +78,7 @@ void SMEM_Residual(AllData *all_data,
 
    for (int i = ns; i < ne; i++)
    {
-      r[i] = b[i] - y[i];
+      double ri = b[i] - y[i];
+      r[i] = ri;
    }
 }

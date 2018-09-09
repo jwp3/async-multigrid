@@ -68,7 +68,7 @@ int main (int argc, char *argv[])
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
    all_data.input.print_reshist_flag = 1;
-   all_data.input.smooth_weight = 1;
+   all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
    all_data.input.solver = MULT;
 
