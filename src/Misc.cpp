@@ -156,6 +156,7 @@ int SMEM_LevelBarrier(AllData *all_data,
    while (1){
       if (tid == root){
          int s = 0;
+         #pragma omp flush (barrier_flags)
          for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
             t = all_data->thread.level_threads[level][i];
             s += barrier_flags[level][t];
@@ -185,7 +186,7 @@ int SMEM_LevelBarrier(AllData *all_data,
          if (barrier_flags[level][tid] == 2*all_data->thread.level_threads[level].size()){
             return 1;
          }
-         else if(barrier_flags[level][tid] == all_data->thread.level_threads[level].size()){
+         else if (barrier_flags[level][tid] == all_data->thread.level_threads[level].size()){
             return 0;
          }
       }

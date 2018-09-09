@@ -139,6 +139,8 @@ typedef struct{
    int num_levels;
    int *n;
    int *num_correct;
+   int *level_res_comp_count;
+   int res_comp_count;
 }GridData;
 
 typedef struct{

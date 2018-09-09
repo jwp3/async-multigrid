@@ -70,6 +70,7 @@ void InitAlgebra(void *amg_vdata,
          (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
    all_data->grid.num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.level_res_comp_count = (int *)calloc(all_data->grid.num_levels, sizeof(int));
 
    if (all_data->input.thread_part_type == ALL_LEVELS){
 
@@ -260,30 +261,44 @@ void PartitionLevels(AllData *all_data)
       all_data->thread.converge_flag = 0;
       int tid = 0;
       for (int level = 0; level < num_levels; level++){
-        // printf("level %d:\n\t", level);
+         printf("level %d:\n\t", level);
          all_data->thread.barrier_flags[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
          if (num_threads == 1){
-           // printf("%d ", tid);
+            printf("%d ", tid);
             all_data->thread.thread_levels[tid].push_back(level);
             all_data->thread.level_threads[level].push_back(tid);
             all_data->thread.barrier_root[level] = tid;
             all_data->thread.barrier_flags[level][tid] = 0;
          }
          else{
-            half_threads = (int)ceil(((double)num_threads)/2.0);
-            for (int t = tid; t < tid + half_threads; t++){
-              // printf("%d ", t);
-               all_data->thread.thread_levels[t].push_back(level);
-               all_data->thread.level_threads[level].push_back(t);
+            if (level == num_levels-1){
+               for (int t = tid; t < tid + num_threads; t++){
+                  printf("%d ", t);
+                  all_data->thread.thread_levels[t].push_back(level);
+                  all_data->thread.level_threads[level].push_back(t);
+               }
+               for (int t = tid; t < tid + half_threads; t++){
+                  all_data->thread.barrier_flags[level][t] = 0;
+               }
+               tid += num_threads;
+               all_data->thread.barrier_root[level] = tid-1;
             }
-            for (int t = tid; t < tid + half_threads; t++){
-               all_data->thread.barrier_flags[level][t] = 0;
+            else {
+               half_threads = (int)ceil(((double)num_threads)/2.0);
+               for (int t = tid; t < tid + half_threads; t++){
+                  printf("%d ", t);
+                  all_data->thread.thread_levels[t].push_back(level);
+                  all_data->thread.level_threads[level].push_back(t);
+               }
+               for (int t = tid; t < tid + half_threads; t++){
+                  all_data->thread.barrier_flags[level][t] = 0;
+               }
+               num_threads -= half_threads;
+               tid += half_threads;
+               all_data->thread.barrier_root[level] = tid-1;
             }
-            num_threads -= half_threads;
-            tid += half_threads;
-            all_data->thread.barrier_root[level] = tid-1;
          }
-        // printf("\n");
+         printf("\n");
       }
    }
    else{
