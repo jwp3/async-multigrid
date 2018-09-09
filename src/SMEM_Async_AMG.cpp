@@ -92,7 +92,7 @@ void SMEM_Async_AFACx(AllData *all_data)
                                    all_data->level_vector[thread_level].r[coarse_grid],
                                    all_data->level_vector[thread_level].u_coarse[coarse_grid],
                                    all_data->level_vector[thread_level].u_coarse_prev[coarse_grid],
-                                   2*all_data->input.num_coarse_smooth_sweeps,
+                                   all_data->input.num_coarse_smooth_sweeps,
                                    thread_level,
                                    ns, ne);
                }
@@ -179,7 +179,6 @@ void SMEM_Async_AFACx(AllData *all_data)
             if (tid == all_data->thread.barrier_root[thread_level]){
                all_data->grid.num_correct[thread_level]++;
             }
-
             if (tid == 0){
                if (CheckConverge(all_data) == 1){
                   all_data->thread.converge_flag = 1;

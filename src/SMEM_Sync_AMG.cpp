@@ -376,7 +376,6 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
          fine_grid = 0;
          ns = all_data->thread.A_ns[fine_grid][tid];
          ne = all_data->thread.A_ne[fine_grid][tid];
-         if (thread_level == 0)
          for (int i = ns; i < ne; i++){
             #pragma omp atomic
             all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
