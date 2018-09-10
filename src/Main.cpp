@@ -57,6 +57,9 @@ int main (int argc, char *argv[])
    int hypre_print_level = 0;
    int hypre_solve_flag = 0;
 
+   /* mfem parameters */
+   int ref_levels = 10;
+
    AllData all_data;
    all_data.input.async_flag = 0;
    all_data.input.thread_part_type = ONE_LEVEL;
@@ -199,69 +202,50 @@ int main (int argc, char *argv[])
       return (0);
    }
 
-   if (n*n < num_procs) n = (int)sqrt((double)num_procs) + 1;
-   N = n*n;
-
-   local_size = N/num_procs;
-   extra = N - local_size*num_procs;
-
-   ilower = local_size*myid;
-   ilower += hypre_min(myid, extra);
-
-   iupper = local_size*(myid+1);
-   iupper += hypre_min(myid+1, extra);
-   iupper = iupper - 1;
-
-   local_size = iupper - ilower + 1;
-
-   HYPRE_IJMatrixCreate(MPI_COMM_WORLD, ilower, iupper, ilower, iupper, &A);
-
-   HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
-
-   HYPRE_IJMatrixInitialize(A);
-
-   Laplacian_2D_5pt(&A, n, N, ilower, iupper);
+   Laplacian_2D_5pt(&A, n);
+   MFEM_Ex1(&A, ref_levels);
+  // return 0;
 
    HYPRE_IJMatrixAssemble(A);
 
    HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
 
 
-   HYPRE_IJVectorCreate(MPI_COMM_WORLD, ilower, iupper,&b);
-   HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
-   HYPRE_IJVectorInitialize(b);
+  // HYPRE_IJVectorCreate(MPI_COMM_WORLD, ilower, iupper,&b);
+  // HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
+  // HYPRE_IJVectorInitialize(b);
 
-   HYPRE_IJVectorCreate(MPI_COMM_WORLD, ilower, iupper,&x);
-   HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
-   HYPRE_IJVectorInitialize(x);
+  // HYPRE_IJVectorCreate(MPI_COMM_WORLD, ilower, iupper,&x);
+  // HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
+  // HYPRE_IJVectorInitialize(x);
 
-   double *rhs_values, *x_values;
-   int *rows;
+  // double *rhs_values, *x_values;
+  // int *rows;
 
-   rhs_values =  (double*) calloc(local_size, sizeof(double));
-   x_values =  (double*) calloc(local_size, sizeof(double));
-   rows = (int*) calloc(local_size, sizeof(int));
+  // rhs_values =  (double*) calloc(local_size, sizeof(double));
+  // x_values =  (double*) calloc(local_size, sizeof(double));
+  // rows = (int*) calloc(local_size, sizeof(int));
 
-   for (int i = 0; i < local_size; i++)
-   {
-      rhs_values[i] = 1;
-      x_values[i] = 0.0;
-      rows[i] = ilower + i;
-   }
+  // for (int i = 0; i < local_size; i++)
+  // {
+  //    rhs_values[i] = 1;
+  //    x_values[i] = 0.0;
+  //    rows[i] = ilower + i;
+  // }
 
-   HYPRE_IJVectorSetValues(b, local_size, rows, rhs_values);
-   HYPRE_IJVectorSetValues(x, local_size, rows, x_values);
+  // HYPRE_IJVectorSetValues(b, local_size, rows, rhs_values);
+  // HYPRE_IJVectorSetValues(x, local_size, rows, x_values);
 
-   free(x_values);
-   free(rhs_values);
-   free(rows);
+  // free(x_values);
+  // free(rhs_values);
+  // free(rows);
 
 
-   HYPRE_IJVectorAssemble(b);
-   HYPRE_IJVectorGetObject(b, (void **) &par_b);
+  // HYPRE_IJVectorAssemble(b);
+  // HYPRE_IJVectorGetObject(b, (void **) &par_b);
 
-   HYPRE_IJVectorAssemble(x);
-   HYPRE_IJVectorGetObject(x, (void **) &par_x);
+  // HYPRE_IJVectorAssemble(x);
+  // HYPRE_IJVectorGetObject(x, (void **) &par_x);
    
    HYPRE_BoomerAMGCreate(&solver);
 
@@ -276,24 +260,24 @@ int main (int argc, char *argv[])
    HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
    all_data.output.hypre_setup_wtime = omp_get_wtime() - start;
 
-   if (hypre_solve_flag){
-      HYPRE_BoomerAMGSetNumSweeps(solver, 1);
-      HYPRE_BoomerAMGSetRelaxType(solver, 1);
-      HYPRE_BoomerAMGSetTol(solver, 1e-7);
-      HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
-      int num_iterations;
-      double final_res_norm;
-      HYPRE_BoomerAMGGetNumIterations(solver, &num_iterations);
-      HYPRE_BoomerAMGGetFinalRelativeResidualNorm(solver, &final_res_norm);
-      if (all_data.input.format_output_flag){
-         printf("HYPRE solve stats:\n");
-         printf("\tIterations = %d\n", num_iterations);
-         printf("\tRelative residual 2-norm = %e\n", final_res_norm);
-      }
-      else{
-         printf("%d, %e\n", num_iterations, final_res_norm);
-      }
-   }
+  // if (hypre_solve_flag){
+  //    HYPRE_BoomerAMGSetNumSweeps(solver, 1);
+  //    HYPRE_BoomerAMGSetRelaxType(solver, 1);
+  //    HYPRE_BoomerAMGSetTol(solver, 1e-7);
+  //    HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
+  //    int num_iterations;
+  //    double final_res_norm;
+  //    HYPRE_BoomerAMGGetNumIterations(solver, &num_iterations);
+  //    HYPRE_BoomerAMGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+  //    if (all_data.input.format_output_flag){
+  //       printf("HYPRE solve stats:\n");
+  //       printf("\tIterations = %d\n", num_iterations);
+  //       printf("\tRelative residual 2-norm = %e\n", final_res_norm);
+  //    }
+  //    else{
+  //       printf("%d, %e\n", num_iterations, final_res_norm);
+  //    }
+  // }
 
    omp_set_num_threads(all_data.input.num_threads);
   // omp_set_num_threads(1);

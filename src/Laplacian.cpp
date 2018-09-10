@@ -1,10 +1,6 @@
 #include "Main.hpp"
 
-void Laplacian_2D_5pt(HYPRE_IJMatrix *A,
-                      int n,
-		      int N,
-                      int ilower,
-                      int iupper)
+void Laplacian_2D_5pt(HYPRE_IJMatrix *A, int n)
 {
    /* go through my local rows and set the matrix entries.
       Each row has at most 5 entries. For example, if n=3:
@@ -16,11 +12,17 @@ void Laplacian_2D_5pt(HYPRE_IJMatrix *A,
       one could set all the rows together (see the User's Manual).
    */
 
+   int N = n*n;
+   
+   HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, N-1, 0, N-1, A);
+   HYPRE_IJMatrixSetObjectType(*A, HYPRE_PARCSR);
+   HYPRE_IJMatrixInitialize(*A);
+
    int nnz;
    double values[5];
    int cols[5];
 
-   for (int i = ilower; i <= iupper; i++)
+   for (int i = 0; i < N; i++)
    {
       nnz = 0;
 
@@ -66,3 +68,146 @@ void Laplacian_2D_5pt(HYPRE_IJMatrix *A,
    }
 }
 
+// Sample runs:  ex1 -m ../data/square-disc.mesh
+//               ex1 -m ../data/star.mesh
+//               ex1 -m ../data/escher.mesh
+//               ex1 -m ../data/fichera.mesh
+//               ex1 -m ../data/square-disc-p2.vtk -o 2
+//               ex1 -m ../data/square-disc-p3.mesh -o 3
+//               ex1 -m ../data/square-disc-nurbs.mesh -o -1
+//               ex1 -m ../data/disc-nurbs.mesh -o -1
+//               ex1 -m ../data/pipe-nurbs.mesh -o -1
+//               ex1 -m ../data/star-surf.mesh
+//               ex1 -m ../data/square-disc-surf.mesh
+//               ex1 -m ../data/inline-segment.mesh
+//               ex1 -m ../data/amr-quad.mesh
+//               ex1 -m ../data/amr-hex.mesh
+//               ex1 -m ../data/fichera-amr.mesh
+//               ex1 -m ../data/mobius-strip.mesh
+//               ex1 -m ../data/mobius-strip.mesh -o -1 -sc
+//
+// Description:  This example code demonstrates the use of MFEM to define a
+//               simple finite element discretization of the Laplace problem
+//               -Delta u = 1 with homogeneous Dirichlet boundary conditions.
+//               Specifically, we discretize using a FE space of the specified
+//               order, or if order < 1 using an isoparametric/isogeometric
+//               space (i.e. quadratic for quadratic curvilinear mesh, NURBS for
+//               NURBS mesh, etc.)
+//
+//               The example highlights the use of mesh refinement, finite
+//               element grid functions, as well as linear and bilinear forms
+//               corresponding to the left-hand side and right-hand side of the
+//               discrete linear system. We also cover the explicit elimination
+//               of essential boundary conditions, static condensation, and the
+//               optional connection to the GLVis tool for visualization.
+
+void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels)
+{
+   const char *mesh_file = "./mfem/data/ball-nurbs.mesh";
+   int order = 1;
+   bool static_cond = false;
+
+   // 2. Read the mesh from the given mesh file. We can handle triangular,
+   //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
+   //    the same code.
+   Mesh *mesh = new Mesh(mesh_file, 1, 1);
+   int dim = mesh->Dimension();
+
+   // 4. Define a finite element space on the mesh. Here we use continuous
+   //    Lagrange finite elements of the specified order. If order < 1, we
+   //    instead use an isoparametric/isogeometric space.
+   FiniteElementCollection *fec;
+   if (order > 0)
+   {
+      fec = new H1_FECollection(order, dim);
+   }
+   else if (mesh->GetNodes())
+   {
+      fec = mesh->GetNodes()->OwnFEC();
+     // cout << "Using isoparametric FEs: " << fec->Name() << endl;
+   }
+   else
+   {
+      fec = new H1_FECollection(order = 1, dim);
+   }
+   FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
+  // cout << "Number of finite element unknowns: "
+  //      << fespace->GetTrueVSize() << endl;
+
+   // 5. Determine the list of true (i.e. conforming) essential boundary dofs.
+   //    In this example, the boundary conditions are defined by marking all
+   //    the boundary attributes from the mesh as essential (Dirichlet) and
+   //    converting them to a list of true dofs.
+   Array<int> ess_tdof_list;
+   if (mesh->bdr_attributes.Size())
+   {
+      Array<int> ess_bdr(mesh->bdr_attributes.Max());
+      ess_bdr = 1;
+      fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+   }
+
+   // 6. Set up the linear form b(.) which corresponds to the right-hand side of
+   //    the FEM linear system, which in this case is (1,phi_i) where phi_i are
+   //    the basis functions in the finite element fespace.
+   LinearForm *b = new LinearForm(fespace);
+   ConstantCoefficient one(1.0);
+   b->AddDomainIntegrator(new DomainLFIntegrator(one));
+   b->Assemble();
+
+   // 7. Define the solution vector x as a finite element grid function
+   //    corresponding to fespace. Initialize x with initial guess of zero,
+   //    which satisfies the boundary conditions.
+   GridFunction x(fespace);
+   x = 0.0;
+
+   // 8. Set up the bilinear form a(.,.) on the finite element space
+   //    corresponding to the Laplacian operator -Delta, by adding the Diffusion
+   //    domain integrator.
+   BilinearForm *a = new BilinearForm(fespace);
+   a->AddDomainIntegrator(new DiffusionIntegrator(one));
+
+   // 9. Assemble the bilinear form and the corresponding linear system,
+   //    applying any necessary transformations such as: eliminating boundary
+   //    conditions, applying conforming constraints for non-conforming AMR,
+   //    static condensation, etc.
+   if (static_cond) { a->EnableStaticCondensation(); }
+   a->Assemble();
+
+   SparseMatrix A;
+   Vector B, X;
+   a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+
+   HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, A.Height()-1, 0, A.Height()-1, Aij);
+   HYPRE_IJMatrixSetObjectType(*Aij, HYPRE_PARCSR);
+   HYPRE_IJMatrixInitialize(*Aij);
+
+   for (int i = 0; i < A.Height(); i++)
+   {
+
+      Array<int> mfem_cols;
+      Vector mfem_srow;
+      A.GetRow(i, mfem_cols, mfem_srow);
+
+      int nnz = mfem_srow.Size();
+
+      double *values = (double *)malloc(nnz * sizeof(double));
+      int *cols = (int *)malloc(nnz * sizeof(int));
+      
+      for (int j = 0; j < nnz; j++){
+         cols[j] = mfem_cols[j];
+         values[j] = mfem_srow[j];
+      }
+
+      /* Set the values for row i */
+      HYPRE_IJMatrixSetValues(*Aij, 1, &nnz, &i, cols, values);
+   }
+
+  // cout << "Size of linear system: " << A.Height() << endl;
+
+   // 14. Free the used memory.
+   delete a;
+   delete b;
+   delete fespace;
+   if (order > 0) { delete fec; }
+   delete mesh;
+}

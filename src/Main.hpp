@@ -1,6 +1,8 @@
 #ifndef MAIN_HPP
 #define MAIN_HPP
 
+#include <fstream>
+#include <iostream>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -25,6 +27,8 @@
 #include "HYPRE_parcsr_mv.h"
 #include "HYPRE_parcsr_ls.h"
 
+#include "mfem.hpp"
+
 #define JACOBI 0
 #define GAUSS_SEIDEL 1
 #define HYBRID_JACOBI_GAUSS_SEIDEL 2
@@ -40,6 +44,9 @@
 
 #define HALF_THREADS 0
 #define EQUAL_THREADS 1
+
+using namespace std;
+using namespace mfem;
 
 typedef struct{
    int *smooth_relax;
@@ -121,14 +128,18 @@ typedef struct{
 }PardisoData;
 
 typedef struct{
+   SparseMatrix A;
+}MfemData;
+
+typedef struct{
    hypre_CSRMatrix **A;
    hypre_CSRMatrix **P;
    hypre_CSRMatrix **R;
 }MatrixData;
 
 typedef struct{
-   std::vector<std::vector<int>> thread_levels;
-   std::vector<std::vector<int>> level_threads;
+   vector<vector<int>> thread_levels;
+   vector<vector<int>> level_threads;
    int *barrier_root;
    int **barrier_flags;
    int **A_ns;

@@ -4,10 +4,8 @@
 
 #include "Main.hpp"
 
-void Laplacian_2D_5pt(HYPRE_IJMatrix *A,
-                      int n,
-		      int N,
-                      int ilower,
-                      int iupper);
+void Laplacian_2D_5pt(HYPRE_IJMatrix *A, int n);
+
+void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels);
 
 #endif
