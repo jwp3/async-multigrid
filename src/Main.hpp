@@ -38,6 +38,9 @@
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1
 
+#define HALF_THREADS 0
+#define EQUAL_THREADS 1
+
 typedef struct{
    int *smooth_relax;
    int *smooth_sweeps;
@@ -69,6 +72,7 @@ typedef struct{
    int solver;
    int async_flag;
    int thread_part_type;
+   int thread_part_distr_type;
 }InputData;
 
 typedef struct{

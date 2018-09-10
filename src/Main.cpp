@@ -52,7 +52,7 @@ int main (int argc, char *argv[])
    /* Hypre parameters */
    int max_levels = 20;
    int solver_id = 0;
-   HYPRE_Int agg_num_levels = 0;
+   HYPRE_Int agg_num_levels = 1;
    HYPRE_Int coarsen_type = 10;
    int hypre_print_level = 0;
    int hypre_solve_flag = 0;
@@ -60,6 +60,7 @@ int main (int argc, char *argv[])
    AllData all_data;
    all_data.input.async_flag = 0;
    all_data.input.thread_part_type = ONE_LEVEL;
+   all_data.input.thread_part_distr_type = EQUAL_THREADS;
    all_data.input.num_pre_smooth_sweeps = 1;
    all_data.input.num_post_smooth_sweeps = 1;
    all_data.input.num_fine_smooth_sweeps = 1;

@@ -9,6 +9,8 @@ double RandDouble(double low, double high);
 
 double Norm2(double *x, int n);
 
+double Parfor_Norm2(double *x, int n);
+
 int SumInt(int *x, int n);
 
 double SumDbl(double *x, int n);

@@ -59,6 +59,16 @@ double Norm2(double *x, int n)
    return sqrt(sum);
 }
 
+double Parfor_Norm2(double *x, int n)
+{
+   double sum = 0;
+   #pragma omp parallel for reduction(+:sum)
+   for (int i = 0; i < n; i++){
+      sum += pow(x[i], 2.0);
+   }
+   return sqrt(sum);
+}
+
 int SumInt(int *x, int n)
 {
    int sum = 0;

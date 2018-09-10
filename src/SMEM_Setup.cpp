@@ -248,7 +248,7 @@ void PartitionLevels(AllData *all_data)
 {
    int num_threads = all_data->input.num_threads;
    int num_levels = all_data->grid.num_levels;
-   int half_threads;
+   int half_threads, n_threads;
    int num_level_threads;
 
    all_data->thread.thread_levels.resize(num_threads, std::vector<int>(0));
@@ -257,48 +257,93 @@ void PartitionLevels(AllData *all_data)
    all_data->thread.barrier_root = (int *)malloc(num_levels * sizeof(int));
 
   
-   if (all_data->input.thread_part_type == ALL_LEVELS){ 
+   if (all_data->input.thread_part_type == ALL_LEVELS){
       all_data->thread.converge_flag = 0;
       int tid = 0;
       for (int level = 0; level < num_levels; level++){
-         printf("level %d:\n\t", level);
          all_data->thread.barrier_flags[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
-         if (num_threads == 1){
-            printf("%d ", tid);
-            all_data->thread.thread_levels[tid].push_back(level);
-            all_data->thread.level_threads[level].push_back(tid);
-            all_data->thread.barrier_root[level] = tid;
-            all_data->thread.barrier_flags[level][tid] = 0;
-         }
-         else{
-            if (level == num_levels-1){
-               for (int t = tid; t < tid + num_threads; t++){
-                  printf("%d ", t);
-                  all_data->thread.thread_levels[t].push_back(level);
-                  all_data->thread.level_threads[level].push_back(t);
-               }
-               for (int t = tid; t < tid + half_threads; t++){
-                  all_data->thread.barrier_flags[level][t] = 0;
-               }
-               tid += num_threads;
-               all_data->thread.barrier_root[level] = tid-1;
+      }
+      if (all_data->input.thread_part_distr_type == HALF_THREADS){
+         for (int level = 0; level < num_levels; level++){
+            printf("level %d:\n\t", level);
+            if (num_threads == 1){
+               printf("%d ", tid);
+               all_data->thread.thread_levels[tid].push_back(level);
+               all_data->thread.level_threads[level].push_back(tid);
+               all_data->thread.barrier_root[level] = tid;
+               all_data->thread.barrier_flags[level][tid] = 0;
             }
-            else {
-               half_threads = (int)ceil(((double)num_threads)/2.0);
-               for (int t = tid; t < tid + half_threads; t++){
-                  printf("%d ", t);
-                  all_data->thread.thread_levels[t].push_back(level);
-                  all_data->thread.level_threads[level].push_back(t);
+            else{
+               if (level == num_levels-1){
+                  for (int t = tid; t < tid + num_threads; t++){
+                     printf("%d ", t);
+                     all_data->thread.thread_levels[t].push_back(level);
+                     all_data->thread.level_threads[level].push_back(t);
+                  }
+                  for (int t = tid; t < tid + half_threads; t++){
+                     all_data->thread.barrier_flags[level][t] = 0;
+                  }
+                  tid += num_threads;
+                  all_data->thread.barrier_root[level] = tid-1;
                }
-               for (int t = tid; t < tid + half_threads; t++){
-                  all_data->thread.barrier_flags[level][t] = 0;
+               else {
+                  half_threads = (int)ceil(((double)num_threads)/2.0);
+                  for (int t = tid; t < tid + half_threads; t++){
+                     printf("%d ", t);
+                     all_data->thread.thread_levels[t].push_back(level);
+                     all_data->thread.level_threads[level].push_back(t);
+                  }
+                  for (int t = tid; t < tid + half_threads; t++){
+                     all_data->thread.barrier_flags[level][t] = 0;
+                  }
+                  num_threads -= half_threads;
+                  tid += half_threads;
+                  all_data->thread.barrier_root[level] = tid-1;
                }
-               num_threads -= half_threads;
-               tid += half_threads;
-               all_data->thread.barrier_root[level] = tid-1;
             }
+            printf("\n");
          }
-         printf("\n");
+      }
+      else {
+         int equal_threads = std::max(all_data->input.num_threads/all_data->grid.num_levels, 1);
+         for (int level = 0; level < num_levels; level++){
+            printf("level %d:\n\t", level);
+            if (num_threads == 1){
+               printf("%d ", tid);
+               all_data->thread.thread_levels[tid].push_back(level);
+               all_data->thread.level_threads[level].push_back(tid);
+               all_data->thread.barrier_root[level] = tid;
+               all_data->thread.barrier_flags[level][tid] = 0;
+            }
+            else{
+               if (level == num_levels-1){
+                  for (int t = tid; t < tid + num_threads; t++){
+                     printf("%d ", t);
+                     all_data->thread.thread_levels[t].push_back(level);
+                     all_data->thread.level_threads[level].push_back(t);
+                  }
+                  for (int t = tid; t < tid + half_threads; t++){
+                     all_data->thread.barrier_flags[level][t] = 0;
+                  }
+                  tid += num_threads;
+                  all_data->thread.barrier_root[level] = tid-1;
+               }
+               else {
+                  for (int t = tid; t < tid + equal_threads; t++){
+                     printf("%d ", t);
+                     all_data->thread.thread_levels[t].push_back(level);
+                     all_data->thread.level_threads[level].push_back(t);
+                  }
+                  for (int t = tid; t < tid + equal_threads; t++){
+                     all_data->thread.barrier_flags[level][t] = 0;
+                  }
+                  num_threads -= equal_threads;
+                  tid += equal_threads;
+                  all_data->thread.barrier_root[level] = tid-1;
+               }
+            }
+            printf("\n");
+         }
       }
    }
    else{
