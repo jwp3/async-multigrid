@@ -1,4 +1,5 @@
 #include "Main.hpp"
+#include "Misc.hpp"
 
 void SMEM_Sync_Parfor_MatVec(AllData *all_data,
                              hypre_CSRMatrix *A,
@@ -80,5 +81,54 @@ void SMEM_Residual(AllData *all_data,
    {
       double ri = b[i] - y[i];
       r[i] = ri;
+   }
+}
+
+void SMEM_JacobiIterMat_MatVec(AllData *all_data,
+                               hypre_CSRMatrix *A,
+                               HYPRE_Real *y,
+                               HYPRE_Real *r,
+                               int ns, int ne,
+                               int thread_level)
+{
+   SMEM_MatVec(all_data, A, r, y, ns, ne);
+   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+
+   for (int i = ns; i < ne; i++)
+   {
+      if (A->data[A->i[i]] != 0.0)
+      {
+         r[i] -= all_data->input.smooth_weight * y[i] / A->data[A->i[i]];
+      }
+   }
+}
+
+void SMEM_JacobiSymmIterMat_MatVec(AllData *all_data,
+                                   hypre_CSRMatrix *A,
+                                   HYPRE_Real *y,
+                                   HYPRE_Real *r,
+                                   int ns, int ne,
+                                   int thread_level)
+{
+   for (int i = ns; i < ne; i++)
+   {
+      if (A->data[A->i[i]] != 0.0)
+      {
+         r[i] *= all_data->input.smooth_weight / A->data[A->i[i]];
+      }
+   }
+   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+
+   SMEM_MatVec(all_data, A, r, y, ns, ne);
+   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+
+   for (int i = ns; i < ne; i++)
+   {
+      if (A->data[A->i[i]] != 0.0)
+      {
+         r[i] = (2.0 * A->data[A->i[i]] * r[i] / all_data->input.smooth_weight) - 
+                (all_data->input.smooth_weight * y[i]);
+         r[i] *= all_data->input.smooth_weight / A->data[A->i[i]];
+      }
    }
 }

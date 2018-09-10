@@ -104,11 +104,16 @@ int main (int argc, char *argv[])
          if (strcmp(argv[arg_index], "mult") == 0){
             all_data.input.solver = MULT;
          }
-         else if (strcmp(argv[arg_index], "mult_add") == 0){
+         else if (strcmp(argv[arg_index], "multadd") == 0){
             all_data.input.solver = MULT_ADD;
          }
          else if (strcmp(argv[arg_index], "afacx") == 0){
             all_data.input.solver = AFACX;
+         }
+         else if (strcmp(argv[arg_index], "async_multadd") == 0){
+            all_data.input.solver = ASYNC_MULTADD;
+            all_data.input.async_flag = 1;
+            all_data.input.thread_part_type = ALL_LEVELS;
          }
          else if (strcmp(argv[arg_index], "async_afacx") == 0){
             all_data.input.solver = ASYNC_AFACX;

@@ -26,7 +26,12 @@ void SMEM_Solve(AllData *all_data)
    }
 
    if (all_data->input.async_flag == 1){
-      SMEM_Async_AFACx(all_data);
+      if (all_data->input.solver == AFACX){
+         SMEM_Async_AFACx(all_data);
+      }
+      else{
+         SMEM_Async_Multadd(all_data);
+      } 
       SEQ_Residual(all_data,
                    all_data->matrix.A[fine_grid],
                    all_data->vector.f[fine_grid],
@@ -43,7 +48,11 @@ void SMEM_Solve(AllData *all_data)
    else{
       for (int k = 0; k < all_data->input.num_cycles; k++){
          if (all_data->input.solver == MULT_ADD){
-        
+            if (all_data->input.thread_part_type == ALL_LEVELS){
+               SMEM_Sync_Multadd_Vcycle(all_data);
+            }
+            else{
+            } 
          }
          else if (all_data->input.solver == AFACX){
             if (all_data->input.thread_part_type == ALL_LEVELS){

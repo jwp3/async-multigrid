@@ -9,4 +9,6 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data);
 
 void SMEM_Sync_AFACx_Vcycle(AllData *all_data);
 
+void SMEM_Sync_Multadd_Vcycle(AllData *all_data);
+
 #endif

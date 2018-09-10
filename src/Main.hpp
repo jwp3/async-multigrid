@@ -33,6 +33,7 @@
 #define AFACX 1
 #define MULT_ADD 2
 #define ASYNC_AFACX 3
+#define ASYNC_MULTADD 4
 
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1

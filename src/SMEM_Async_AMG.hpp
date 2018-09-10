@@ -5,4 +5,6 @@
 
 void SMEM_Async_AFACx(AllData *all_data);
 
+void SMEM_Async_Multadd(AllData *all_data);
+
 #endif
