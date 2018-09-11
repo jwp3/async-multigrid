@@ -58,7 +58,7 @@ int main (int argc, char *argv[])
    int hypre_solve_flag = 0;
 
    /* mfem parameters */
-   int ref_levels = 10;
+   int ref_levels = 3;
 
    AllData all_data;
    all_data.input.async_flag = 0;

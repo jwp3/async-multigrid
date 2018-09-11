@@ -113,6 +113,14 @@ void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels)
    Mesh *mesh = new Mesh(mesh_file, 1, 1);
    int dim = mesh->Dimension();
 
+   // 3. Refine the mesh to increase the resolution. In this example we do
+   //    'ref_levels' of uniform refinement. We choose 'ref_levels' to be the
+   //    largest number that gives a final mesh with no more than 50,000
+   //    elements.
+   for (int l = 0; l < ref_levels; l++){
+      mesh->UniformRefinement();
+   }
+
    // 4. Define a finite element space on the mesh. Here we use continuous
    //    Lagrange finite elements of the specified order. If order < 1, we
    //    instead use an isoparametric/isogeometric space.
@@ -200,6 +208,9 @@ void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels)
 
       /* Set the values for row i */
       HYPRE_IJMatrixSetValues(*Aij, 1, &nnz, &i, cols, values);
+      
+      free(values);
+      free(cols);
    }
 
   // cout << "Size of linear system: " << A.Height() << endl;
