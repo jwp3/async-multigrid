@@ -57,12 +57,13 @@ int main (int argc, char *argv[])
    int hypre_print_level = 0;
    int hypre_solve_flag = 0;
 
-   /* mfem parameters */
-   int ref_levels = 6;
-   int order = 1;
-
    AllData all_data;
+   /* mfem parameters */
+   all_data.mfem.ref_levels = 4;
+   all_data.mfem.order = 1;
+
    all_data.input.async_flag = 0;
+   all_data.input.async_type = 1;
    all_data.input.thread_part_type = ONE_LEVEL;
    all_data.input.thread_part_distr_type = EQUAL_THREADS;
    all_data.input.num_pre_smooth_sweeps = 1;
@@ -76,7 +77,6 @@ int main (int argc, char *argv[])
    all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
    all_data.input.solver = MULT;
-
 
    /* Parse command line */
    int arg_index = 0;
@@ -144,6 +144,16 @@ int main (int argc, char *argv[])
          arg_index++;
          max_levels = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-mfem_ref_levels") == 0)
+      {
+         arg_index++;
+         all_data.mfem.ref_levels = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-mfem_order") == 0)
+      {
+         arg_index++;
+         all_data.mfem.order = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-thread_level_part") == 0)
       {
          arg_index++;
@@ -152,6 +162,16 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "all") == 0){
             all_data.input.thread_part_type = ALL_LEVELS;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-async_type") == 0)
+      {
+         arg_index++;
+         if (strcmp(argv[arg_index], "full") == 0){
+            all_data.input.async_type = FULL_ASYNC;
+         }
+         else if (strcmp(argv[arg_index], "semi") == 0){
+            all_data.input.async_type = SEMI_ASYNC;
          }
       }
       else if (strcmp(argv[arg_index], "-num_threads") == 0)
@@ -204,7 +224,7 @@ int main (int argc, char *argv[])
    }
 
   // Laplacian_2D_5pt(&A, n);
-   MFEM_Ex1(&A, ref_levels, order);
+   MFEM_Ex1(&all_data, &A);
   // return 0;
 
    HYPRE_IJMatrixAssemble(A);

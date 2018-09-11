@@ -101,11 +101,10 @@ void Laplacian_2D_5pt(HYPRE_IJMatrix *A, int n)
 //               of essential boundary conditions, static condensation, and the
 //               optional connection to the GLVis tool for visualization.
 
-void MFEM_Ex1(HYPRE_IJMatrix *Aij,
-              int ref_levels,
-              int order)
+void MFEM_Ex1(AllData *all_data,
+              HYPRE_IJMatrix *Aij)
 {
-   const char *mesh_file = "./mfem/data/beam-tet.mesh";
+   const char *mesh_file = "./mfem/data/ball-nurbs.mesh";
    bool static_cond = false;
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
@@ -115,16 +114,20 @@ void MFEM_Ex1(HYPRE_IJMatrix *Aij,
    int dim = mesh->Dimension();
 
    // 3. Refine the mesh to increase the resolution.
-   for (int l = 0; l < ref_levels; l++){
+   for (int l = 0; l < all_data->mfem.ref_levels; l++){
       mesh->UniformRefinement();
    }
-   mesh->SetCurvature(2);
+   if (mesh->NURBSext)
+   {
+      mesh->SetCurvature(max(all_data->mfem.order, 1));
+   }
+  // mesh->SetCurvature(2);
 
    // 4. Define a finite element space on the mesh. Here we use continuous
    //    Lagrange finite elements of the specified order. If order < 1, we
    //    instead use an isoparametric/isogeometric space.
    FiniteElementCollection *fec;
-   fec = new H1_FECollection(order, dim);
+   fec = new H1_FECollection(all_data->mfem.order, dim);
    FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
   // cout << "Number of finite element unknowns: "
   //      << fespace->GetTrueVSize() << endl;

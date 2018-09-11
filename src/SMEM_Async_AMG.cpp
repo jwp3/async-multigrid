@@ -6,6 +6,7 @@
 void SMEM_Async_AMG(AllData *all_data)
 {
    all_data->grid.res_comp_count = 0;
+   omp_init_lock(&(all_data->thread.lock));
    #pragma omp parallel
    {
       int tid = omp_get_thread_num();
@@ -21,10 +22,6 @@ void SMEM_Async_AMG(AllData *all_data)
             fine_grid = 0;
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
-            for (int i = ns; i < ne; i++){
-               all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
-            }
-            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             SMEM_Residual(all_data,
                           all_data->matrix.A[fine_grid],
                           all_data->vector.f[fine_grid],
@@ -216,10 +213,27 @@ void SMEM_Async_AMG(AllData *all_data)
             fine_grid = 0;
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
-            for (int i = ns; i < ne; i++){
-               #pragma omp atomic
-               all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+            if (all_data->input.async_type == SEMI_ASYNC){
+               if (tid == all_data->thread.barrier_root[thread_level]){
+                  omp_set_lock(&(all_data->thread.lock));
+               }
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               for (int i = ns; i < ne; i++){
+                  all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+                  all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
+               }
+               if (tid == all_data->thread.barrier_root[thread_level]){
+                  omp_unset_lock(&(all_data->thread.lock));
+               }
             }
+            else {
+               for (int i = ns; i < ne; i++){
+                  #pragma omp atomic
+                  all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+                  all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
+               }
+            }
+
             if (tid == all_data->thread.barrier_root[thread_level]){
                all_data->grid.num_correct[thread_level]++;
             }
@@ -238,4 +252,5 @@ void SMEM_Async_AMG(AllData *all_data)
          }
       }
    }
+   omp_destroy_lock(&(all_data->thread.lock));
 }

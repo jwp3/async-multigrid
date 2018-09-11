@@ -45,6 +45,9 @@
 #define HALF_THREADS 0
 #define EQUAL_THREADS 1
 
+#define FULL_ASYNC 0
+#define SEMI_ASYNC 1
+
 using namespace std;
 using namespace mfem;
 
@@ -78,6 +81,7 @@ typedef struct{
    int smoother;
    int solver;
    int async_flag;
+   int async_type;
    int thread_part_type;
    int thread_part_distr_type;
 }InputData;
@@ -128,7 +132,8 @@ typedef struct{
 }PardisoData;
 
 typedef struct{
-   SparseMatrix A;
+   int ref_levels;
+   int order;
 }MfemData;
 
 typedef struct{
@@ -140,6 +145,7 @@ typedef struct{
 typedef struct{
    vector<vector<int>> thread_levels;
    vector<vector<int>> level_threads;
+   omp_lock_t lock;
    int *barrier_root;
    int **barrier_flags;
    int **A_ns;
@@ -169,6 +175,7 @@ typedef struct{
    OutputData output;
    GridData grid;
    PardisoData pardiso;
+   MfemData mfem;
 }AllData;
 
 #endif
