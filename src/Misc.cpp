@@ -202,3 +202,70 @@ int SMEM_LevelBarrier(AllData *all_data,
       }
    }
 }
+
+void InitVectors(AllData *all_data)
+{
+   if (all_data->input.thread_part_type == ALL_LEVELS){
+      for (int level = 0; level < all_data->grid.num_levels; level++){
+         for (int inner_level = 0; inner_level < level+2; inner_level++){
+            if (inner_level < all_data->grid.num_levels){
+               int n = all_data->grid.n[inner_level];
+               for (int i = 0; i < n; i++){
+                  all_data->level_vector[level].f[inner_level][i] = 0;
+                  all_data->level_vector[level].u[inner_level][i] = 0;
+                  all_data->level_vector[level].u_prev[inner_level][i] = 0;
+                  all_data->level_vector[level].u_coarse[inner_level][i] = 0;
+                  all_data->level_vector[level].u_coarse_prev[inner_level][i] = 0;
+                  all_data->level_vector[level].u_fine[inner_level][i] = 0;
+                  all_data->level_vector[level].u_fine_prev[inner_level][i] = 0;
+                  all_data->level_vector[level].y[inner_level][i] = 0;
+                  all_data->level_vector[level].r[inner_level][i] = 0;
+                  all_data->level_vector[level].r_coarse[inner_level][i] = 0;
+                  all_data->level_vector[level].r_fine[inner_level][i] = 0;
+                  all_data->level_vector[level].e[inner_level][i] = 0;
+               }
+            }
+         }
+         if (level == 0){
+            int n = all_data->grid.n[level];
+            for (int i = 0; i < n; i++){
+               all_data->vector.r[level][i] = 0;
+               all_data->vector.u[level][i] = 0;
+               all_data->vector.y[level][i] = 0;
+            }
+         }
+      }
+   }
+   else {
+      for (int level = 0; level < all_data->grid.num_levels; level++){
+         int n = all_data->grid.n[level];
+         for (int i = 0; i < n; i++){
+            all_data->vector.f[level][i] = 0;
+            all_data->vector.u[level][i] = 0;
+            all_data->vector.u_prev[level][i] = 0;
+            all_data->vector.u_coarse[level][i] = 0;
+            all_data->vector.u_coarse_prev[level][i] = 0;
+            all_data->vector.u_fine[level][i] = 0;
+            all_data->vector.u_fine_prev[level][i] = 0;
+            all_data->vector.y[level][i] = 0;
+            all_data->vector.r[level][i] = 0;
+            all_data->vector.r_coarse[level][i] = 0;
+            all_data->vector.r_fine[level][i] = 0;
+            all_data->vector.e[level][i] = 0;
+         }
+      }
+   }
+   int level = 0;
+   for (int i = 0; i < all_data->grid.n[level]; i++){
+      all_data->vector.f[level][i] = 1;
+   }
+}
+
+void InitSolve(AllData *all_data)
+{
+   InitVectors(all_data);
+   for (int level = 0; level < all_data->grid.num_levels; level++){
+      all_data->grid.num_correct[level] = 0;
+   }
+   all_data->thread.converge_flag = 0;
+}

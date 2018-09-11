@@ -16,7 +16,6 @@ void SMEM_Async_AMG(AllData *all_data)
       int ns, ne;
 
       while(1){
-     // for (int k = 0; k < all_data->input.num_cycles; k++){
          for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
             thread_level = all_data->thread.thread_levels[tid][q];
             fine_grid = 0;
@@ -228,7 +227,7 @@ void SMEM_Async_AMG(AllData *all_data)
             }
             else {
                for (int i = ns; i < ne; i++){
-                  #pragma omp atomic
+                 // #pragma omp atomic
                   all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
                   all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
                }
@@ -237,14 +236,23 @@ void SMEM_Async_AMG(AllData *all_data)
             if (tid == all_data->thread.barrier_root[thread_level]){
                all_data->grid.num_correct[thread_level]++;
             }
-            if (tid == 0){
-               if (CheckConverge(all_data) == 1){
-                  all_data->thread.converge_flag = 1;
+            if (all_data->input.converge_test_type == ALL_LEVELS){
+               if (tid == 0){
+                  if (CheckConverge(all_data) == 1){
+                     all_data->thread.converge_flag = 1;
+                  }
+               }
+               if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
+                  tid_converge = 1;
+                  break;
                }
             }
-            if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
-               tid_converge = 1;
-               break;
+            else{
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               if (all_data->grid.num_correct[thread_level] == all_data->input.num_cycles){
+                  tid_converge = 1;
+                  break;
+               }
             }
          }
          if (tid_converge == 1){
@@ -253,4 +261,7 @@ void SMEM_Async_AMG(AllData *all_data)
       }
    }
    omp_destroy_lock(&(all_data->thread.lock));
+  // for (int level = 0; level < all_data->grid.num_levels; level++){
+  //    printf("level %d: %d\n", level, all_data->grid.num_correct[level]);
+  // }
 }

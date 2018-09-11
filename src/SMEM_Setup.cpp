@@ -170,10 +170,8 @@ void InitAlgebra(void *amg_vdata,
       }
    }
    
-   int level = 0;
-   for (int i = 0; i < all_data->grid.n[level]; i++) all_data->vector.f[level][i] = 1;
 
-   level = all_data->grid.num_levels-1;         
+   int level = all_data->grid.num_levels-1;         
    HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
    HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A[level]);
    HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
@@ -258,7 +256,6 @@ void PartitionLevels(AllData *all_data)
 
   
    if (all_data->input.thread_part_type == ALL_LEVELS){
-      all_data->thread.converge_flag = 0;
       int tid = 0;
       for (int level = 0; level < num_levels; level++){
          all_data->thread.barrier_flags[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));

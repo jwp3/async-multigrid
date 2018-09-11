@@ -22,6 +22,7 @@
 #include "SEQ_AMG.hpp"
 #include "SMEM_Setup.hpp"
 #include "SMEM_Solve.hpp"
+#include "Misc.hpp"
 
 
 int main (int argc, char *argv[])
@@ -33,6 +34,7 @@ int main (int argc, char *argv[])
    int local_size, extra;
 
    double start;
+   int num_runs = 1;
 
    HYPRE_IJMatrix A;
    HYPRE_ParCSRMatrix parcsr_A;
@@ -53,7 +55,7 @@ int main (int argc, char *argv[])
    int max_levels = 20;
    int solver_id = 0;
    HYPRE_Int agg_num_levels = 1;
-   HYPRE_Int coarsen_type = 10;
+   HYPRE_Int coarsen_type = 9;
    int hypre_print_level = 0;
    int hypre_solve_flag = 0;
 
@@ -65,6 +67,7 @@ int main (int argc, char *argv[])
    all_data.input.async_flag = 0;
    all_data.input.async_type = 1;
    all_data.input.thread_part_type = ONE_LEVEL;
+   all_data.input.converge_test_type = ONE_LEVEL;
    all_data.input.thread_part_distr_type = EQUAL_THREADS;
    all_data.input.num_pre_smooth_sweeps = 1;
    all_data.input.num_post_smooth_sweeps = 1;
@@ -144,6 +147,16 @@ int main (int argc, char *argv[])
          arg_index++;
          max_levels = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-hypre_agg_nl") == 0)
+      {
+         arg_index++;
+         agg_num_levels = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-hypre_coarsen_type") == 0)
+      {
+         arg_index++;
+         coarsen_type = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-mfem_ref_levels") == 0)
       {
          arg_index++;
@@ -164,6 +177,16 @@ int main (int argc, char *argv[])
             all_data.input.thread_part_type = ALL_LEVELS;
          }
       }
+      else if (strcmp(argv[arg_index], "-converge_test_type") == 0)
+      {
+         arg_index++;
+         if (strcmp(argv[arg_index], "one") == 0){
+            all_data.input.converge_test_type = ONE_LEVEL;
+         }
+         else if (strcmp(argv[arg_index], "all") == 0){
+            all_data.input.converge_test_type = ALL_LEVELS;
+         }
+      }
       else if (strcmp(argv[arg_index], "-async_type") == 0)
       {
          arg_index++;
@@ -178,6 +201,11 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          all_data.input.num_threads = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-num_runs") == 0)
+      {
+         arg_index++;
+         num_runs = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-format_output") == 0)
       {
@@ -223,8 +251,8 @@ int main (int argc, char *argv[])
       return (0);
    }
 
-  // Laplacian_2D_5pt(&A, n);
-   MFEM_Ex1(&all_data, &A);
+   Laplacian_2D_5pt(&A, n);
+  // MFEM_Ex1(&all_data, &A);
   // return 0;
 
    HYPRE_IJMatrixAssemble(A);
@@ -305,37 +333,38 @@ int main (int argc, char *argv[])
    start = omp_get_wtime();
    SMEM_Setup(solver, &all_data);
    all_data.output.setup_wtime = omp_get_wtime() - start;
-   start = omp_get_wtime();
-   SMEM_Solve(&all_data);
-   all_data.output.solve_wtime = omp_get_wtime() - start;
 
-   char print_str[1000];
-   if (all_data.input.format_output_flag == 0){
-      strcpy(print_str, "\nSetup stats:\n"
-                        "\tHypre setup time = %e\n"
-                        "\tRemaining setup time = %e\n"
-                        "\tTotal setup time = %e\n"
-                        "\nSolve stats:\n"
-                        "\tTotal solve time = %e\n"
-                        "\tRelative Residual 2-norm = %e\n");
-   }
-   else{
-      strcpy(print_str, "%e %e %e %e %e\n");
-   }
+   for (int run = 1; run <= num_runs; run++){
+      InitSolve(&all_data);
+      SMEM_Solve(&all_data);
 
-   printf(print_str,
-          all_data.output.hypre_setup_wtime,
-          all_data.output.setup_wtime,
-          all_data.output.hypre_setup_wtime + all_data.output.hypre_setup_wtime,
-          all_data.output.solve_wtime,
-          all_data.output.r_norm2/all_data.output.r0_norm2);
+      char print_str[1000];
+      if (all_data.input.format_output_flag == 0){
+         strcpy(print_str, "\nSetup stats:\n"
+                           "\tHypre setup time = %e\n"
+                           "\tRemaining setup time = %e\n"
+                           "\tTotal setup time = %e\n"
+                           "\nSolve stats:\n"
+                           "\tTotal solve time = %e\n"
+                           "\tRelative Residual 2-norm = %e\n");
+      }
+      else{
+         strcpy(print_str, "%e %e %e %e %e\n");
+      }
+
+      printf(print_str,
+             all_data.output.hypre_setup_wtime,
+             all_data.output.setup_wtime,
+             all_data.output.hypre_setup_wtime + all_data.output.hypre_setup_wtime,
+             all_data.output.solve_wtime,
+             all_data.output.r_norm2/all_data.output.r0_norm2);
+   }
 
    HYPRE_BoomerAMGDestroy(solver);
-
-   /* Clean up */
    HYPRE_IJMatrixDestroy(A);
    HYPRE_IJVectorDestroy(b);
    HYPRE_IJVectorDestroy(x);
+   
 
    /* Finalize MPI*/
    MPI_Finalize();

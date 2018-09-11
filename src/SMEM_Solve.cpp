@@ -27,6 +27,7 @@ void SMEM_Solve(AllData *all_data)
       printf("%d\t%e\n", 0, 1.);
    }
 
+   double start = omp_get_wtime();
    if (all_data->input.async_flag == 1){
       SMEM_Async_AMG(all_data);
       if (all_data->input.num_threads == 1){
@@ -114,4 +115,5 @@ void SMEM_Solve(AllData *all_data)
          }
       }
    }
+   all_data->output.solve_wtime = omp_get_wtime() - start;
 }

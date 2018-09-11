@@ -84,6 +84,7 @@ typedef struct{
    int async_type;
    int thread_part_type;
    int thread_part_distr_type;
+   int converge_test_type;
 }InputData;
 
 typedef struct{

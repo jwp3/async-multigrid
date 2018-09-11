@@ -25,4 +25,6 @@ int SMEM_LevelBarrier(AllData *all_data,
 
 int CheckConverge(AllData *all_data);
 
+void InitSolve(AllData *all_data);
+
 #endif
