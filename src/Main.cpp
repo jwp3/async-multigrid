@@ -58,7 +58,8 @@ int main (int argc, char *argv[])
    int hypre_solve_flag = 0;
 
    /* mfem parameters */
-   int ref_levels = 3;
+   int ref_levels = 6;
+   int order = 1;
 
    AllData all_data;
    all_data.input.async_flag = 0;
@@ -202,8 +203,8 @@ int main (int argc, char *argv[])
       return (0);
    }
 
-   Laplacian_2D_5pt(&A, n);
-   MFEM_Ex1(&A, ref_levels);
+  // Laplacian_2D_5pt(&A, n);
+   MFEM_Ex1(&A, ref_levels, order);
   // return 0;
 
    HYPRE_IJMatrixAssemble(A);
@@ -295,17 +296,19 @@ int main (int argc, char *argv[])
                         "\tRemaining setup time = %e\n"
                         "\tTotal setup time = %e\n"
                         "\nSolve stats:\n"
-                        "\tTotal solve time = %e\n");
+                        "\tTotal solve time = %e\n"
+                        "\tRelative Residual 2-norm = %e\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e\n");
+      strcpy(print_str, "%e %e %e %e %e\n");
    }
 
    printf(print_str,
           all_data.output.hypre_setup_wtime,
           all_data.output.setup_wtime,
           all_data.output.hypre_setup_wtime + all_data.output.hypre_setup_wtime,
-          all_data.output.solve_wtime);
+          all_data.output.solve_wtime,
+          all_data.output.r_norm2/all_data.output.r0_norm2);
 
    HYPRE_BoomerAMGDestroy(solver);
 

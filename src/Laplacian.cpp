@@ -101,10 +101,11 @@ void Laplacian_2D_5pt(HYPRE_IJMatrix *A, int n)
 //               of essential boundary conditions, static condensation, and the
 //               optional connection to the GLVis tool for visualization.
 
-void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels)
+void MFEM_Ex1(HYPRE_IJMatrix *Aij,
+              int ref_levels,
+              int order)
 {
-   const char *mesh_file = "./mfem/data/ball-nurbs.mesh";
-   int order = 1;
+   const char *mesh_file = "./mfem/data/beam-tet.mesh";
    bool static_cond = false;
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
@@ -113,31 +114,17 @@ void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels)
    Mesh *mesh = new Mesh(mesh_file, 1, 1);
    int dim = mesh->Dimension();
 
-   // 3. Refine the mesh to increase the resolution. In this example we do
-   //    'ref_levels' of uniform refinement. We choose 'ref_levels' to be the
-   //    largest number that gives a final mesh with no more than 50,000
-   //    elements.
+   // 3. Refine the mesh to increase the resolution.
    for (int l = 0; l < ref_levels; l++){
       mesh->UniformRefinement();
    }
+   mesh->SetCurvature(2);
 
    // 4. Define a finite element space on the mesh. Here we use continuous
    //    Lagrange finite elements of the specified order. If order < 1, we
    //    instead use an isoparametric/isogeometric space.
    FiniteElementCollection *fec;
-   if (order > 0)
-   {
-      fec = new H1_FECollection(order, dim);
-   }
-   else if (mesh->GetNodes())
-   {
-      fec = mesh->GetNodes()->OwnFEC();
-     // cout << "Using isoparametric FEs: " << fec->Name() << endl;
-   }
-   else
-   {
-      fec = new H1_FECollection(order = 1, dim);
-   }
+   fec = new H1_FECollection(order, dim);
    FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
   // cout << "Number of finite element unknowns: "
   //      << fespace->GetTrueVSize() << endl;
@@ -208,9 +195,6 @@ void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels)
 
       /* Set the values for row i */
       HYPRE_IJMatrixSetValues(*Aij, 1, &nnz, &i, cols, values);
-      
-      free(values);
-      free(cols);
    }
 
   // cout << "Size of linear system: " << A.Height() << endl;
@@ -219,6 +203,6 @@ void MFEM_Ex1(HYPRE_IJMatrix *Aij, int ref_levels)
    delete a;
    delete b;
    delete fespace;
-   if (order > 0) { delete fec; }
+   delete fec;
    delete mesh;
 }

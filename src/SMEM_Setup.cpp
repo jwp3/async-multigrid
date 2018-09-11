@@ -265,9 +265,9 @@ void PartitionLevels(AllData *all_data)
       }
       if (all_data->input.thread_part_distr_type == HALF_THREADS){
          for (int level = 0; level < num_levels; level++){
-            printf("level %d:\n\t", level);
+           // printf("level %d:\n\t", level);
             if (num_threads == 1){
-               printf("%d ", tid);
+              // printf("%d ", tid);
                all_data->thread.thread_levels[tid].push_back(level);
                all_data->thread.level_threads[level].push_back(tid);
                all_data->thread.barrier_root[level] = tid;
@@ -276,7 +276,7 @@ void PartitionLevels(AllData *all_data)
             else{
                if (level == num_levels-1){
                   for (int t = tid; t < tid + num_threads; t++){
-                     printf("%d ", t);
+                    // printf("%d ", t);
                      all_data->thread.thread_levels[t].push_back(level);
                      all_data->thread.level_threads[level].push_back(t);
                   }
@@ -289,7 +289,7 @@ void PartitionLevels(AllData *all_data)
                else {
                   half_threads = (int)ceil(((double)num_threads)/2.0);
                   for (int t = tid; t < tid + half_threads; t++){
-                     printf("%d ", t);
+                    // printf("%d ", t);
                      all_data->thread.thread_levels[t].push_back(level);
                      all_data->thread.level_threads[level].push_back(t);
                   }
@@ -301,15 +301,15 @@ void PartitionLevels(AllData *all_data)
                   all_data->thread.barrier_root[level] = tid-1;
                }
             }
-            printf("\n");
+           // printf("\n");
          }
       }
       else {
          int equal_threads = std::max(all_data->input.num_threads/all_data->grid.num_levels, 1);
          for (int level = 0; level < num_levels; level++){
-            printf("level %d:\n\t", level);
+           // printf("level %d:\n\t", level);
             if (num_threads == 1){
-               printf("%d ", tid);
+              // printf("%d ", tid);
                all_data->thread.thread_levels[tid].push_back(level);
                all_data->thread.level_threads[level].push_back(tid);
                all_data->thread.barrier_root[level] = tid;
@@ -318,7 +318,7 @@ void PartitionLevels(AllData *all_data)
             else{
                if (level == num_levels-1){
                   for (int t = tid; t < tid + num_threads; t++){
-                     printf("%d ", t);
+                    // printf("%d ", t);
                      all_data->thread.thread_levels[t].push_back(level);
                      all_data->thread.level_threads[level].push_back(t);
                   }
@@ -330,7 +330,7 @@ void PartitionLevels(AllData *all_data)
                }
                else {
                   for (int t = tid; t < tid + equal_threads; t++){
-                     printf("%d ", t);
+                    // printf("%d ", t);
                      all_data->thread.thread_levels[t].push_back(level);
                      all_data->thread.level_threads[level].push_back(t);
                   }
@@ -342,7 +342,7 @@ void PartitionLevels(AllData *all_data)
                   all_data->thread.barrier_root[level] = tid-1;
                }
             }
-            printf("\n");
+           // printf("\n");
          }
       }
    }
