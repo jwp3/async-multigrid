@@ -129,9 +129,21 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
                         if (k == q)
                             e = A{q}\e;
                         else
-                            e = omega*d{k}.*e;
-                            e = (2./(omega*d{k})).*e - omega*A{k}*e;
-                            e = omega*d{k}.*e;
+                            f = e;
+                            if (strcmp(smooth_type, 'Jacobi') == 1)
+                                e = Jacobi(A{k}, zeros(N(k),1), f, num_relax, 1);
+                            elseif (strcmp(smooth_type, 'wJacobi') == 1)
+                                e = Jacobi(A{k}, zeros(N(k),1), f, num_relax, omega);
+                            elseif (strcmp(smooth_type, 'async-Jacobi') == 1)
+                                e = async_Jacobi(A{k}, zeros(N(k),1), f, num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, 1);
+                            elseif (strcmp(smooth_type, 'async-wJacobi') == 1)
+                                e = async_Jacobi(A{k}, zeros(N(k),1), f, num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, omega);
+                            else
+                                e = GS_lower(A{k}, zeros(N(k),1), f, num_relax);
+                            end
+%                             e = omega*d{k}.*e;
+%                             e = (2./(omega*d{k})).*e - omega*A{k}*e;
+%                             e = omega*d{k}.*e;
                         end
                         for i = (k-1):-1:1
                             e = G{i}*(P{i}*e);

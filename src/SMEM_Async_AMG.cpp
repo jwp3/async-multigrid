@@ -1,9 +1,10 @@
 #include "Main.hpp"
 #include "SMEM_MatVec.hpp"
 #include "SMEM_Smooth.hpp"
+#include "SMEM_Solve.hpp"
 #include "Misc.hpp"
 
-void SMEM_Async_AMG(AllData *all_data)
+void SMEM_Async_Add_AMG(AllData *all_data)
 {
    all_data->grid.res_comp_count = 0;
    omp_init_lock(&(all_data->thread.lock));
@@ -19,11 +20,6 @@ void SMEM_Async_AMG(AllData *all_data)
       double smooth_start;
       double restrict_start;
       double prolong_start;
-      
-      all_data->output.smooth_wtime[tid] = 0;
-      all_data->output.residual_wtime[tid] = 0;
-      all_data->output.restrict_wtime[tid] = 0;
-      all_data->output.prolong_wtime[tid] = 0;
 
       while(1){
          residual_start = omp_get_wtime();
@@ -111,17 +107,19 @@ void SMEM_Async_AMG(AllData *all_data)
                if (all_data->input.solver == ASYNC_MULTADD){
                   ns = all_data->thread.A_ns[thread_level][tid];
                   ne = all_data->thread.A_ne[thread_level][tid];
-                  SMEM_JacobiSymmIterMat_MatVec(all_data,
-                                                all_data->matrix.A[thread_level],
-                                                all_data->level_vector[thread_level].y[thread_level],
-                                                all_data->level_vector[thread_level].r[thread_level],
-                                                ns, ne,
-                                                thread_level);
                   for (int i = ns; i < ne; i++){
-                     all_data->level_vector[thread_level].e[thread_level][i] =
-                        all_data->level_vector[thread_level].r[thread_level][i];
+                     all_data->level_vector[thread_level].e[thread_level][i] = 0;
                   }
                   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+                  SMEM_Smooth(all_data,
+                              all_data->matrix.A[thread_level],
+                              all_data->level_vector[thread_level].r[thread_level],
+                              all_data->level_vector[thread_level].e[thread_level],
+                              all_data->level_vector[thread_level].u_prev[thread_level],
+                              all_data->level_vector[thread_level].y[thread_level],
+                              all_data->input.num_fine_smooth_sweeps,
+                              thread_level,
+                              ns, ne);
                }
                else{
                   ns = all_data->thread.A_ns[fine_grid][tid];
@@ -135,27 +133,15 @@ void SMEM_Async_AMG(AllData *all_data)
                      all_data->level_vector[thread_level].u_coarse[coarse_grid][i] = 0;
                   }
                   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-                 
-                  if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
-                     SMEM_Sync_HybridJacobiGaussSeidel(all_data,
-                                                       all_data->matrix.A[coarse_grid],
-                                                       all_data->level_vector[thread_level].r[coarse_grid],
-                                                       all_data->level_vector[thread_level].u_coarse[coarse_grid],
-                                                       all_data->level_vector[thread_level].u_coarse_prev[coarse_grid],
-                                                       all_data->input.num_coarse_smooth_sweeps,
-                                                       thread_level,
-                                                       ns, ne);
-                  }
-                  else {
-                     SMEM_Sync_Jacobi(all_data,
-                                      all_data->matrix.A[coarse_grid],
-                                      all_data->level_vector[thread_level].r[coarse_grid],
-                                      all_data->level_vector[thread_level].u_coarse[coarse_grid],
-                                      all_data->level_vector[thread_level].u_coarse_prev[coarse_grid],
-                                      all_data->input.num_coarse_smooth_sweeps,
-                                      thread_level,
-                                      ns, ne);
-                  }
+                  SMEM_Smooth(all_data,
+                              all_data->matrix.A[coarse_grid],
+                              all_data->level_vector[thread_level].r[coarse_grid],
+                              all_data->level_vector[thread_level].u_coarse[coarse_grid],
+                              all_data->level_vector[thread_level].u_coarse_prev[coarse_grid],
+                              all_data->level_vector[thread_level].y[coarse_grid],
+                              all_data->input.num_coarse_smooth_sweeps,
+                              thread_level,
+                              ns, ne);
                   ns = all_data->thread.A_ns[fine_grid][tid];
                   ne = all_data->thread.A_ne[fine_grid][tid];
                   SMEM_MatVec(all_data,
@@ -172,26 +158,15 @@ void SMEM_Async_AMG(AllData *all_data)
                                 all_data->level_vector[thread_level].r_fine[fine_grid],
                                 ns, ne);
                   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-                  if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
-                     SMEM_Sync_HybridJacobiGaussSeidel(all_data,
-                                                       all_data->matrix.A[fine_grid],
-                                                       all_data->level_vector[thread_level].r_fine[fine_grid],
-                                                       all_data->level_vector[thread_level].u_fine[fine_grid],
-                                                       all_data->level_vector[thread_level].u_fine_prev[fine_grid],
-                                                       all_data->input.num_fine_smooth_sweeps,
-                                                       thread_level,
-                                                       ns, ne);
-                  }
-                  else {
-                     SMEM_Sync_Jacobi(all_data,
-                                      all_data->matrix.A[fine_grid],
-                                      all_data->level_vector[thread_level].r_fine[fine_grid],
-                                      all_data->level_vector[thread_level].u_fine[fine_grid],
-                                      all_data->level_vector[thread_level].u_fine_prev[fine_grid],
-                                      all_data->input.num_fine_smooth_sweeps,
-                                      thread_level,
-                                      ns, ne);
-                  }
+                  SMEM_Smooth(all_data,
+                              all_data->matrix.A[fine_grid],
+                              all_data->level_vector[thread_level].r_fine[fine_grid],
+                              all_data->level_vector[thread_level].u_fine[fine_grid],
+                              all_data->level_vector[thread_level].u_fine_prev[fine_grid],
+                              all_data->level_vector[thread_level].y[fine_grid],
+                              all_data->input.num_fine_smooth_sweeps,
+                              thread_level,
+                              ns, ne);
                   ns = all_data->thread.A_ns[thread_level][tid];
                   ne = all_data->thread.A_ne[thread_level][tid];
                   for (int i = ns; i < ne; i++){

@@ -36,11 +36,11 @@ void SMEM_JacobiIterMat_MatVec(AllData *all_data,
                                int ns, int ne,
                                int thread_level);
 
-void SMEM_JacobiSymmIterMat_MatVec(AllData *all_data,
-                                   hypre_CSRMatrix *A,
-                                   HYPRE_Real *y,
-                                   HYPRE_Real *r,
-                                   int ns, int ne,
-                                   int thread_level);
+//void SMEM_JacobiSymmIterMat_MatVec(AllData *all_data,
+//                                   hypre_CSRMatrix *A,
+//                                   HYPRE_Real *y,
+//                                   HYPRE_Real *r,
+//                                   int ns, int ne,
+//                                   int thread_level);
 
 #endif

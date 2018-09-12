@@ -32,10 +32,12 @@
 #define JACOBI 0
 #define GAUSS_SEIDEL 1
 #define HYBRID_JACOBI_GAUSS_SEIDEL 2
+#define SYMM_JACOBI 3
+#define SEMI_ASYNC_GAUSS_SEIDEL 4
 
 #define MULT 0
 #define AFACX 1
-#define MULT_ADD 2
+#define MULTADD 2
 #define ASYNC_AFACX 3
 #define ASYNC_MULTADD 4
 

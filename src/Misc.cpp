@@ -9,11 +9,12 @@ void PrintOutput(AllData all_data)
    double mean_restrict_wtime;
    double mean_residual_wtime;
    double mean_prolong_wtime;
+   double mean_correct;
 
    mean_smooth_sweeps =
       (int)((double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads);
-   mean_cycles =
-      (int)((double)SumInt(all_data.output.cycles, all_data.input.num_threads)/(double)all_data.input.num_threads);
+   mean_correct =
+      (int)((double)SumInt(all_data.grid.num_correct, all_data.grid.num_levels)/(double)all_data.grid.num_levels);
    mean_smooth_wtime =
       SumDbl(all_data.output.smooth_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
    mean_residual_wtime =
@@ -32,13 +33,14 @@ void PrintOutput(AllData all_data)
                         "\nSolve stats:\n"
                         "\tRelative Residual 2-norm = %e\n"
                         "\tTotal solve time = %e\n"
+                        "\tMean corrections = %e\n"
 		        "\tMean smooth time = %e\n" 
 			"\tMean residual time = %e\n"
 			"\tMean restrict time = %e\n"
 		        "\tMean prolong time = %e\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %e %e %e %e\n");
+      strcpy(print_str, "%e %e %e %e %e %e %e %e %e %e\n");
    }
 
    printf(print_str,
@@ -47,6 +49,7 @@ void PrintOutput(AllData all_data)
           all_data.output.hypre_setup_wtime + all_data.output.hypre_setup_wtime,
           all_data.output.r_norm2/all_data.output.r0_norm2,
           all_data.output.solve_wtime,
+          mean_correct,
           mean_smooth_wtime,
           mean_residual_wtime,
           mean_restrict_wtime,

@@ -54,8 +54,8 @@ int main (int argc, char *argv[])
    /* Hypre parameters */
    int max_levels = 20;
    int solver_id = 0;
-   HYPRE_Int agg_num_levels = 1;
-   HYPRE_Int coarsen_type = 9;
+   HYPRE_Int agg_num_levels = 0;
+   HYPRE_Int coarsen_type = 10;
    int hypre_print_level = 0;
    int hypre_solve_flag = 0;
 
@@ -113,7 +113,7 @@ int main (int argc, char *argv[])
             all_data.input.solver = MULT;
          }
          else if (strcmp(argv[arg_index], "multadd") == 0){
-            all_data.input.solver = MULT_ADD;
+            all_data.input.solver = MULTADD;
          }
          else if (strcmp(argv[arg_index], "afacx") == 0){
             all_data.input.solver = AFACX;
