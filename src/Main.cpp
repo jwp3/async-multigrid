@@ -63,9 +63,14 @@ int main (int argc, char *argv[])
    /* mfem parameters */
    all_data.mfem.ref_levels = 4;
    all_data.mfem.order = 1;
+   strcpy(all_data.mfem.mesh_file, "./mfem/data/ball-nurbs.mesh");
 
+   all_data.input.test_problem = LAPLACE_2D5PT;
+   all_data.input.tol = 1e-9;
    all_data.input.async_flag = 0;
    all_data.input.async_type = 1;
+   all_data.input.check_resnorm_flag = 1;
+   all_data.input.global_conv_flag = 0;
    all_data.input.thread_part_type = ONE_LEVEL;
    all_data.input.converge_test_type = ONE_LEVEL;
    all_data.input.thread_part_distr_type = EQUAL_THREADS;
@@ -92,6 +97,16 @@ int main (int argc, char *argv[])
          arg_index++;
          n = atoi(argv[arg_index]);
       }
+      if (strcmp(argv[arg_index], "-problem") == 0)
+      {
+         arg_index++;
+         if (strcmp(argv[arg_index], "laplace_2d5pt") == 0){
+            all_data.input.test_problem = LAPLACE_2D5PT;
+         }
+         else if (strcmp(argv[arg_index], "mfem") == 0){
+            all_data.input.test_problem = MFEM;
+         }
+      }
       else if (strcmp(argv[arg_index], "-smoother") == 0)
       {
          arg_index++;
@@ -103,6 +118,12 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "hybrid_jgs") == 0){
             all_data.input.smoother = HYBRID_JACOBI_GAUSS_SEIDEL;
+         }
+         else if (strcmp(argv[arg_index], "symm_j") == 0){
+            all_data.input.smoother = SYMM_JACOBI;
+         }
+         else if (strcmp(argv[arg_index], "semi_async_gs") == 0){
+            all_data.input.smoother = SEMI_ASYNC_GAUSS_SEIDEL;
          }
       }
       else if (strcmp(argv[arg_index], "-solver") == 0)
@@ -134,6 +155,11 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.input.num_cycles = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-tol") == 0)
+      {
+         arg_index++;
+         all_data.input.tol = atof(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-num_smooth_sweeps") == 0)
       {
          arg_index++;
@@ -147,12 +173,12 @@ int main (int argc, char *argv[])
          arg_index++;
          max_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-hypre_agg_nl") == 0)
+      else if (strcmp(argv[arg_index], "-agg_nl") == 0)
       {
          arg_index++;
          agg_num_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-hypre_coarsen_type") == 0)
+      else if (strcmp(argv[arg_index], "-coarsen_type") == 0)
       {
          arg_index++;
          coarsen_type = atoi(argv[arg_index]);
@@ -166,6 +192,11 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          all_data.mfem.order = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-mfem_mesh_file") == 0)
+      {
+         arg_index++;
+         strcpy(all_data.mfem.mesh_file, argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-thread_level_part") == 0)
       {
@@ -182,10 +213,17 @@ int main (int argc, char *argv[])
          arg_index++;
          if (strcmp(argv[arg_index], "one") == 0){
             all_data.input.converge_test_type = ONE_LEVEL;
+            all_data.input.global_conv_flag = 0;
          }
          else if (strcmp(argv[arg_index], "all") == 0){
             all_data.input.converge_test_type = ALL_LEVELS;
+            all_data.input.global_conv_flag = 1;
          }
+      }
+      else if (strcmp(argv[arg_index], "-check_resnorm") == 0)
+      {
+         all_data.input.check_resnorm_flag = 1;
+         all_data.input.global_conv_flag = 1;
       }
       else if (strcmp(argv[arg_index], "-async_type") == 0)
       {
@@ -250,10 +288,13 @@ int main (int argc, char *argv[])
       MPI_Finalize();
       return (0);
    }
-
-   Laplacian_2D_5pt(&A, n);
-  // MFEM_Ex1(&all_data, &A);
-  // return 0;
+   
+   if (all_data.input.test_problem == LAPLACE_2D5PT){
+      Laplacian_2D_5pt(&A, n);
+   }
+   else if (all_data.input.test_problem = MFEM){
+      MFEM_Ex1(&all_data, &A);
+   }
 
    HYPRE_IJMatrixAssemble(A);
 

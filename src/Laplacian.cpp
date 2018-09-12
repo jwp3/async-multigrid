@@ -104,13 +104,12 @@ void Laplacian_2D_5pt(HYPRE_IJMatrix *A, int n)
 void MFEM_Ex1(AllData *all_data,
               HYPRE_IJMatrix *Aij)
 {
-   const char *mesh_file = "./mfem/data/ball-nurbs.mesh";
    bool static_cond = false;
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
    //    the same code.
-   Mesh *mesh = new Mesh(mesh_file, 1, 1);
+   Mesh *mesh = new Mesh(all_data->mfem.mesh_file, 1, 1);
    int dim = mesh->Dimension();
 
    // 3. Refine the mesh to increase the resolution.

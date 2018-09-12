@@ -70,6 +70,7 @@ void SEQ_Vcycle(AllData *all_data)
            all_data->vector.u[this_grid],
            &(all_data->pardiso.info.error));
    all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+   all_data->grid.num_correct[this_grid]++;
 
 
    for (int level = all_data->grid.num_levels-2; level > -1; level--){
@@ -95,6 +96,7 @@ void SEQ_Vcycle(AllData *all_data)
                   fine_grid,
                   0, 0);
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+      all_data->grid.num_correct[level]++;
    }
 }
 
@@ -185,6 +187,7 @@ void SEQ_AFACx_Vcycle(AllData *all_data)
                      0, 0);
       }
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+      all_data->grid.num_correct[level]++;
 
       this_grid = level;
       for (int i = 0; i < all_data->grid.n[this_grid]; i++){

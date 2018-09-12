@@ -33,14 +33,14 @@ void PrintOutput(AllData all_data)
                         "\nSolve stats:\n"
                         "\tRelative Residual 2-norm = %e\n"
                         "\tTotal solve time = %e\n"
-                        "\tMean corrections = %e\n"
+                        "\tMean corrections = %f\n"
 		        "\tMean smooth time = %e\n" 
 			"\tMean residual time = %e\n"
 			"\tMean restrict time = %e\n"
 		        "\tMean prolong time = %e\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %e %e %e %e %e\n");
+      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e\n");
    }
 
    printf(print_str,
@@ -79,6 +79,25 @@ double Parfor_Norm2(double *x, int n)
    }
    return sqrt(sum);
 }
+
+void Par_Norm2(AllData *all_data,
+               double *r,
+               int thread_level,
+               int ns, int ne)
+{
+   int tid = omp_get_thread_num();
+   all_data->thread.loc_sum[tid] = 0;
+   for (int i = ns; i < ne; i++){
+      all_data->thread.loc_sum[tid] += pow(r[i], 2.0);
+   }
+   #pragma omp atomic
+   all_data->output.r_norm2 += all_data->thread.loc_sum[tid];
+   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+   if (tid == all_data->thread.barrier_root[thread_level]){
+      all_data->output.r_norm2 = sqrt(all_data->output.r_norm2);
+   }
+}
+
 
 int SumInt(int *x, int n)
 {
@@ -155,14 +174,23 @@ void QuicksortPair_int_double(int *x, double *y, int left, int right)
    }
 }
 
-int CheckConverge(AllData *all_data)
+int CheckConverge(AllData *all_data,
+                  int thread_level)
 {
-   for (int q = 0; q < all_data->grid.num_levels; q++){
-      if (all_data->grid.num_correct[q] < all_data->input.num_cycles){
-         return 0;
+   if (all_data->input.check_resnorm_flag == 1){
+      if (all_data->output.r_norm2/all_data->output.r0_norm2 < all_data->input.tol){
+         return 1;
       }
    }
-   return 1;
+   if (all_data->input.converge_test_type == ALL_LEVELS){
+      for (int q = 0; q < all_data->grid.num_levels; q++){
+         if (all_data->grid.num_correct[q] < all_data->input.num_cycles){
+            return 0;
+         }
+      }
+      return 1;
+   }
+   return 0;
 }
 
 int SMEM_LevelBarrier(AllData *all_data,

@@ -50,6 +50,9 @@
 #define FULL_ASYNC 0
 #define SEMI_ASYNC 1
 
+#define LAPLACE_2D5PT 0
+#define MFEM 1
+
 using namespace std;
 using namespace mfem;
 
@@ -79,6 +82,8 @@ typedef struct{
    double tol;
    int format_output_flag;
    int print_reshist_flag;
+   int check_resnorm_flag;
+   int global_conv_flag;
    double smooth_weight;
    int smoother;
    int solver;
@@ -87,6 +92,7 @@ typedef struct{
    int thread_part_type;
    int thread_part_distr_type;
    int converge_test_type;
+   int test_problem;
 }InputData;
 
 typedef struct{
@@ -137,6 +143,7 @@ typedef struct{
 typedef struct{
    int ref_levels;
    int order;
+   char mesh_file[1000];
 }MfemData;
 
 typedef struct{
@@ -151,6 +158,7 @@ typedef struct{
    omp_lock_t lock;
    int *barrier_root;
    int **barrier_flags;
+   double *loc_sum;
    int **A_ns;
    int **A_ne;
    int **R_ns;

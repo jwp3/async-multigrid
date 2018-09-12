@@ -253,6 +253,7 @@ void PartitionLevels(AllData *all_data)
    all_data->thread.level_threads.resize(num_levels, std::vector<int>(0));
    all_data->thread.barrier_flags = (int **)malloc(num_levels * sizeof(int *));
    all_data->thread.barrier_root = (int *)malloc(num_levels * sizeof(int));
+   all_data->thread.loc_sum = (double *)malloc(num_threads * sizeof(double));
 
    all_data->output.smooth_wtime = (double *)malloc(num_threads * sizeof(double));
    all_data->output.residual_wtime = (double *)malloc(num_threads * sizeof(double));

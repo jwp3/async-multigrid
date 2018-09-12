@@ -22,12 +22,15 @@ void SMEM_Async_Add_AMG(AllData *all_data)
       double prolong_start;
 
       while(1){
-         residual_start = omp_get_wtime();
          for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
             thread_level = all_data->thread.thread_levels[tid][q];
             fine_grid = 0;
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
+            if (tid == 0){
+               all_data->output.r_norm2 = 0;
+            }
+            residual_start = omp_get_wtime();
             SMEM_Residual(all_data,
                           all_data->matrix.A[fine_grid],
                           all_data->vector.f[fine_grid],
@@ -36,8 +39,32 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                           all_data->level_vector[thread_level].r[fine_grid],
                           ns, ne);
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
+
+            if (thread_level == 0 &&
+                all_data->input.check_resnorm_flag == 1){
+               Par_Norm2(all_data, 
+                         all_data->level_vector[thread_level].r[fine_grid],
+                         thread_level,
+                         ns, ne);
+            }
+            if (tid == 0){
+               all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
+            }
+            if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
+               tid_converge = 1;
+               break;
+            }
+            if (all_data->input.converge_test_type == ONE_LEVEL){
+               if (all_data->grid.num_correct[thread_level] == all_data->input.num_cycles){
+                  tid_converge = 1;
+                  break;
+               }
+            }
          }
-         all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
+         if (tid_converge == 1){
+            break;
+         }
 
          for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
             thread_level = all_data->thread.thread_levels[tid][q];
@@ -224,7 +251,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             }
             else {
                for (int i = ns; i < ne; i++){
-                 // #pragma omp atomic
+                  #pragma omp atomic
                   all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
                   all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
                }
@@ -233,27 +260,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             if (tid == all_data->thread.barrier_root[thread_level]){
                all_data->grid.num_correct[thread_level]++;
             }
-            if (all_data->input.converge_test_type == ALL_LEVELS){
-               if (tid == 0){
-                  if (CheckConverge(all_data) == 1){
-                     all_data->thread.converge_flag = 1;
-                  }
-               }
-               if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
-                  tid_converge = 1;
-                  break;
-               }
-            }
-            else{
-               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-               if (all_data->grid.num_correct[thread_level] == all_data->input.num_cycles){
-                  tid_converge = 1;
-                  break;
-               }
-            }
-         }
-         if (tid_converge == 1){
-            break;
+            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
          }
       }
    }
