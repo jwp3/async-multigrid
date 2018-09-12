@@ -337,27 +337,7 @@ int main (int argc, char *argv[])
    for (int run = 1; run <= num_runs; run++){
       InitSolve(&all_data);
       SMEM_Solve(&all_data);
-
-      char print_str[1000];
-      if (all_data.input.format_output_flag == 0){
-         strcpy(print_str, "\nSetup stats:\n"
-                           "\tHypre setup time = %e\n"
-                           "\tRemaining setup time = %e\n"
-                           "\tTotal setup time = %e\n"
-                           "\nSolve stats:\n"
-                           "\tTotal solve time = %e\n"
-                           "\tRelative Residual 2-norm = %e\n");
-      }
-      else{
-         strcpy(print_str, "%e %e %e %e %e\n");
-      }
-
-      printf(print_str,
-             all_data.output.hypre_setup_wtime,
-             all_data.output.setup_wtime,
-             all_data.output.hypre_setup_wtime + all_data.output.hypre_setup_wtime,
-             all_data.output.solve_wtime,
-             all_data.output.r_norm2/all_data.output.r0_norm2);
+      PrintOutput(all_data);
    }
 
    HYPRE_BoomerAMGDestroy(solver);

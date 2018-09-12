@@ -254,6 +254,10 @@ void PartitionLevels(AllData *all_data)
    all_data->thread.barrier_flags = (int **)malloc(num_levels * sizeof(int *));
    all_data->thread.barrier_root = (int *)malloc(num_levels * sizeof(int));
 
+   all_data->output.smooth_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.residual_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.restrict_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.prolong_wtime = (double *)malloc(num_threads * sizeof(double));
   
    if (all_data->input.thread_part_type == ALL_LEVELS){
       int tid = 0;

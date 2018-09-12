@@ -8,9 +8,17 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
    #pragma omp parallel
    {
       int fine_grid, coarse_grid;
+      int tid = omp_get_thread_num();
+
+      double residual_start;
+      double smooth_start;
+      double restrict_start;
+      double prolong_start;
+
       for (int level = 0; level < all_data->grid.num_levels-1; level++){
          fine_grid = level;
          coarse_grid = level + 1;
+         smooth_start = omp_get_wtime();
          if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
             SMEM_Sync_Parfor_HybridJacobiGaussSeidel(all_data,
                                                      all_data->matrix.A[fine_grid],
@@ -29,16 +37,21 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                     all_data->input.num_pre_smooth_sweeps,
                                     fine_grid);
          }
+         all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+         residual_start = omp_get_wtime();
          SMEM_Sync_Parfor_Residual(all_data,
                                    all_data->matrix.A[fine_grid],
                                    all_data->vector.f[fine_grid],
                                    all_data->vector.u[fine_grid],
                                    all_data->vector.y[fine_grid],
                                    all_data->vector.r[fine_grid]);
+         all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
+         restrict_start = omp_get_wtime();
          SMEM_Sync_Parfor_MatVec(all_data,
                                  all_data->matrix.R[fine_grid],
                                  all_data->vector.r[fine_grid],
                                  all_data->vector.f[coarse_grid]);
+         all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
          #pragma omp for
          for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
             all_data->vector.u[coarse_grid][i] = 0;
@@ -47,6 +60,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
    }
 
    int thread_level = all_data->grid.num_levels-1;
+   double smooth_start = omp_get_wtime();
    PARDISO(all_data->pardiso.info.pt,
            &(all_data->pardiso.info.maxfct),
            &(all_data->pardiso.info.mnum),
@@ -63,21 +77,34 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
            all_data->vector.f[thread_level],
            all_data->vector.u[thread_level],
            &(all_data->pardiso.info.error));
+   for (int t = 0; t < all_data->input.num_threads; t++){
+      all_data->output.smooth_wtime[t] += omp_get_wtime() - smooth_start;
+   }
 
    #pragma omp parallel
    {
       int fine_grid, coarse_grid;
+      int tid = omp_get_thread_num();
+
+      double residual_start;
+      double smooth_start;
+      double restrict_start;
+      double prolong_start;
+
       for (int level = all_data->grid.num_levels-2; level > -1; level--){
          fine_grid = level;
          coarse_grid = level + 1;
+         prolong_start = omp_get_wtime();
          SMEM_Sync_Parfor_MatVec(all_data,
                                  all_data->matrix.P[fine_grid],
                                  all_data->vector.u[coarse_grid],
                                  all_data->vector.e[fine_grid]);
+         all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
          #pragma omp for
          for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
             all_data->vector.u[fine_grid][i] += all_data->vector.e[fine_grid][i];
          }
+         smooth_start = omp_get_wtime();
          if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
             SMEM_Sync_Parfor_HybridJacobiGaussSeidel(all_data,
                                                      all_data->matrix.A[fine_grid],
@@ -96,6 +123,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                     all_data->input.num_post_smooth_sweeps,
                                     fine_grid);
          }
+         all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
       }
    }
 }
@@ -105,6 +133,14 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
    #pragma omp parallel
    {
       int fine_grid, coarse_grid;
+      int tid = omp_get_thread_num();
+
+      double residual_start;
+      double smooth_start;
+      double restrict_start;
+      double prolong_start;
+
+      restrict_start = omp_get_wtime();
       for (int level = 0; level < all_data->grid.num_levels-1; level++){
          fine_grid = level;
          coarse_grid = level + 1;
@@ -113,9 +149,11 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                  all_data->vector.r[fine_grid],
                                  all_data->vector.r[coarse_grid]);
       }
+      all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
    }
 
    int thread_level = all_data->grid.num_levels-1;
+   double smooth_start = omp_get_wtime();
    PARDISO(all_data->pardiso.info.pt,
            &(all_data->pardiso.info.maxfct),
            &(all_data->pardiso.info.mnum),
@@ -132,10 +170,20 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
            all_data->vector.r[thread_level],
            all_data->vector.u_fine[thread_level],
            &(all_data->pardiso.info.error));
+   for (int t = 0; t < all_data->input.num_threads; t++){
+      all_data->output.smooth_wtime[t] += omp_get_wtime() - smooth_start;
+   }
 
    #pragma omp parallel
    {
       int fine_grid, coarse_grid, thread_level;
+      int tid = omp_get_thread_num();
+
+      double residual_start;
+      double smooth_start;
+      double restrict_start;
+      double prolong_start;
+
       for (int level = all_data->grid.num_levels-1; level > -1; level--){
          if (level != all_data->grid.num_levels-1){
             fine_grid = level;
@@ -150,6 +198,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                all_data->vector.u_coarse[coarse_grid][i] = 0;
             }
 
+            smooth_start = omp_get_wtime();
             if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
                SMEM_Sync_Parfor_HybridJacobiGaussSeidel(all_data,
                                                         all_data->matrix.A[coarse_grid],
@@ -196,8 +245,8 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                        all_data->input.num_fine_smooth_sweeps,
                                        fine_grid);
             }
+            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          }
-
 
          thread_level = level;
          #pragma omp for
@@ -208,10 +257,12 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
             for (int inner_level = level; inner_level > 0; inner_level--){
                fine_grid = inner_level - 1;
                coarse_grid = inner_level;
+               prolong_start = omp_get_wtime();
                SMEM_Sync_Parfor_MatVec(all_data,
                                        all_data->matrix.P[fine_grid],
                                        all_data->vector.e[coarse_grid],
                                        all_data->vector.e[fine_grid]);
+               all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
             }
          }
          fine_grid = 0;
@@ -232,6 +283,11 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
       int thread_level;
       int ns, ne;
 
+      double residual_start;
+      double smooth_start;
+      double restrict_start;
+      double prolong_start;
+
       for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
          thread_level = all_data->thread.thread_levels[tid][q];
 
@@ -248,17 +304,20 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                coarse_grid = level + 1;
                ns = all_data->thread.R_ns[fine_grid][tid];
                ne = all_data->thread.R_ne[fine_grid][tid];
+               restrict_start = omp_get_wtime();
                SMEM_MatVec(all_data,
                            all_data->matrix.R[fine_grid],
                            all_data->level_vector[thread_level].r[fine_grid],
                            all_data->level_vector[thread_level].r[coarse_grid],
                            ns, ne);
                SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
             }
          }
          fine_grid = thread_level;
          coarse_grid = thread_level + 1;
          if (thread_level == all_data->grid.num_levels-1){
+            smooth_start = omp_get_wtime();
             if (tid == all_data->thread.level_threads[thread_level][0]){
                PARDISO(all_data->pardiso.info.pt,
                        &(all_data->pardiso.info.maxfct),
@@ -278,9 +337,9 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                        &(all_data->pardiso.info.error));
             }
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          }
          else {
-
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
             for (int i = ns; i < ne; i++){
@@ -292,7 +351,8 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                all_data->level_vector[thread_level].u_coarse[coarse_grid][i] = 0;
             }
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-           
+            
+            smooth_start = omp_get_wtime();
             if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
                SMEM_Sync_HybridJacobiGaussSeidel(all_data,
                                                  all_data->matrix.A[coarse_grid],
@@ -349,6 +409,7 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                                 thread_level,
                                 ns, ne);
             }
+            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          }
 
          ns = all_data->thread.A_ns[thread_level][tid];
@@ -364,12 +425,14 @@ void SMEM_Sync_AFACx_Vcycle(AllData *all_data)
                coarse_grid = level + 1;
                ns = all_data->thread.P_ns[fine_grid][tid];
                ne = all_data->thread.P_ne[fine_grid][tid];
+               prolong_start = omp_get_wtime();
                SMEM_MatVec(all_data,
                            all_data->matrix.P[fine_grid],
                            all_data->level_vector[thread_level].e[coarse_grid],
                            all_data->level_vector[thread_level].e[fine_grid],
                            ns, ne);
                SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
             }
          }
        
@@ -393,6 +456,11 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
       int thread_level;
       int ns, ne;
 
+      double residual_start;
+      double smooth_start;
+      double restrict_start;
+      double prolong_start;
+
       for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
          thread_level = all_data->thread.thread_levels[tid][q];
 
@@ -408,6 +476,7 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
             coarse_grid = level + 1;
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
+            smooth_start = omp_get_wtime();
             SMEM_JacobiIterMat_MatVec(all_data,
                                       all_data->matrix.A[fine_grid],
                                       all_data->level_vector[thread_level].y[fine_grid],
@@ -415,16 +484,20 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
                                       ns, ne,
                                       thread_level);
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
             ns = all_data->thread.R_ns[fine_grid][tid];
             ne = all_data->thread.R_ne[fine_grid][tid];
+            restrict_start = omp_get_wtime();
             SMEM_MatVec(all_data,
                         all_data->matrix.R[fine_grid],
                         all_data->level_vector[thread_level].r[fine_grid],
                         all_data->level_vector[thread_level].r[coarse_grid],
                         ns, ne);
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
          }
          if (thread_level == all_data->grid.num_levels-1){
+            smooth_start = omp_get_wtime();
             if (tid == all_data->thread.level_threads[thread_level][0]){
                PARDISO(all_data->pardiso.info.pt,
                        &(all_data->pardiso.info.maxfct),
@@ -444,6 +517,7 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
                        &(all_data->pardiso.info.error));
             }
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          }
          else {
             ns = all_data->thread.A_ns[thread_level][tid];
@@ -455,6 +529,7 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
            //          all_data->level_vector[thread_level].r[thread_level][i] / A->data[A->i[i]];
            //    }
            // }
+            smooth_start = omp_get_wtime();
             SMEM_JacobiSymmIterMat_MatVec(all_data,
                                           all_data->matrix.A[thread_level],
                                           all_data->level_vector[thread_level].y[thread_level],
@@ -466,6 +541,7 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
                   all_data->level_vector[thread_level].r[thread_level][i];
             }
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          } 
            
          for (int level = thread_level-1; level > -1; level--){
@@ -473,14 +549,17 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
             coarse_grid = level + 1;
             ns = all_data->thread.P_ns[fine_grid][tid];
             ne = all_data->thread.P_ne[fine_grid][tid];
+            prolong_start = omp_get_wtime();
             SMEM_MatVec(all_data,
                         all_data->matrix.P[fine_grid],
                         all_data->level_vector[thread_level].e[coarse_grid],
                         all_data->level_vector[thread_level].e[fine_grid],
                         ns, ne);
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
+            smooth_start = omp_get_wtime();
             SMEM_JacobiIterMat_MatVec(all_data,
                                       all_data->matrix.A[fine_grid],
                                       all_data->level_vector[thread_level].y[fine_grid],
@@ -488,13 +567,14 @@ void SMEM_Sync_Multadd_Vcycle(AllData *all_data)
                                       ns, ne,
                                       thread_level);
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          }
        
          fine_grid = 0;
          ns = all_data->thread.A_ns[fine_grid][tid];
          ne = all_data->thread.A_ne[fine_grid][tid];
          for (int i = ns; i < ne; i++){
-            #pragma omp atomic
+           // #pragma omp atomic
             all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
          }
       }
