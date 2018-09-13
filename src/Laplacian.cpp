@@ -68,6 +68,52 @@ void Laplacian_2D_5pt(HYPRE_IJMatrix *A, int n)
    }
 }
 
+void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
+                       int n)
+{
+   HYPRE_Int nx, ny, nz;
+   HYPRE_Int P, Q, R;
+
+   HYPRE_ParCSRMatrix A;
+
+   HYPRE_Int num_procs, myid;
+   HYPRE_Int p, q, r;
+   HYPRE_Real *values;
+
+
+   hypre_MPI_Comm_size(hypre_MPI_COMM_WORLD, &num_procs );
+   hypre_MPI_Comm_rank(hypre_MPI_COMM_WORLD, &myid );
+
+   nx = n;
+   ny = n;
+   nz = n;
+
+   P  = 1;
+   Q  = num_procs;
+   R  = 1;
+
+   p = myid % P;
+   q = (( myid - p)/P) % Q;
+   r = ( myid - p - P*q)/( P*Q );
+
+
+   values = hypre_CTAlloc(HYPRE_Real,  2, HYPRE_MEMORY_HOST);
+
+   values[0] = 26.0;
+   if (nx == 1 || ny == 1 || nz == 1)
+      values[0] = 8.0;
+   if (nx*ny == 1 || nx*nz == 1 || ny*nz == 1)
+      values[0] = 2.0;
+   values[1] = -1.;
+
+   A = (HYPRE_ParCSRMatrix) GenerateLaplacian27pt(hypre_MPI_COMM_WORLD,
+                                                  nx, ny, nz, P, Q, R, p, q, r, values);
+
+   hypre_TFree(values, HYPRE_MEMORY_HOST);
+
+   *A_ptr = A;
+}
+
 // Sample runs:  ex1 -m ../data/square-disc.mesh
 //               ex1 -m ../data/star.mesh
 //               ex1 -m ../data/escher.mesh

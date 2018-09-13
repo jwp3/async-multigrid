@@ -243,7 +243,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             if (tid == all_data->thread.barrier_root[thread_level]){
                all_data->grid.num_correct[thread_level]++;
             }
-            if (tid == 0){
+            if (tid == 0 && all_data->thread.converge_flag == 0){
                all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
             }
             if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){

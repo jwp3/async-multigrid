@@ -52,6 +52,7 @@
 
 #define LAPLACE_2D5PT 0
 #define MFEM 1
+#define LAPLACE_3D27PT 2
 
 using namespace std;
 using namespace mfem;

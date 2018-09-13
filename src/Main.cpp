@@ -69,7 +69,7 @@ int main (int argc, char *argv[])
    all_data.input.tol = 1e-9;
    all_data.input.async_flag = 0;
    all_data.input.async_type = FULL_ASYNC;
-   all_data.input.check_resnorm_flag = 1;
+   all_data.input.check_resnorm_flag = 0;
    all_data.input.global_conv_flag = 0;
    all_data.input.thread_part_type = ONE_LEVEL;
    all_data.input.converge_test_type = ONE_LEVEL;
@@ -103,8 +103,11 @@ int main (int argc, char *argv[])
       if (strcmp(argv[arg_index], "-problem") == 0)
       {
          arg_index++;
-         if (strcmp(argv[arg_index], "laplace_2d5pt") == 0){
+         if (strcmp(argv[arg_index], "5pt") == 0){
             all_data.input.test_problem = LAPLACE_2D5PT;
+         }
+         else if (strcmp(argv[arg_index], "27pt") == 0){
+            all_data.input.test_problem = LAPLACE_3D27PT;
          }
          else if (strcmp(argv[arg_index], "mfem") == 0){
             all_data.input.test_problem = MFEM;
@@ -138,6 +141,7 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "multadd") == 0){
             all_data.input.solver = MULTADD;
+            all_data.input.thread_part_type = ALL_LEVELS;
          }
          else if (strcmp(argv[arg_index], "afacx") == 0){
             all_data.input.solver = AFACX;
@@ -236,7 +240,6 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-check_resnorm") == 0)
       {
          all_data.input.check_resnorm_flag = 1;
-         all_data.input.global_conv_flag = 1;
       }
       else if (strcmp(argv[arg_index], "-async_type") == 0)
       {
@@ -304,51 +307,17 @@ int main (int argc, char *argv[])
    
    if (all_data.input.test_problem == LAPLACE_2D5PT){
       Laplacian_2D_5pt(&A, n);
+      HYPRE_IJMatrixAssemble(A);
+      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
+   }
+   else if (all_data.input.test_problem == LAPLACE_3D27PT){
+      Laplacian_3D_27pt(&parcsr_A, n);
    }
    else if (all_data.input.test_problem = MFEM){
       MFEM_Ex1(&all_data, &A);
+      HYPRE_IJMatrixAssemble(A);
+      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
    }
-
-   HYPRE_IJMatrixAssemble(A);
-
-   HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
-
-
-  // HYPRE_IJVectorCreate(MPI_COMM_WORLD, ilower, iupper,&b);
-  // HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
-  // HYPRE_IJVectorInitialize(b);
-
-  // HYPRE_IJVectorCreate(MPI_COMM_WORLD, ilower, iupper,&x);
-  // HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
-  // HYPRE_IJVectorInitialize(x);
-
-  // double *rhs_values, *x_values;
-  // int *rows;
-
-  // rhs_values =  (double*) calloc(local_size, sizeof(double));
-  // x_values =  (double*) calloc(local_size, sizeof(double));
-  // rows = (int*) calloc(local_size, sizeof(int));
-
-  // for (int i = 0; i < local_size; i++)
-  // {
-  //    rhs_values[i] = 1;
-  //    x_values[i] = 0.0;
-  //    rows[i] = ilower + i;
-  // }
-
-  // HYPRE_IJVectorSetValues(b, local_size, rows, rhs_values);
-  // HYPRE_IJVectorSetValues(x, local_size, rows, x_values);
-
-  // free(x_values);
-  // free(rhs_values);
-  // free(rows);
-
-
-  // HYPRE_IJVectorAssemble(b);
-  // HYPRE_IJVectorGetObject(b, (void **) &par_b);
-
-  // HYPRE_IJVectorAssemble(x);
-  // HYPRE_IJVectorGetObject(x, (void **) &par_x);
    
    HYPRE_BoomerAMGCreate(&solver);
 
@@ -362,25 +331,6 @@ int main (int argc, char *argv[])
    start = omp_get_wtime();
    HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
    all_data.output.hypre_setup_wtime = omp_get_wtime() - start;
-
-  // if (hypre_solve_flag){
-  //    HYPRE_BoomerAMGSetNumSweeps(solver, 1);
-  //    HYPRE_BoomerAMGSetRelaxType(solver, 1);
-  //    HYPRE_BoomerAMGSetTol(solver, 1e-7);
-  //    HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
-  //    int num_iterations;
-  //    double final_res_norm;
-  //    HYPRE_BoomerAMGGetNumIterations(solver, &num_iterations);
-  //    HYPRE_BoomerAMGGetFinalRelativeResidualNorm(solver, &final_res_norm);
-  //    if (all_data.input.format_output_flag){
-  //       printf("HYPRE solve stats:\n");
-  //       printf("\tIterations = %d\n", num_iterations);
-  //       printf("\tRelative residual 2-norm = %e\n", final_res_norm);
-  //    }
-  //    else{
-  //       printf("%d, %e\n", num_iterations, final_res_norm);
-  //    }
-  // }
 
    omp_set_num_threads(all_data.input.num_threads);
    start = omp_get_wtime();
@@ -396,10 +346,10 @@ int main (int argc, char *argv[])
       }
    }
 
-   HYPRE_BoomerAMGDestroy(solver);
-   HYPRE_IJMatrixDestroy(A);
-   HYPRE_IJVectorDestroy(b);
-   HYPRE_IJVectorDestroy(x);
+  // HYPRE_BoomerAMGDestroy(solver);
+  // HYPRE_IJMatrixDestroy(A);
+  // HYPRE_IJVectorDestroy(b);
+  // HYPRE_IJVectorDestroy(x);
    
    MPI_Finalize();
 
