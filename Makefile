@@ -18,22 +18,17 @@ MPIICPC_COMPILE = mpiicpc -qopenmp -std=c++11 -O3 -mkl #-g #-w3
 NERSC_COMPILE = CC -qopenmp -std=c++11 -O3 -mkl
 MPICXX_COMPILE =  mpicxx -fopenmp -g -std=c++0x -O3 -Wall
 
-COMPILE=$(MPIICPC_COMPILE)
-
-all: clean MAIN
-
-DMEM_LIBS =
-LIBS = libHYPRE.a libmfem.a
-
 NERSC_INCLUDE = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
 GOTHAM_INCLUDE = -I/home/jwp3local/async-multigrid/src/hypre_include -I/home/jwp3local/async-multigrid/mfem
 
 INCLUDE=$(GOTHAM_INCLUDE)
+COMPILE=$(MPIICPC_COMPILE)
+LIBS = libHYPRE.a libmfem.a
 
-MAIN: $(SRC_DIR)Main.cpp
+all: clean main
+
+main: $(SRC_DIR)Main.cpp
 	$(COMPILE) $(SRC_DIR)Main.cpp $(CPP_FILES) $(LIBS) $(INCLUDE) -o Main
-
-DMEM: $(SRC_DIR)DMEM_Main.cpp
 
 TextToBin: $(SRC_DIR)TextToBin.cpp
 	$(ICPC_COMPILE) $(SRC_DIR)TextToBin.cpp -o TextToBin
