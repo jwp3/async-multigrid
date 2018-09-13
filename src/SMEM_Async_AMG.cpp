@@ -43,7 +43,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
 
             if (thread_level == 0 &&
                 all_data->input.check_resnorm_flag == 1){
-               Par_Norm2(all_data, 
+               Par_Norm2(all_data,
                          all_data->level_vector[thread_level].r[fine_grid],
                          thread_level,
                          ns, ne);
@@ -51,23 +51,6 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             if (tid == 0){
                all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
             }
-            if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
-               tid_converge = 1;
-               break;
-            }
-            if (all_data->input.converge_test_type == ONE_LEVEL){
-               if (all_data->grid.num_correct[thread_level] == all_data->input.num_cycles){
-                  tid_converge = 1;
-                  break;
-               }
-            }
-         }
-         if (tid_converge == 1){
-            break;
-         }
-
-         for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
-            thread_level = all_data->thread.thread_levels[tid][q];
 
             int coarsest_level;
             if (all_data->input.solver == ASYNC_MULTADD){
@@ -260,7 +243,20 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             if (tid == all_data->thread.barrier_root[thread_level]){
                all_data->grid.num_correct[thread_level]++;
             }
-            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            if (tid == 0){
+               all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
+            }
+            if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
+               tid_converge = 1;
+            }
+            if (all_data->input.converge_test_type == ONE_LEVEL){
+               if (all_data->grid.num_correct[thread_level] == all_data->input.num_cycles){
+                  tid_converge = 1;
+               }
+            }
+         }
+         if (tid_converge == 1){
+            break;
          }
       }
    }
