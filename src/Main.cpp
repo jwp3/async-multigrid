@@ -68,7 +68,7 @@ int main (int argc, char *argv[])
    all_data.input.test_problem = LAPLACE_2D5PT;
    all_data.input.tol = 1e-9;
    all_data.input.async_flag = 0;
-   all_data.input.async_type = 1;
+   all_data.input.async_type = FULL_ASYNC;
    all_data.input.check_resnorm_flag = 1;
    all_data.input.global_conv_flag = 0;
    all_data.input.thread_part_type = ONE_LEVEL;
@@ -78,13 +78,16 @@ int main (int argc, char *argv[])
    all_data.input.num_post_smooth_sweeps = 1;
    all_data.input.num_fine_smooth_sweeps = 1;
    all_data.input.num_coarse_smooth_sweeps = 1;
-   all_data.input.num_cycles = 20;
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
    all_data.input.print_reshist_flag = 1;
    all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
    all_data.input.solver = MULT;
+
+   int num_cycles = 20;
+   int start_cycle = num_cycles;
+   int c = 1;
 
    /* Parse command line */
    int arg_index = 0;
@@ -153,7 +156,17 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
          arg_index++;
-         all_data.input.num_cycles = atoi(argv[arg_index]);
+         num_cycles = start_cycle = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-start_cycle") == 0)
+      {
+         arg_index++;
+         start_cycle = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-incr_cycle") == 0)
+      {
+         arg_index++;
+         c = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-tol") == 0)
       {
@@ -286,7 +299,7 @@ int main (int argc, char *argv[])
    if (print_usage)
    {
       MPI_Finalize();
-      return (0);
+      return 0;
    }
    
    if (all_data.input.test_problem == LAPLACE_2D5PT){
@@ -370,15 +383,17 @@ int main (int argc, char *argv[])
   // }
 
    omp_set_num_threads(all_data.input.num_threads);
-  // omp_set_num_threads(1);
    start = omp_get_wtime();
    SMEM_Setup(solver, &all_data);
-   all_data.output.setup_wtime = omp_get_wtime() - start;
+   all_data.output.setup_wtime = omp_get_wtime() - start; 
 
-   for (int run = 1; run <= num_runs; run++){
-      InitSolve(&all_data);
-      SMEM_Solve(&all_data);
-      PrintOutput(all_data);
+   for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){   
+      all_data.input.num_cycles = cycle;
+      for (int run = 1; run <= num_runs; run++){
+         InitSolve(&all_data);
+         SMEM_Solve(&all_data);
+         PrintOutput(all_data);
+      }
    }
 
    HYPRE_BoomerAMGDestroy(solver);
@@ -386,9 +401,7 @@ int main (int argc, char *argv[])
    HYPRE_IJVectorDestroy(b);
    HYPRE_IJVectorDestroy(x);
    
-
-   /* Finalize MPI*/
    MPI_Finalize();
 
-   return(0);
+   return 0;
 }
