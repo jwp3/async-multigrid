@@ -71,7 +71,7 @@ int main (int argc, char *argv[])
    all_data.input.async_type = FULL_ASYNC;
    all_data.input.check_resnorm_flag = 0;
    all_data.input.global_conv_flag = 0;
-   all_data.input.thread_part_type = ONE_LEVEL;
+   all_data.input.thread_part_type = ALL_LEVELS;
    all_data.input.converge_test_type = ONE_LEVEL;
    all_data.input.thread_part_distr_type = EQUAL_THREADS;
    all_data.input.num_pre_smooth_sweeps = 1;
