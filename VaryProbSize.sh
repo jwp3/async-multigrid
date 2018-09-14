@@ -16,7 +16,7 @@ rm -f ${file_name}
 num_runs=20
 num_cycles=10
 #n_list=(10 20 50 100 150)
-n_list=(100 200 500 1000 1500)
+n_list=(50 100 200 500 1000)
 
 for n in ${n_list[@]}
 do

@@ -5,6 +5,8 @@
 void InitAlgebra(void *amg_vdata,
                  AllData *all_data);
 
+void ComputeWork(AllData *all_data);
+
 void PartitionLevels(AllData *all_data);
 
 void PartitionGrids(AllData *all_data);
@@ -60,6 +62,7 @@ void InitAlgebra(void *amg_vdata,
         // all_data->matrix.R[level] = hypre_ParCSRMatrixDiag(parR[level]);
       }
    }
+
    all_data->vector.u =
          (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.y =
@@ -71,6 +74,8 @@ void InitAlgebra(void *amg_vdata,
 
    all_data->grid.num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.level_res_comp_count = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+
+   ComputeWork(all_data);
 
    if (all_data->input.thread_part_type == ALL_LEVELS){
 
@@ -306,7 +311,7 @@ void PartitionLevels(AllData *all_data)
            // printf("\n");
          }
       }
-      else {
+      else if (all_data->input.thread_part_distr_type == EQUAL_THREADS){
          int equal_threads = std::max(all_data->input.num_threads/all_data->grid.num_levels, 1);
          for (int level = 0; level < num_levels; level++){
            // printf("level %d:\n\t", level);
@@ -345,6 +350,50 @@ void PartitionLevels(AllData *all_data)
                }
             }
            // printf("\n");
+         }
+      }
+      else{
+         for (int level = 0; level < num_levels; level++){
+            int balanced_threads = std::max((int)ceil(all_data->thread.frac_level_work[level]*(double)all_data->input.num_threads), 1);
+            while (balanced_threads >= num_threads){
+               balanced_threads--;
+            }
+            printf("level %d: %f\n\t", level, all_data->thread.frac_level_work[level]);
+            if (num_threads == 1){
+               printf("%d ", tid);
+               all_data->thread.thread_levels[tid].push_back(level);
+               all_data->thread.level_threads[level].push_back(tid);
+               all_data->thread.barrier_root[level] = tid;
+               all_data->thread.barrier_flags[level][tid] = 0;
+            }
+            else{
+               if (level == num_levels-1){
+                  for (int t = tid; t < tid + num_threads; t++){
+                     printf("%d ", t);
+                     all_data->thread.thread_levels[t].push_back(level);
+                     all_data->thread.level_threads[level].push_back(t);
+                  }
+                  for (int t = tid; t < tid + half_threads; t++){
+                     all_data->thread.barrier_flags[level][t] = 0;
+                  }
+                  tid += num_threads;
+                  all_data->thread.barrier_root[level] = tid-1;
+               }
+               else {
+                  for (int t = tid; t < tid + balanced_threads; t++){
+                     printf("%d ", t);
+                     all_data->thread.thread_levels[t].push_back(level);
+                     all_data->thread.level_threads[level].push_back(t);
+                  }
+                  for (int t = tid; t < tid + balanced_threads; t++){
+                     all_data->thread.barrier_flags[level][t] = 0;
+                  }
+                  num_threads -= balanced_threads;
+                  tid += balanced_threads;
+                  all_data->thread.barrier_root[level] = tid-1;
+               }
+            }
+            printf("\n");
          }
       }
    }
@@ -498,6 +547,90 @@ void CSR_Transpose(hypre_CSRMatrix *A,
    }
    
    StdVector_to_CSR(AT, j_vector, data_vector); 
+}
+
+void ComputeWork(AllData *all_data)
+{
+   int coarsest_level;
+   int fine_grid, coarse_grid;
+   all_data->thread.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   for (int level = 0; level < all_data->grid.num_levels; level++){
+      if (all_data->input.solver == MULTADD ||
+          all_data->input.solver == ASYNC_MULTADD){
+         coarsest_level = level;
+      }
+      else if (all_data->input.solver == AFACX ||
+               all_data->input.solver == ASYNC_AFACX){
+         coarsest_level = level+1;
+      }
+      for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
+         fine_grid = inner_level;
+         coarse_grid = inner_level + 1;
+         if (all_data->input.solver == MULTADD ||
+             all_data->input.solver == ASYNC_MULTADD){
+            all_data->thread.level_work[level] +=
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) + hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
+
+         }
+         else if (all_data->input.solver == AFACX ||
+                  all_data->input.solver == ASYNC_AFACX){
+            if (level < all_data->grid.num_levels-1){
+               all_data->thread.level_work[level] +=
+                  hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
+            }
+         }
+      }
+
+      fine_grid = level;
+      coarse_grid = level + 1;
+      if (all_data->input.solver == MULTADD ||
+          all_data->input.solver == ASYNC_MULTADD){
+         if (level == all_data->grid.num_levels-1){
+            all_data->thread.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+         }
+         else{
+            all_data->thread.level_work[level] += all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+         }
+      }
+      else if (all_data->input.solver == AFACX ||
+               all_data->input.solver == ASYNC_AFACX){
+         if (level == all_data->grid.num_levels-1){
+            all_data->thread.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+         }
+         else{
+            all_data->thread.level_work[level] +=
+               all_data->input.num_coarse_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[coarse_grid]) +
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]) +
+               all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+         }
+
+      }
+
+      for (int inner_level = 0; inner_level < coarsest_level-1; inner_level++){
+         fine_grid = inner_level;
+         coarse_grid = inner_level + 1;
+         if (all_data->input.solver == MULTADD ||
+             all_data->input.solver == ASYNC_MULTADD){
+            all_data->thread.level_work[level] +=
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) + hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
+
+         }
+         else if (all_data->input.solver == AFACX ||
+                  all_data->input.solver == ASYNC_AFACX){
+            all_data->thread.level_work[level] +=
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
+         }
+      }
+   }
+   all_data->thread.tot_work = 0;
+   all_data->thread.frac_level_work = (double *)calloc(all_data->grid.num_levels, sizeof(double));
+   for (int level = 0; level < all_data->grid.num_levels; level++){
+      all_data->thread.tot_work += all_data->thread.level_work[level];
+   }
+   for (int level = 0; level < all_data->grid.num_levels; level++){
+      all_data->thread.frac_level_work[level] = (double)all_data->thread.level_work[level] / (double)all_data->thread.tot_work;
+     // printf("hello %e\n", all_data->thread.frac_level_work[level]);
+   }
 }
 
 void StdVector_to_CSR(hypre_CSRMatrix *A,

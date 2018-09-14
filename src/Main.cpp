@@ -73,7 +73,7 @@ int main (int argc, char *argv[])
    all_data.input.global_conv_flag = 0;
    all_data.input.thread_part_type = ALL_LEVELS;
    all_data.input.converge_test_type = ONE_LEVEL;
-   all_data.input.thread_part_distr_type = EQUAL_THREADS;
+   all_data.input.thread_part_distr_type = BALANCED_THREADS;
    all_data.input.num_pre_smooth_sweeps = 1;
    all_data.input.num_post_smooth_sweeps = 1;
    all_data.input.num_fine_smooth_sweeps = 1;

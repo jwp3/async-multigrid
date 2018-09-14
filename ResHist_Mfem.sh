@@ -15,7 +15,8 @@ rm -f ${file_name}
 ref_levels=5
 problem="mfem"
 num_runs=20
-num_cycles=50
-start_cycle=1
+num_cycles=100
+start_cycle=5
+incr_cycle=5
 
-	./Main -format_output -num_runs ${num_runs} -num_cycles ${num_cycles} -start_cycle ${start_cycle} -mfem_ref_levels ${ref_levels} -num_threads ${num_threads} -solver ${solver} -smoother ${smoother} -problem ${problem} -async_type ${async_type} -agg_nl ${agg_nl} | tee -a ${file_name}
+	./Main -format_output -num_runs ${num_runs} -num_cycles ${num_cycles} -start_cycle ${start_cycle} -incr_cycle ${incr_cycle} -mfem_ref_levels ${ref_levels} -num_threads ${num_threads} -solver ${solver} -smoother ${smoother} -problem ${problem} -async_type ${async_type} -agg_nl ${agg_nl} | tee -a ${file_name}

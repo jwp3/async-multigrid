@@ -46,6 +46,7 @@
 
 #define HALF_THREADS 0
 #define EQUAL_THREADS 1
+#define BALANCED_THREADS 2
 
 #define FULL_ASYNC 0
 #define SEMI_ASYNC 1
@@ -157,6 +158,9 @@ typedef struct{
    vector<vector<int>> thread_levels;
    vector<vector<int>> level_threads;
    omp_lock_t lock;
+   int tot_work;
+   int *level_work;
+   double *frac_level_work;
    int *barrier_root;
    int **barrier_flags;
    double *loc_sum;
