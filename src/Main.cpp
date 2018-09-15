@@ -160,6 +160,11 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
          arg_index++;
+         all_data.input.smooth_weight = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-num_cycles") == 0)
+      {
+         arg_index++;
          num_cycles = start_cycle = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-start_cycle") == 0)

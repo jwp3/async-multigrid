@@ -358,7 +358,25 @@ void PartitionLevels(AllData *all_data)
             while (balanced_threads >= num_threads){
                balanced_threads--;
             }
-            printf("level %d: %f\n\t", level, all_data->thread.frac_level_work[level]);
+            if (level < num_levels-1){
+               while (1){
+                  int candidate = balanced_threads-1;
+                  double diff_current = 
+                     fabs(all_data->thread.frac_level_work[level] - 
+                          (double)balanced_threads/(double)all_data->input.num_threads);
+                  double diff_candidate = 
+                     fabs(all_data->thread.frac_level_work[level] -
+                          (double)candidate/(double)all_data->input.num_threads);
+                  if (diff_current <= diff_candidate){
+                     break;
+                  }
+                  balanced_threads--;
+               }
+            }
+            printf("level %d: %f, %f\n\t", 
+                   level,
+                   all_data->thread.frac_level_work[level],
+                   (double)balanced_threads/(double)all_data->input.num_threads);
             if (num_threads == 1){
                printf("%d ", tid);
                all_data->thread.thread_levels[tid].push_back(level);
@@ -603,10 +621,10 @@ void ComputeWork(AllData *all_data)
                hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]) +
                all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
          }
-
       }
 
-      for (int inner_level = 0; inner_level < coarsest_level-1; inner_level++){
+      coarsest_level = level;
+      for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
          fine_grid = inner_level;
          coarse_grid = inner_level + 1;
          if (all_data->input.solver == MULTADD ||
