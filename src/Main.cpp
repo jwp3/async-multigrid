@@ -157,7 +157,7 @@ int main (int argc, char *argv[])
             all_data.input.thread_part_type = ALL_LEVELS;
          }
       }
-      else if (strcmp(argv[arg_index], "-num_cycles") == 0)
+      else if (strcmp(argv[arg_index], "-smooth_weight") == 0)
       {
          arg_index++;
          all_data.input.smooth_weight = atof(argv[arg_index]);
