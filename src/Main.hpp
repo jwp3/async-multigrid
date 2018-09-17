@@ -53,8 +53,9 @@
 #define SEMI_ASYNC 1
 
 #define LAPLACE_2D5PT 0
-#define MFEM 1
-#define LAPLACE_3D27PT 2
+#define LAPLACE_3D27PT 1
+#define MFEM_LAPLACE 2
+#define MFEM_ELAST 3
 
 using namespace std;
 using namespace mfem;

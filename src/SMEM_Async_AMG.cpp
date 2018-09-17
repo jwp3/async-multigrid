@@ -261,10 +261,10 @@ void SMEM_Async_Add_AMG(AllData *all_data)
       }
    }
    omp_destroy_lock(&(all_data->thread.lock));
-  // for (int level = 0; level < all_data->grid.num_levels; level++){
-  //    printf("level %d: %d,%f\n", 
-  //           level,
-  //           all_data->grid.num_correct[level],
-  //           all_data->output.smooth_wtime[all_data->thread.barrier_root[level]]);
-  // }
+   for (int level = 0; level < all_data->grid.num_levels; level++){
+      printf("level %d: %d\n", 
+             level,
+             all_data->grid.num_correct[level]);
+
+   }
 }

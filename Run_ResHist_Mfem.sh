@@ -1,57 +1,40 @@
 #!/bin/bash
 
-num_threads=272
+num_threads=136
+smoother="async_gs"
 
 ./ResHist_Mfem.sh \
 async_multadd \
-symm_j \
+${smoother} \
 ${num_threads} \
 full \
 
 ./ResHist_Mfem.sh \
 async_multadd \
-symm_j \
-${num_threads} \
-semi \
-
-./ResHist_Mfem.sh \
-async_multadd \
-semi_async_gs \
-${num_threads} \
-full \
-
-./ResHist_Mfem.sh \
-async_multadd \
-semi_async_gs \
+${smoother} \
 ${num_threads} \
 semi \
 
 ./ResHist_Mfem.sh \
 async_afacx \
-semi_async_gs \
+${smoother} \
 ${num_threads} \
 full \
 
 ./ResHist_Mfem.sh \
 async_afacx \
-semi_async_gs \
+${smoother} \
 ${num_threads} \
 semi \
 
 ./ResHist_Mfem.sh \
 afacx \
-semi_async_gs \
+${smoother} \
 ${num_threads} \
 full \
 
 ./ResHist_Mfem.sh \
 mult \
-semi_async_gs \
-${num_threads} \
-full \
-
-./ResHist_Mfem.sh \
-afacx \
-hybrid_jgs \
+${smoother} \
 ${num_threads} \
 full \

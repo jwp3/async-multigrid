@@ -147,8 +147,8 @@ void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
 //               of essential boundary conditions, static condensation, and the
 //               optional connection to the GLVis tool for visualization.
 
-void MFEM_Ex1(AllData *all_data,
-              HYPRE_IJMatrix *Aij)
+void MFEM_Laplacian(AllData *all_data,
+                    HYPRE_IJMatrix *Aij)
 {
    bool static_cond = false;
 

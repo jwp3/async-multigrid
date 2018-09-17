@@ -1,45 +1,46 @@
 #!/bin/bash
 
-num_threads=272
+num_threads=136
+smoother="j"
 
 ./VaryProbSize.sh \
 async_multadd \
-j \
+${smoother} \
 5pt \
 ${num_threads} \
 full \
 
 ./VaryProbSize.sh \
 async_afacx \
-j \
+${smoother} \
 5pt \
 ${num_threads} \
 full \
 
 ./VaryProbSize.sh \
 async_multadd \
-j \
+${smoother} \
 5pt \
 ${num_threads} \
 semi \
 
 ./VaryProbSize.sh \
 async_afacx \
-j \
+${smoother} \
 5pt \
 ${num_threads} \
 semi \
 
 ./VaryProbSize.sh \
 mult \
-j \
+${smoother} \
 5pt \
 ${num_threads} \
 full \
 
 ./VaryProbSize.sh \
 afacx \
-j \
+${smoother} \
 5pt \
 ${num_threads} \
 full \

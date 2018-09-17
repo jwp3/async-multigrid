@@ -353,32 +353,7 @@ void PartitionLevels(AllData *all_data)
       }
       else{
          for (int level = 0; level < num_levels; level++){
-	    int balanced_threads;
-            if (level < num_levels-1){
-               balanced_threads = std::max((int)floor(all_data->thread.frac_level_work[level] *
-                                           (double)all_data->input.num_threads), 1);
-               while (1){
-                  int candidate = balanced_threads+1;
-                  double diff_current =
-                     fabs(all_data->thread.frac_level_work[level] -
-                          (double)balanced_threads/(double)all_data->input.num_threads);
-                  double diff_candidate =
-                     fabs(all_data->thread.frac_level_work[level] -
-                          (double)candidate/(double)all_data->input.num_threads);
-                  if (diff_current <= diff_candidate ||
-                      (double)candidate/(double)all_data->input.num_threads > all_data->thread.frac_level_work[level]){
-                     break;
-                  }
-                  balanced_threads++;
-               }
-            }
-            else{
-               balanced_threads = num_threads;
-            }
-           // printf("level %d: %f, %f\n\t", 
-           //        level,
-           //        all_data->thread.frac_level_work[level],
-           //        (double)balanced_threads/(double)all_data->input.num_threads);
+            int balanced_threads;
             if (num_threads == 1){
               // printf("%d ", tid);
                all_data->thread.thread_levels[tid].push_back(level);
@@ -387,6 +362,32 @@ void PartitionLevels(AllData *all_data)
                all_data->thread.barrier_flags[level][tid] = 0;
             }
             else{
+              // if (level == 0){
+              //    balanced_threads = std::max((int)ceil(all_data->thread.frac_level_work[level] *
+              //                                         (double)all_data->input.num_threads), 1);
+              // }
+              // else if (level == num_levels-1){
+	       if (level == num_levels-1){
+                  balanced_threads = num_threads;
+               }
+               else {
+                  balanced_threads = std::max((int)floor(all_data->thread.frac_level_work[level] *
+                                              (double)all_data->input.num_threads), 1);
+                  while (1){
+                     int candidate = balanced_threads+1;
+                     double diff_current =
+                        fabs(all_data->thread.frac_level_work[level] -
+                             (double)balanced_threads/(double)all_data->input.num_threads);
+                     double diff_candidate =
+                        fabs(all_data->thread.frac_level_work[level] -
+                             (double)candidate/(double)all_data->input.num_threads);
+                     if (diff_current <= diff_candidate ||
+                         (double)candidate/(double)all_data->input.num_threads > all_data->thread.frac_level_work[level]){
+                        break;
+                     }
+                     balanced_threads++;
+                  }
+               }
                for (int t = tid; t < tid + balanced_threads; t++){
                  // printf("%d ", t);
                   all_data->thread.thread_levels[t].push_back(level);
@@ -399,6 +400,10 @@ void PartitionLevels(AllData *all_data)
                tid += balanced_threads;
                all_data->thread.barrier_root[level] = tid-1;
             }
+	    printf("level %d: %f, %f\n\t",
+                      level,
+                      all_data->thread.frac_level_work[level],
+                      (double)balanced_threads/(double)all_data->input.num_threads);
            // printf("\n");
          }
       }
@@ -633,6 +638,7 @@ void ComputeWork(AllData *all_data)
    }
    for (int level = 0; level < all_data->grid.num_levels; level++){
       all_data->thread.frac_level_work[level] = (double)all_data->thread.level_work[level] / (double)all_data->thread.tot_work;
+     // printf("hello %e\n", all_data->thread.frac_level_work[level]);
    }
 }
 

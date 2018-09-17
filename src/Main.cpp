@@ -18,6 +18,7 @@
 
 #include "Main.hpp"
 #include "Laplacian.hpp"
+#include "Elasticity.hpp"
 #include "SEQ_MatVec.hpp"
 #include "SEQ_AMG.hpp"
 #include "SMEM_Setup.hpp"
@@ -100,7 +101,7 @@ int main (int argc, char *argv[])
          arg_index++;
          n = atoi(argv[arg_index]);
       }
-      if (strcmp(argv[arg_index], "-problem") == 0)
+      else if (strcmp(argv[arg_index], "-problem") == 0)
       {
          arg_index++;
          if (strcmp(argv[arg_index], "5pt") == 0){
@@ -109,8 +110,11 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "27pt") == 0){
             all_data.input.test_problem = LAPLACE_3D27PT;
          }
-         else if (strcmp(argv[arg_index], "mfem") == 0){
-            all_data.input.test_problem = MFEM;
+         else if (strcmp(argv[arg_index], "mfem_laplace") == 0){
+            all_data.input.test_problem = MFEM_LAPLACE;
+         }
+         else if (strcmp(argv[arg_index], "mfem_elast") == 0){
+            all_data.input.test_problem = MFEM_ELAST;
          }
       }
       else if (strcmp(argv[arg_index], "-smoother") == 0)
@@ -312,7 +316,7 @@ int main (int argc, char *argv[])
       MPI_Finalize();
       return 0;
    }
-   
+  
    if (all_data.input.test_problem == LAPLACE_2D5PT){
       Laplacian_2D_5pt(&A, n);
       HYPRE_IJMatrixAssemble(A);
@@ -321,10 +325,18 @@ int main (int argc, char *argv[])
    else if (all_data.input.test_problem == LAPLACE_3D27PT){
       Laplacian_3D_27pt(&parcsr_A, n);
    }
-   else if (all_data.input.test_problem = MFEM){
-      MFEM_Ex1(&all_data, &A);
+   else if (all_data.input.test_problem == MFEM_LAPLACE){
+      MFEM_Laplacian(&all_data, &A);
       HYPRE_IJMatrixAssemble(A);
       HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
+   }
+   else if (all_data.input.test_problem == MFEM_ELAST){
+      MFEM_Elasticity(&all_data, &A);
+      HYPRE_IJMatrixAssemble(A);
+      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
+   }
+   else{
+      return 1;
    }
    
    HYPRE_BoomerAMGCreate(&solver);
