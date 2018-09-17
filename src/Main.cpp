@@ -128,6 +128,9 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "symm_j") == 0){
             all_data.input.smoother = SYMM_JACOBI;
          }
+         else if (strcmp(argv[arg_index], "async_gs") == 0){
+            all_data.input.smoother = ASYNC_GAUSS_SEIDEL;
+         }
          else if (strcmp(argv[arg_index], "semi_async_gs") == 0){
             all_data.input.smoother = SEMI_ASYNC_GAUSS_SEIDEL;
          }

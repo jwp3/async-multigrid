@@ -18,6 +18,13 @@ void SMEM_SemiAsync_Parfor_GaussSeidel(AllData *all_data,
                                       int num_sweeps,
 				      int level);
 
+void SMEM_Async_Parfor_GaussSeidel(AllData *all_data,
+                                   hypre_CSRMatrix *A,
+                                   HYPRE_Real *f,
+                                   HYPRE_Real *u,
+                                   int num_sweeps,
+                                   int level);
+
 void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
                                               hypre_CSRMatrix *A,
                                               HYPRE_Real *f,

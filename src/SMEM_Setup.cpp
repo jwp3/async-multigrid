@@ -214,7 +214,6 @@ void InitAlgebra(void *amg_vdata,
    all_data->pardiso.info.iparm[18] = -1;
    all_data->pardiso.info.iparm[0] = 1;         /* No solver default */
    all_data->pardiso.info.iparm[1] = 0;         /* Fill-in reordering from METIS */
-   all_data->pardiso.info.iparm[7] = 1;
    all_data->pardiso.info.iparm[9] = 13;        /* Perturb the pivot elements with 1E-13 */
    all_data->pardiso.info.iparm[10] = 1;        /* Use nonsymmetric permutation and scaling MPS */
    all_data->pardiso.info.iparm[12] = 1;
@@ -354,64 +353,53 @@ void PartitionLevels(AllData *all_data)
       }
       else{
          for (int level = 0; level < num_levels; level++){
-            int balanced_threads = std::max((int)ceil(all_data->thread.frac_level_work[level]*(double)all_data->input.num_threads), 1);
-            while (balanced_threads >= num_threads){
-               balanced_threads--;
-            }
+	    int balanced_threads;
             if (level < num_levels-1){
+               balanced_threads = std::max((int)floor(all_data->thread.frac_level_work[level] *
+                                           (double)all_data->input.num_threads), 1);
                while (1){
-                  int candidate = balanced_threads-1;
-                  double diff_current = 
-                     fabs(all_data->thread.frac_level_work[level] - 
+                  int candidate = balanced_threads+1;
+                  double diff_current =
+                     fabs(all_data->thread.frac_level_work[level] -
                           (double)balanced_threads/(double)all_data->input.num_threads);
-                  double diff_candidate = 
+                  double diff_candidate =
                      fabs(all_data->thread.frac_level_work[level] -
                           (double)candidate/(double)all_data->input.num_threads);
-                  if (diff_current <= diff_candidate){
+                  if (diff_current <= diff_candidate ||
+                      (double)candidate/(double)all_data->input.num_threads > all_data->thread.frac_level_work[level]){
                      break;
                   }
-                  balanced_threads--;
+                  balanced_threads++;
                }
             }
-            printf("level %d: %f, %f\n\t", 
-                   level,
-                   all_data->thread.frac_level_work[level],
-                   (double)balanced_threads/(double)all_data->input.num_threads);
+            else{
+               balanced_threads = num_threads;
+            }
+           // printf("level %d: %f, %f\n\t", 
+           //        level,
+           //        all_data->thread.frac_level_work[level],
+           //        (double)balanced_threads/(double)all_data->input.num_threads);
             if (num_threads == 1){
-               printf("%d ", tid);
+              // printf("%d ", tid);
                all_data->thread.thread_levels[tid].push_back(level);
                all_data->thread.level_threads[level].push_back(tid);
                all_data->thread.barrier_root[level] = tid;
                all_data->thread.barrier_flags[level][tid] = 0;
             }
             else{
-               if (level == num_levels-1){
-                  for (int t = tid; t < tid + num_threads; t++){
-                     printf("%d ", t);
-                     all_data->thread.thread_levels[t].push_back(level);
-                     all_data->thread.level_threads[level].push_back(t);
-                  }
-                  for (int t = tid; t < tid + half_threads; t++){
-                     all_data->thread.barrier_flags[level][t] = 0;
-                  }
-                  tid += num_threads;
-                  all_data->thread.barrier_root[level] = tid-1;
+               for (int t = tid; t < tid + balanced_threads; t++){
+                 // printf("%d ", t);
+                  all_data->thread.thread_levels[t].push_back(level);
+                  all_data->thread.level_threads[level].push_back(t);
                }
-               else {
-                  for (int t = tid; t < tid + balanced_threads; t++){
-                     printf("%d ", t);
-                     all_data->thread.thread_levels[t].push_back(level);
-                     all_data->thread.level_threads[level].push_back(t);
-                  }
-                  for (int t = tid; t < tid + balanced_threads; t++){
-                     all_data->thread.barrier_flags[level][t] = 0;
-                  }
-                  num_threads -= balanced_threads;
-                  tid += balanced_threads;
-                  all_data->thread.barrier_root[level] = tid-1;
+               for (int t = tid; t < tid + balanced_threads; t++){
+                  all_data->thread.barrier_flags[level][t] = 0;
                }
+               num_threads -= balanced_threads;
+               tid += balanced_threads;
+               all_data->thread.barrier_root[level] = tid-1;
             }
-            printf("\n");
+           // printf("\n");
          }
       }
    }
@@ -573,6 +561,7 @@ void ComputeWork(AllData *all_data)
    int fine_grid, coarse_grid;
    all_data->thread.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    for (int level = 0; level < all_data->grid.num_levels; level++){
+      all_data->thread.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
       if (all_data->input.solver == MULTADD ||
           all_data->input.solver == ASYNC_MULTADD){
          coarsest_level = level;
@@ -601,24 +590,21 @@ void ComputeWork(AllData *all_data)
 
       fine_grid = level;
       coarse_grid = level + 1;
-      if (all_data->input.solver == MULTADD ||
-          all_data->input.solver == ASYNC_MULTADD){
-         if (level == all_data->grid.num_levels-1){
-            all_data->thread.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
-         }
-         else{
-            all_data->thread.level_work[level] += all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
-         }
+      if (level == all_data->grid.num_levels-1){
+         all_data->thread.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
       }
-      else if (all_data->input.solver == AFACX ||
-               all_data->input.solver == ASYNC_AFACX){
-         if (level == all_data->grid.num_levels-1){
-            all_data->thread.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+      else {
+         if (all_data->input.solver == MULTADD ||
+             all_data->input.solver == ASYNC_MULTADD){
+            all_data->thread.level_work[level] +=
+	       all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
          }
-         else{
+         else if (all_data->input.solver == AFACX ||
+                  all_data->input.solver == ASYNC_AFACX){
             all_data->thread.level_work[level] +=
                all_data->input.num_coarse_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[coarse_grid]) +
                hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]) +
+	       hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
                all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
          }
       }
@@ -647,7 +633,6 @@ void ComputeWork(AllData *all_data)
    }
    for (int level = 0; level < all_data->grid.num_levels; level++){
       all_data->thread.frac_level_work[level] = (double)all_data->thread.level_work[level] / (double)all_data->thread.tot_work;
-     // printf("hello %e\n", all_data->thread.frac_level_work[level]);
    }
 }
 

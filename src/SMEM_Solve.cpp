@@ -85,6 +85,7 @@ void SMEM_Solve(AllData *all_data)
                SMEM_Sync_Parfor_Vcycle(all_data);
             }
          }
+         all_data->output.solve_wtime = omp_get_wtime() - start;
          if (all_data->input.num_threads == 1){
             SEQ_Residual(all_data,
                          all_data->matrix.A[fine_grid],
@@ -104,7 +105,6 @@ void SMEM_Solve(AllData *all_data)
                                          all_data->vector.r[fine_grid]);
             }
          }
-         all_data->output.solve_wtime = omp_get_wtime() - start;
          all_data->output.r_norm2 =
             Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
          if (all_data->input.print_reshist_flag == 1 &&
@@ -134,6 +134,9 @@ void SMEM_Smooth(AllData *all_data,
          else if (all_data->input.smoother == SYMM_JACOBI){
             SMEM_Sync_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
          }
+         else if (all_data->input.smoother == ASYNC_GAUSS_SEIDEL){
+            SMEM_Async_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
+         }
          else if (all_data->input.smoother == SEMI_ASYNC_GAUSS_SEIDEL){
             SMEM_SemiAsync_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
          }
@@ -144,6 +147,9 @@ void SMEM_Smooth(AllData *all_data,
       else{
          if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
             SMEM_Sync_Parfor_HybridJacobiGaussSeidel(all_data, A, f, u, y, num_sweeps, level);
+         }
+         else if (all_data->input.smoother == ASYNC_GAUSS_SEIDEL){
+            SMEM_Async_Parfor_GaussSeidel(all_data, A, f, u, num_sweeps, level);
          }
          else if (all_data->input.smoother == SEMI_ASYNC_GAUSS_SEIDEL){
             SMEM_SemiAsync_Parfor_GaussSeidel(all_data, A, f, u, num_sweeps, level);
