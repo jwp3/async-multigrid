@@ -1,6 +1,22 @@
 #include "Main.hpp"
 #include "SMEM_Setup.hpp"
 #include "Misc.hpp"
+#include "../eigen/Eigen/Sparse"
+
+using namespace std;
+typedef Eigen::SparseMatrix<double,Eigen::RowMajor> EigenSpMat;
+typedef Eigen::Triplet<double> EigenTrip;
+typedef Eigen::VectorXd EigenVec;
+
+void SmoothTransfer(AllData *all_data,
+                    hypre_CSRMatrix *P,
+                    hypre_CSRMatrix *R,
+                    int level);
+
+void EigenMatMat(AllData *all_data,
+                 hypre_CSRMatrix *A,
+                 hypre_CSRMatrix *B,
+                 hypre_CSRMatrix *C);
 
 void InitAlgebra(void *amg_vdata,
                  AllData *all_data);
@@ -12,8 +28,8 @@ void PartitionLevels(AllData *all_data);
 void PartitionGrids(AllData *all_data);
 
 void StdVector_to_CSR(hypre_CSRMatrix *A,
-                      std::vector<std::vector<HYPRE_Int>> j_vector,
-                      std::vector<std::vector<HYPRE_Real>> data_vector);
+                      vector<vector<HYPRE_Int>> j_vector,
+                      vector<vector<HYPRE_Real>> data_vector);
 
 void CSR_Transpose(hypre_CSRMatrix *A,
                    hypre_CSRMatrix *AT);
@@ -56,10 +72,20 @@ void InitAlgebra(void *amg_vdata,
       all_data->matrix.A[level] = hypre_ParCSRMatrixDiag(parA[level]);
       all_data->grid.n[level] = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
       if (level < all_data->grid.num_levels-1){
-         all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
-         all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
-         CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
-        // all_data->matrix.R[level] = hypre_ParCSRMatrixDiag(parR[level]);
+         if (all_data->input.solver == MULTADD ||
+             all_data->input.solver == ASYNC_MULTADD){
+            all_data->matrix.P[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+            all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+            SmoothTransfer(all_data,
+                           hypre_ParCSRMatrixDiag(parP[level]),
+                           hypre_ParCSRMatrixDiag(parR[level]),
+                           level);
+         }
+         else {
+            all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
+            all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+            CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
+         }
       }
    }
 
@@ -253,8 +279,8 @@ void PartitionLevels(AllData *all_data)
    int half_threads, n_threads;
    int num_level_threads;
 
-   all_data->thread.thread_levels.resize(num_threads, std::vector<int>(0));
-   all_data->thread.level_threads.resize(num_levels, std::vector<int>(0));
+   all_data->thread.thread_levels.resize(num_threads, vector<int>(0));
+   all_data->thread.level_threads.resize(num_levels, vector<int>(0));
    all_data->thread.barrier_flags = (int **)malloc(num_levels * sizeof(int *));
    all_data->thread.barrier_root = (int *)malloc(num_levels * sizeof(int));
    all_data->thread.loc_sum = (double *)malloc(num_threads * sizeof(double));
@@ -311,7 +337,7 @@ void PartitionLevels(AllData *all_data)
          }
       }
       else if (all_data->input.thread_part_distr_type == EQUAL_THREADS){
-         int equal_threads = std::max(all_data->input.num_threads/all_data->grid.num_levels, 1);
+         int equal_threads = max(all_data->input.num_threads/all_data->grid.num_levels, 1);
          for (int level = 0; level < num_levels; level++){
            // printf("level %d:\n\t", level);
             if (num_threads == 1){
@@ -363,16 +389,35 @@ void PartitionLevels(AllData *all_data)
             }
             else{
               // if (level == 0){
-              //    balanced_threads = std::max((int)ceil(all_data->thread.frac_level_work[level] *
+              //    balanced_threads = max((int)ceil(all_data->thread.frac_level_work[level] *
               //                                         (double)all_data->input.num_threads), 1);
               // }
               // else if (level == num_levels-1){
+               
 	       if (level == num_levels-1){
                   balanced_threads = num_threads;
                }
                else {
-                  balanced_threads = std::max((int)floor(all_data->thread.frac_level_work[level] *
-                                              (double)all_data->input.num_threads), 1);
+                 // balanced_threads = max((int)ceil(all_data->thread.frac_level_work[level] *
+                 //                                       (double)all_data->input.num_threads), 1);
+                 // while (balanced_threads >= num_threads){
+                 //    balanced_threads--;
+                 // }
+                 // while (1){
+                 //    int candidate = balanced_threads-1;
+                 //    double diff_current =
+                 //       fabs(all_data->thread.frac_level_work[level] -
+                 //            (double)balanced_threads/(double)all_data->input.num_threads);
+                 //    double diff_candidate =
+                 //       fabs(all_data->thread.frac_level_work[level] -
+                 //            (double)candidate/(double)all_data->input.num_threads);
+                 //    if (diff_current <= diff_candidate){
+                 //       break;
+                 //    }
+                 //    balanced_threads--;
+                 // }
+                  balanced_threads = max((int)floor(all_data->thread.frac_level_work[level] *
+                                                        (double)all_data->input.num_threads), 1);
                   while (1){
                      int candidate = balanced_threads+1;
                      double diff_current =
@@ -400,7 +445,7 @@ void PartitionLevels(AllData *all_data)
                tid += balanced_threads;
                all_data->thread.barrier_root[level] = tid-1;
             }
-	    printf("level %d: %f, %f\n\t",
+	    printf("\tlevel %d: %f, %f\n",
                       level,
                       all_data->thread.frac_level_work[level],
                       (double)balanced_threads/(double)all_data->input.num_threads);
@@ -527,39 +572,6 @@ void PartitionGrids(AllData *all_data)
    }
 }
 
-void CSR_Transpose(hypre_CSRMatrix *A,
-                   hypre_CSRMatrix *AT)
-{
-   int j;
-   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
-   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
-   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
-
-   HYPRE_Int A_num_rows = hypre_CSRMatrixNumRows(A);
-   HYPRE_Int A_num_cols = hypre_CSRMatrixNumCols(A);
-  
-   hypre_CSRMatrixNumRows(AT) = A_num_cols;
-   hypre_CSRMatrixNumCols(AT) = A_num_rows;
-   hypre_CSRMatrixNumNonzeros(AT) = hypre_CSRMatrixNumNonzeros(A);
-
-   std::vector<std::vector<HYPRE_Int>> 
-      j_vector(A_num_cols, std::vector<HYPRE_Int>(0));
-   std::vector<std::vector<HYPRE_Real>> 
-      data_vector(A_num_cols, std::vector<HYPRE_Real>(0));
-
-   
-   
-   for (int i = 0; i < A_num_rows; i++){
-      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-         j = A_j[jj];
-         j_vector[j].push_back(i);
-         data_vector[j].push_back(A_data[jj]);
-      }
-   }
-   
-   StdVector_to_CSR(AT, j_vector, data_vector); 
-}
-
 void ComputeWork(AllData *all_data)
 {
    int coarsest_level;
@@ -581,7 +593,7 @@ void ComputeWork(AllData *all_data)
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
             all_data->thread.level_work[level] +=
-               hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) + hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
 
          }
          else if (all_data->input.solver == AFACX ||
@@ -621,7 +633,7 @@ void ComputeWork(AllData *all_data)
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
             all_data->thread.level_work[level] +=
-               hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) + hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
 
          }
          else if (all_data->input.solver == AFACX ||
@@ -642,9 +654,156 @@ void ComputeWork(AllData *all_data)
    }
 }
 
+void SmoothTransfer(AllData *all_data,
+                    hypre_CSRMatrix *P,
+                    hypre_CSRMatrix *R,
+                    int level)
+{
+   hypre_CSRMatrix *RT = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+   CSR_Transpose(R, RT);
+
+   hypre_CSRMatrix *G = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+   hypre_CSRMatrix *GT = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+
+   HYPRE_Int num_rows = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+   HYPRE_Int num_cols = hypre_CSRMatrixNumCols(all_data->matrix.A[level]);
+   HYPRE_Int nnz = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
+
+   hypre_CSRMatrixNumRows(G) = num_rows;
+   hypre_CSRMatrixNumCols(G) = num_cols;
+   hypre_CSRMatrixNumNonzeros(G) = nnz;
+
+   hypre_CSRMatrixNumRows(GT) = num_rows;
+   hypre_CSRMatrixNumCols(GT) = num_cols;
+   hypre_CSRMatrixNumNonzeros(GT) = nnz;
+
+   HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A[level]);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
+   HYPRE_Real *G_data = (HYPRE_Real *)calloc(nnz, sizeof(HYPRE_Real));
+   HYPRE_Real *GT_data = (HYPRE_Real *)calloc(nnz, sizeof(HYPRE_Real));
+
+   for (int i = 0; i < num_rows; i++){
+      if (A_data[A_i[i]] != 0.0){
+         G_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
+         GT_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
+         for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
+            G_data[jj] = -all_data->input.smooth_weight * A_data[jj] / A_data[A_i[i]];
+            GT_data[jj] = -all_data->input.smooth_weight * A_data[jj] / A_data[A_i[A_j[jj]]];
+         }
+      }
+   }
+
+   hypre_CSRMatrixI(G) = A_i;
+   hypre_CSRMatrixJ(G) = A_j;
+   hypre_CSRMatrixData(G) = G_data;
+   hypre_CSRMatrixI(GT) = A_i;
+   hypre_CSRMatrixJ(GT) = A_j;
+   hypre_CSRMatrixData(GT) = GT_data;
+   EigenMatMat(all_data, G, P, all_data->matrix.P[level]);
+   EigenMatMat(all_data, RT, GT, all_data->matrix.R[level]);
+}
+
+void EigenMatMat(AllData *all_data,
+                 hypre_CSRMatrix *A,
+                 hypre_CSRMatrix *B,
+                 hypre_CSRMatrix *C)
+{
+   Eigen::setNbThreads(all_data->input.num_threads);
+
+   int A_num_rows = hypre_CSRMatrixNumRows(A); 
+   int A_num_cols = hypre_CSRMatrixNumCols(A);
+   int B_num_rows = hypre_CSRMatrixNumRows(B);
+   int B_num_cols = hypre_CSRMatrixNumCols(B);
+   
+   EigenSpMat eigen_A(A_num_rows, A_num_cols);
+   EigenSpMat eigen_B(B_num_rows, B_num_cols);
+   EigenSpMat eigen_C(A_num_rows, B_num_cols);
+ 
+   vector<EigenTrip> A_eigtrip;
+   vector<EigenTrip> B_eigtrip;
+
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+
+   HYPRE_Int *B_i = hypre_CSRMatrixI(B);
+   HYPRE_Int *B_j = hypre_CSRMatrixJ(B);
+   HYPRE_Real *B_data = hypre_CSRMatrixData(B);
+   
+
+   for (int i = 0; i < A_num_rows; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         A_eigtrip.push_back(EigenTrip(i, A_j[jj], A_data[jj]));
+      }
+   }
+   for (int i = 0; i < B_num_rows; i++){
+      for (int jj = B_i[i]; jj < B_i[i+1]; jj++){
+         B_eigtrip.push_back(EigenTrip(i, B_j[jj], B_data[jj]));
+      }
+   }
+
+   eigen_A.setFromTriplets(A_eigtrip.begin(), A_eigtrip.end());
+   eigen_B.setFromTriplets(B_eigtrip.begin(), B_eigtrip.end());
+   eigen_A.makeCompressed();
+   eigen_B.makeCompressed();
+   eigen_C = (eigen_A * eigen_B).pruned();
+   eigen_C.makeCompressed();
+
+   int num_rows, num_cols, nnz;
+   hypre_CSRMatrixNumRows(C) = num_rows = eigen_C.rows();
+   hypre_CSRMatrixNumCols(C) = num_cols = eigen_C.cols();
+   hypre_CSRMatrixNumNonzeros(C) = nnz = eigen_C.nonZeros();
+
+   vector<vector<HYPRE_Int>>
+      j_vector(num_rows, vector<HYPRE_Int>(0));
+   vector<vector<HYPRE_Real>>
+      data_vector(num_rows, vector<HYPRE_Real>(0));
+
+   for (int i = 0; i < eigen_C.rows(); i++){
+      for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+         j_vector[i].push_back(it.col());
+         data_vector[i].push_back(it.value());
+      }
+   }
+
+   StdVector_to_CSR(C, j_vector, data_vector);
+}
+
+void CSR_Transpose(hypre_CSRMatrix *A,
+                   hypre_CSRMatrix *AT)
+{
+   int j;
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+
+   HYPRE_Int A_num_rows = hypre_CSRMatrixNumRows(A);
+   HYPRE_Int A_num_cols = hypre_CSRMatrixNumCols(A);
+
+   hypre_CSRMatrixNumRows(AT) = A_num_cols;
+   hypre_CSRMatrixNumCols(AT) = A_num_rows;
+   hypre_CSRMatrixNumNonzeros(AT) = hypre_CSRMatrixNumNonzeros(A);
+
+   vector<vector<HYPRE_Int>>
+      j_vector(A_num_cols, vector<HYPRE_Int>(0));
+   vector<vector<HYPRE_Real>>
+      data_vector(A_num_cols, vector<HYPRE_Real>(0));
+
+   for (int i = 0; i < A_num_rows; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         j = A_j[jj];
+         j_vector[j].push_back(i);
+         data_vector[j].push_back(A_data[jj]);
+      }
+   }
+
+   StdVector_to_CSR(AT, j_vector, data_vector);
+}
+
 void StdVector_to_CSR(hypre_CSRMatrix *A,
-                      std::vector<std::vector<HYPRE_Int>> j_vector,
-                      std::vector<std::vector<HYPRE_Real>> data_vector)
+                      vector<vector<HYPRE_Int>> j_vector,
+                      vector<vector<HYPRE_Real>> data_vector)
 {
    int k;
 

@@ -16,8 +16,7 @@ void SEQ_MatVec(AllData *all_data,
    
    for (int i = 0; i < num_rows; i++){
       Axi = 0.0;
-      for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
-      {
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
          Axi += A_data[jj] * x[A_j[jj]];
       }
       y[i] = Axi;
@@ -39,8 +38,7 @@ void SEQ_MatVecT(AllData *all_data,
 
    for (int i = 0; i < num_cols; i++) y[i] = 0; 
    for (int i = 0; i < num_rows; i++){
-      for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
-      {
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
          j = A_j[jj];
          y[j] += A_data[jj] * x[i];
       }

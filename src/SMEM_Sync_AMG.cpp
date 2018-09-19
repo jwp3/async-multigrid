@@ -283,19 +283,19 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
             if (level < all_data->grid.num_levels-1){
                fine_grid = level;
                coarse_grid = level + 1;
-               if (all_data->input.solver == MULTADD){
-                  ns = all_data->thread.A_ns[fine_grid][tid];
-                  ne = all_data->thread.A_ne[fine_grid][tid];
-                  smooth_start = omp_get_wtime();
-                  SMEM_JacobiIterMat_MatVec(all_data,
-                                            all_data->matrix.A[fine_grid],
-                                            all_data->level_vector[thread_level].y[fine_grid],
-                                            all_data->level_vector[thread_level].r[fine_grid],
-                                            ns, ne,
-                                            thread_level);
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-                  all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
-               }
+              // if (all_data->input.solver == MULTADD){
+              //    ns = all_data->thread.A_ns[fine_grid][tid];
+              //    ne = all_data->thread.A_ne[fine_grid][tid];
+              //    smooth_start = omp_get_wtime();
+              //    SMEM_JacobiIterMat_MatVec(all_data,
+              //                              all_data->matrix.A[fine_grid],
+              //                              all_data->level_vector[thread_level].y[fine_grid],
+              //                              all_data->level_vector[thread_level].r[fine_grid],
+              //                              ns, ne,
+              //                              thread_level);
+              //    SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+              //    all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+              // }
                ns = all_data->thread.R_ns[fine_grid][tid];
                ne = all_data->thread.R_ne[fine_grid][tid];
                restrict_start = omp_get_wtime();
@@ -421,19 +421,19 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
                            ns, ne);
                SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
-               smooth_start = omp_get_wtime();
-               if (all_data->input.solver == MULTADD){
-                  ns = all_data->thread.A_ns[fine_grid][tid];
-                  ne = all_data->thread.A_ne[fine_grid][tid];
-                  SMEM_JacobiIterMat_MatVec(all_data,
-                                            all_data->matrix.A[fine_grid],
-                                            all_data->level_vector[thread_level].y[fine_grid],
-                                            all_data->level_vector[thread_level].e[fine_grid],
-                                            ns, ne,
-                                            thread_level);
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-               }
-               all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+              // if (all_data->input.solver == MULTADD){
+              //    ns = all_data->thread.A_ns[fine_grid][tid];
+              //    ne = all_data->thread.A_ne[fine_grid][tid];
+              //    smooth_start = omp_get_wtime();
+              //    SMEM_JacobiIterMat_MatVec(all_data,
+              //                              all_data->matrix.A[fine_grid],
+              //                              all_data->level_vector[thread_level].y[fine_grid],
+              //                              all_data->level_vector[thread_level].e[fine_grid],
+              //                              ns, ne,
+              //                              thread_level);
+              //    SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+              //    all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+              // }
             }
          }
        
