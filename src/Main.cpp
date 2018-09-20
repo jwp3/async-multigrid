@@ -299,7 +299,8 @@ int main (int argc, char *argv[])
    if (all_data.input.solver == MULT){
       all_data.input.thread_part_type = ONE_LEVEL;
    }
-
+   
+   srand(0);
    omp_set_num_threads(1);
    mkl_set_num_threads(1);
 

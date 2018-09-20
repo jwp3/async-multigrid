@@ -387,14 +387,8 @@ void PartitionLevels(AllData *all_data)
                all_data->thread.barrier_root[level] = tid;
                all_data->thread.barrier_flags[level][tid] = 0;
             }
-            else{
-              // if (level == 0){
-              //    balanced_threads = max((int)ceil(all_data->thread.frac_level_work[level] *
-              //                                         (double)all_data->input.num_threads), 1);
-              // }
-              // else if (level == num_levels-1){
-               
-	       if (level == num_levels-1){
+            else{ 
+	       if (level == num_levels-1 || num_threads == 1){
                   balanced_threads = num_threads;
                }
                else {
@@ -411,7 +405,8 @@ void PartitionLevels(AllData *all_data)
                      double diff_candidate =
                         fabs(all_data->thread.frac_level_work[level] -
                              (double)candidate/(double)all_data->input.num_threads);
-                     if (diff_current <= diff_candidate){
+                     if (diff_current <= diff_candidate ||
+                         balanced_threads == 1){
                         break;
                      }
                      balanced_threads--;
