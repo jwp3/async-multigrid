@@ -398,40 +398,40 @@ void PartitionLevels(AllData *all_data)
                   balanced_threads = num_threads;
                }
                else {
-                 // balanced_threads = max((int)ceil(all_data->thread.frac_level_work[level] *
-                 //                                       (double)all_data->input.num_threads), 1);
-                 // while (balanced_threads >= num_threads){
-                 //    balanced_threads--;
-                 // }
-                 // while (1){
-                 //    int candidate = balanced_threads-1;
-                 //    double diff_current =
-                 //       fabs(all_data->thread.frac_level_work[level] -
-                 //            (double)balanced_threads/(double)all_data->input.num_threads);
-                 //    double diff_candidate =
-                 //       fabs(all_data->thread.frac_level_work[level] -
-                 //            (double)candidate/(double)all_data->input.num_threads);
-                 //    if (diff_current <= diff_candidate){
-                 //       break;
-                 //    }
-                 //    balanced_threads--;
-                 // }
-                  balanced_threads = max((int)floor(all_data->thread.frac_level_work[level] *
+                  balanced_threads = max((int)ceil(all_data->thread.frac_level_work[level] *
                                                         (double)all_data->input.num_threads), 1);
+                  while (balanced_threads >= num_threads){
+                     balanced_threads--;
+                  }
                   while (1){
-                     int candidate = balanced_threads+1;
+                     int candidate = balanced_threads-1;
                      double diff_current =
                         fabs(all_data->thread.frac_level_work[level] -
                              (double)balanced_threads/(double)all_data->input.num_threads);
                      double diff_candidate =
                         fabs(all_data->thread.frac_level_work[level] -
                              (double)candidate/(double)all_data->input.num_threads);
-                     if (diff_current <= diff_candidate ||
-                         (double)candidate/(double)all_data->input.num_threads > all_data->thread.frac_level_work[level]){
+                     if (diff_current <= diff_candidate){
                         break;
                      }
-                     balanced_threads++;
+                     balanced_threads--;
                   }
+                 // balanced_threads = max((int)floor(all_data->thread.frac_level_work[level] *
+                 //                                       (double)all_data->input.num_threads), 1);
+                 // while (1){
+                 //    int candidate = balanced_threads+1;
+                 //    double diff_current =
+                 //       fabs(all_data->thread.frac_level_work[level] -
+                 //            (double)balanced_threads/(double)all_data->input.num_threads);
+                 //    double diff_candidate =
+                 //       fabs(all_data->thread.frac_level_work[level] -
+                 //            (double)candidate/(double)all_data->input.num_threads);
+                 //    if (diff_current <= diff_candidate ||
+                 //        (double)candidate/(double)all_data->input.num_threads > all_data->thread.frac_level_work[level]){
+                 //       break;
+                 //    }
+                 //    balanced_threads++;
+                 // }
                }
                for (int t = tid; t < tid + balanced_threads; t++){
                  // printf("%d ", t);

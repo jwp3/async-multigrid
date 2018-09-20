@@ -40,7 +40,7 @@ void PrintOutput(AllData all_data)
 		        "\tMean prolong time = %e\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e\n");
+      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e ");
    }
 
    printf(print_str,
@@ -54,6 +54,26 @@ void PrintOutput(AllData all_data)
           mean_residual_wtime,
           mean_restrict_wtime,
           mean_prolong_wtime);
+
+   if (all_data.input.mfem_test_error_flag == 1){
+      if (all_data.input.format_output_flag == 0){
+         printf("\tmfem error = %e\n", all_data.output.mfem_e_norm2);
+      }
+      else{
+         printf("%e ", all_data.output.mfem_e_norm2);
+      }
+   }
+   if (all_data.input.hypre_test_error_flag == 1){
+      if (all_data.input.format_output_flag == 0){
+         printf("\thypre error = %e\n", all_data.output.hypre_e_norm2);
+      }
+      else{
+         printf("%e ", all_data.output.hypre_e_norm2);
+      }
+   }
+   if (all_data.input.format_output_flag == 1){
+      printf("\n");
+   }
 }
 
 double RandDouble(double low, double high)

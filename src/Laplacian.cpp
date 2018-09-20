@@ -217,15 +217,28 @@ void MFEM_Laplacian(AllData *all_data,
    a->Assemble();
 
    SparseMatrix A;
-   Vector B, X;
+   Vector X, B;
    a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+
+   if (all_data->input.mfem_test_error_flag == 1){
+      for (int i = 0; i < A.Height(); i++){
+         B[i] = 1.0;   
+      }
+
+      GSSmoother M(A);
+      PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
+    
+      all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double)); 
+      for (int i = 0; i < A.Height(); i++){
+         all_data->mfem.u[i] = X[i];
+      }
+   }
 
    HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, A.Height()-1, 0, A.Height()-1, Aij);
    HYPRE_IJMatrixSetObjectType(*Aij, HYPRE_PARCSR);
    HYPRE_IJMatrixInitialize(*Aij);
 
-   for (int i = 0; i < A.Height(); i++)
-   {
+   for (int i = 0; i < A.Height(); i++){
 
       Array<int> mfem_cols;
       Vector mfem_srow;

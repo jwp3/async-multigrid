@@ -29,10 +29,6 @@
 int main (int argc, char *argv[])
 {
    int myid, num_procs;
-   int N, n;
-
-   int ilower, iupper;
-   int local_size, extra;
 
    double start;
    int num_runs = 1;
@@ -51,7 +47,7 @@ int main (int argc, char *argv[])
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
-   n = 33;
+   int n = 10;
    /* Hypre parameters */
    int max_levels = 20;
    int solver_id = 0;
@@ -85,6 +81,9 @@ int main (int argc, char *argv[])
    all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
    all_data.input.solver = MULT;
+   all_data.input.hypre_test_error_flag = 0;
+   all_data.input.mfem_test_error_flag = 0;
+   all_data.input.mfem_solve_print_flag = 0;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
@@ -281,9 +280,13 @@ int main (int argc, char *argv[])
       {
          hypre_print_level = 3;
       }
-      else if (strcmp(argv[arg_index], "-hypre_solve") == 0)
+      else if (strcmp(argv[arg_index], "-hypre_test_error") == 0)
       {
-         hypre_solve_flag = 3;
+         all_data.input.hypre_test_error_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-mfem_test_error") == 0)
+      {
+         all_data.input.mfem_test_error_flag = 1;
       }
       else if (strcmp(argv[arg_index], "-help") == 0)
       {
@@ -338,6 +341,8 @@ int main (int argc, char *argv[])
    else{
       return 1;
    }
+
+
    
    HYPRE_BoomerAMGCreate(&solver);
 
@@ -357,11 +362,61 @@ int main (int argc, char *argv[])
    SMEM_Setup(solver, &all_data);
    all_data.output.setup_wtime = omp_get_wtime() - start; 
 
+   if (all_data.input.hypre_test_error_flag == 1){
+      HYPRE_BoomerAMGSetRelaxType(solver, 0);
+      HYPRE_BoomerAMGSetRelaxWt(solver, all_data.input.smooth_weight);
+      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &b);
+      HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
+      HYPRE_IJVectorInitialize(b);
+
+      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &x);
+      HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
+      HYPRE_IJVectorInitialize(x);
+
+      double *rhs_values, *x_values;
+      int    *rows;
+
+      rhs_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
+      x_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
+      rows = (int*) calloc(all_data.grid.n[0], sizeof(int));
+
+      for (int i = 0; i < all_data.grid.n[0]; i++){
+         rhs_values[i] = 1.0;
+         x_values[i] = 0.0;
+         rows[i] = i;
+      }
+
+      HYPRE_IJVectorSetValues(b, all_data.grid.n[0], rows, rhs_values);
+      HYPRE_IJVectorSetValues(x, all_data.grid.n[0], rows, x_values);
+
+      free(x_values);
+      free(rhs_values);
+      free(rows);
+
+      HYPRE_IJVectorAssemble(b);
+      HYPRE_IJVectorGetObject(b, (void **)&par_b);
+      HYPRE_IJVectorAssemble(x);
+      HYPRE_IJVectorGetObject(x, (void **)&par_x);
+
+      HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
+   }
+
    for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){   
       all_data.input.num_cycles = cycle;
       for (int run = 1; run <= num_runs; run++){
          InitSolve(&all_data);
          SMEM_Solve(&all_data);
+         if (all_data.input.mfem_test_error_flag == 1){
+            for (int i = 0; i < all_data.grid.n[0]; i++){
+               all_data.output.mfem_e_norm2 += pow(all_data.mfem.u[i] - all_data.vector.u[0][i], 2.0);
+            }
+         }
+         if (all_data.input.hypre_test_error_flag == 1){
+            for (int i = 0; i < all_data.grid.n[0]; i++){
+               all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
+            }
+         }
+         
          PrintOutput(all_data);
       }
    }

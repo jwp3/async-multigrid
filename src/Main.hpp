@@ -74,6 +74,8 @@ typedef struct{
    double hypre_solve_wtime;
    double r_norm2;
    double r0_norm2;
+   double hypre_e_norm2;
+   double mfem_e_norm2;
 }OutputData;
 
 typedef struct{
@@ -97,6 +99,9 @@ typedef struct{
    int thread_part_distr_type;
    int converge_test_type;
    int test_problem;
+   int hypre_test_error_flag;
+   int mfem_test_error_flag;
+   int mfem_solve_print_flag;
 }InputData;
 
 typedef struct{
@@ -148,6 +153,7 @@ typedef struct{
    int ref_levels;
    int order;
    char mesh_file[1000];
+   double *u;
 }MfemData;
 
 typedef struct{
