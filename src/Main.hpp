@@ -70,13 +70,15 @@ typedef struct{
    double *prolong_wtime;
    double setup_wtime;
    double hypre_setup_wtime;
+   double prob_setup_wtime;
    double solve_wtime;
    double hypre_solve_wtime;
    double r_norm2;
    double r0_norm2;
    double hypre_e_norm2;
    double mfem_e_norm2;
-   int model_time;
+   int sim_time_instance;
+   int sim_cycle_time_instance;
 }OutputData;
 
 typedef struct{
@@ -89,6 +91,7 @@ typedef struct{
    double tol;
    int format_output_flag;
    int print_reshist_flag;
+   int print_output_flag;
    int check_resnorm_flag;
    int global_conv_flag;
    double smooth_weight;

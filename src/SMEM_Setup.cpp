@@ -445,10 +445,10 @@ void PartitionLevels(AllData *all_data)
                tid += balanced_threads;
                all_data->thread.barrier_root[level] = tid-1;
             }
-	    printf("\tlevel %d: %f, %f\n",
-                      level,
-                      all_data->thread.frac_level_work[level],
-                      (double)balanced_threads/(double)all_data->input.num_threads);
+	   // printf("\tlevel %d: %f, %f\n",
+           //           level,
+           //           all_data->thread.frac_level_work[level],
+           //           (double)balanced_threads/(double)all_data->input.num_threads);
            // printf("\n");
          }
       }

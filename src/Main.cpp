@@ -78,6 +78,7 @@ int main (int argc, char *argv[])
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
    all_data.input.print_reshist_flag = 1;
+   all_data.input.print_output_flag = 1;
    all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
    all_data.input.solver = MULT;
@@ -284,6 +285,14 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.input.sim_read_delay = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-no_reshist") == 0)
+      {
+         all_data.input.print_reshist_flag = 0;
+      }
+      else if (strcmp(argv[arg_index], "-no_output") == 0)
+      {
+         all_data.input.print_output_flag = 0;
+      }
       else if (strcmp(argv[arg_index], "-format_output") == 0)
       {
          all_data.input.format_output_flag = 1;
@@ -429,8 +438,10 @@ int main (int argc, char *argv[])
                all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
             }
          }
-         
-         PrintOutput(all_data);
+
+         if (all_data.input.print_output_flag == 1){         
+            PrintOutput(all_data);
+         }
       }
    }
 

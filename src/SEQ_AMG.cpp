@@ -180,13 +180,13 @@ void SEQ_Add_Vcycle(AllData *all_data)
                        all_data->vector.e[fine_grid]);
             SEQ_Residual(all_data,
                          all_data->matrix.A[fine_grid],
-                         all_data->vector.r[fine_grid],
+                         all_data->vector.r_fine[fine_grid],
                          all_data->vector.e[fine_grid],
                          all_data->vector.y[fine_grid],
                          all_data->vector.r_fine[fine_grid]);
             SMEM_Smooth(all_data,
                         all_data->matrix.A[fine_grid],
-                        all_data->vector.r[fine_grid],
+                        all_data->vector.r_fine[fine_grid],
                         all_data->vector.u_fine[fine_grid],
                         all_data->vector.u_fine_prev[fine_grid],
                         all_data->vector.y[fine_grid],
@@ -229,7 +229,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
    double residual_start;
    double smooth_start;
    double restrict_start;
-   double prolong_start;
+   double prolong_start; 
 
    vector<double> u_hist(all_data->grid.n[0],0);
    vector<vector<double>> e_write(all_data->grid.num_levels, vector<double>(all_data->grid.n[0]));
@@ -291,12 +291,14 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
                   fine_grid = inner_level;
                   coarse_grid = inner_level + 1;
-                  restrict_start = omp_get_wtime();
-                  SEQ_MatVec(all_data,
-                             all_data->matrix.R[fine_grid],
-                             all_data->vector.r[fine_grid],
-                             all_data->vector.r[coarse_grid]);
-                  all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
+                  if (inner_level < all_data->grid.num_levels-1){
+                     restrict_start = omp_get_wtime();
+                     SEQ_MatVec(all_data,
+                                all_data->matrix.R[fine_grid],
+                                all_data->vector.r[fine_grid],
+                                all_data->vector.r[coarse_grid]);
+                     all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
+                  }
                }
                smooth_start = omp_get_wtime();
                if (level == all_data->grid.num_levels-1){
@@ -322,7 +324,8 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                   fine_grid = level;
                   coarse_grid = level + 1;
 
-                  if (all_data->input.solver == MULTADD){
+                  if (all_data->input.solver == MULTADD ||
+                      all_data->input.solver == ASYNC_MULTADD){
                      for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
                         all_data->vector.u_fine[fine_grid][i] = 0;
                      }
@@ -358,13 +361,13 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                                 all_data->vector.e[fine_grid]);
                      SEQ_Residual(all_data,
                                   all_data->matrix.A[fine_grid],
-                                  all_data->vector.r[fine_grid],
+                                  all_data->vector.r_fine[fine_grid],
                                   all_data->vector.e[fine_grid],
                                   all_data->vector.y[fine_grid],
                                   all_data->vector.r_fine[fine_grid]);
                      SMEM_Smooth(all_data,
                                  all_data->matrix.A[fine_grid],
-                                 all_data->vector.r[fine_grid],
+                                 all_data->vector.r_fine[fine_grid],
                                  all_data->vector.u_fine[fine_grid],
                                  all_data->vector.u_fine_prev[fine_grid],
                                  all_data->vector.y[fine_grid],
@@ -398,7 +401,14 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
             }
          }
 
+         vector<int> level_perm(all_data->grid.num_levels);
          for (int level = 0; level < all_data->grid.num_levels; level++){
+            level_perm[level] = level;
+         }
+         random_shuffle(level_perm.begin(), level_perm.end());
+
+         for (int i = 0; i < all_data->grid.num_levels; i++){
+            int level = level_perm[i];
             if (correct_flags[level] == 1){
                fine_grid = 0;
                vector<double> temp(all_data->grid.n[fine_grid]);
@@ -415,6 +425,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                all_data->grid.last_read_correct[level] = all_data->grid.global_num_correct;
             }
          }
+         all_data->output.sim_time_instance++;
 
          for (int level = 0; level < all_data->grid.num_levels; level++){
             if (grid_time_count[level] < grid_wait_list[level]){
@@ -439,6 +450,20 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
             }
             break;
          }
+      }
+      all_data->output.sim_cycle_time_instance = all_data->output.sim_time_instance;
+
+      SEQ_Residual(all_data,
+                   all_data->matrix.A[fine_grid],
+                   all_data->vector.f[fine_grid],
+                   all_data->vector.u[fine_grid],
+                   all_data->vector.y[fine_grid],
+                   all_data->vector.r[fine_grid]);
+      all_data->output.r_norm2 =
+         Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
+      if (all_data->input.print_reshist_flag == 1){
+         printf("%d\t%d\t%e\n",
+                k+1, all_data->output.sim_cycle_time_instance, all_data->output.r_norm2/all_data->output.r0_norm2);
       }
    }
 }
