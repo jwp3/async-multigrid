@@ -76,6 +76,7 @@ typedef struct{
    double r0_norm2;
    double hypre_e_norm2;
    double mfem_e_norm2;
+   int model_time;
 }OutputData;
 
 typedef struct{
@@ -102,6 +103,8 @@ typedef struct{
    int hypre_test_error_flag;
    int mfem_test_error_flag;
    int mfem_solve_print_flag;
+   int sim_grid_wait;
+   int sim_read_delay;
 }InputData;
 
 typedef struct{
@@ -184,9 +187,12 @@ typedef struct{
 typedef struct{
    int num_levels;
    int *n;
-   int *num_correct;
-   int *level_res_comp_count;
-   int res_comp_count;
+   int global_num_correct;
+   int global_cycle_num_correct;
+   int *local_num_correct;
+   int *local_cycle_num_correct;
+   int *last_read_correct;
+   int *last_read_cycle_correct;
 }GridData;
 
 typedef struct{

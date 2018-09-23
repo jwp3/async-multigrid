@@ -48,7 +48,6 @@ void InitAlgebra(void *amg_vdata,
                  AllData *all_data)
 {
    hypre_ParAMGData *amg_data = (hypre_ParAMGData*)amg_vdata;
-  // printf("%d\n", hypre_ParAMGDataNumLevels(amg_data));
    
    hypre_ParCSRMatrix **parA;
    hypre_ParCSRMatrix **parP;
@@ -98,12 +97,15 @@ void InitAlgebra(void *amg_vdata,
    all_data->vector.f =
          (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
-   all_data->grid.num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
-   all_data->grid.level_res_comp_count = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.local_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.local_cycle_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.last_read_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.last_read_cycle_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
 
    ComputeWork(all_data);
 
-   if (all_data->input.thread_part_type == ALL_LEVELS){
+   if (all_data->input.thread_part_type == ALL_LEVELS &&
+       all_data->input.num_threads > 1){
 
       all_data->level_vector =
          (VectorData *)malloc(all_data->grid.num_levels * sizeof(VectorData));
@@ -200,9 +202,12 @@ void InitAlgebra(void *amg_vdata,
             (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
       }
    }
-   
+   int level = 0;
+   for (int i = 0; i < all_data->grid.n[level]; i++){
+      all_data->vector.f[level][i] = 1.0;//RandDouble(-1.0, 1.0);
+   }
 
-   int level = all_data->grid.num_levels-1;         
+   level = all_data->grid.num_levels-1;         
    HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
    HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A[level]);
    HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);

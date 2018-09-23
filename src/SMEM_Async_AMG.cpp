@@ -6,7 +6,6 @@
 
 void SMEM_Async_Add_AMG(AllData *all_data)
 {
-   all_data->grid.res_comp_count = 0;
    omp_init_lock(&(all_data->thread.lock));
    #pragma omp parallel
    {
@@ -215,7 +214,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             }
 
             if (tid == all_data->thread.barrier_root[thread_level]){
-               all_data->grid.num_correct[thread_level]++;
+               all_data->grid.local_num_correct[thread_level]++;
             }
             if (tid == 0 && all_data->thread.converge_flag == 0){
                all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
@@ -224,7 +223,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                tid_converge = 1;
             }
             if (all_data->input.converge_test_type == ONE_LEVEL){
-               if (all_data->grid.num_correct[thread_level] == all_data->input.num_cycles){
+               if (all_data->grid.local_num_correct[thread_level] == all_data->input.num_cycles){
                   tid_converge = 1;
                }
             }
@@ -238,7 +237,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
    for (int level = 0; level < all_data->grid.num_levels; level++){
       printf("level %d: %d\n", 
              level,
-             all_data->grid.num_correct[level]);
+             all_data->grid.local_num_correct[level]);
 
    }
 }

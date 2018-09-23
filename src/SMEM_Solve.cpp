@@ -22,26 +22,21 @@ void SMEM_Solve(AllData *all_data)
 
    double start = omp_get_wtime();
    if (all_data->input.async_flag == 1){
-      SMEM_Async_Add_AMG(all_data);
-      all_data->output.solve_wtime = omp_get_wtime() - start;
       if (all_data->input.num_threads == 1){
-         SEQ_Residual(all_data,
-                      all_data->matrix.A[fine_grid],
-                      all_data->vector.f[fine_grid],
-                      all_data->vector.u[fine_grid],
-                      all_data->vector.y[fine_grid],
-                      all_data->vector.r[fine_grid]);
+         SEQ_Add_Vcycle_Sim(all_data);
       }
-      else{
-         #pragma omp parallel
-         {
-            SMEM_Sync_Parfor_Residual(all_data,
-                                      all_data->matrix.A[fine_grid],
-                                      all_data->vector.f[fine_grid],
-                                      all_data->vector.u[fine_grid],
-                                      all_data->vector.y[fine_grid],
-                                      all_data->vector.r[fine_grid]);
-         }
+      else {
+         SMEM_Async_Add_AMG(all_data);
+      }
+      all_data->output.solve_wtime = omp_get_wtime() - start;
+      #pragma omp parallel
+      {
+         SMEM_Sync_Parfor_Residual(all_data,
+                                   all_data->matrix.A[fine_grid],
+                                   all_data->vector.f[fine_grid],
+                                   all_data->vector.u[fine_grid],
+                                   all_data->vector.y[fine_grid],
+                                   all_data->vector.r[fine_grid]);
       }
       all_data->output.r_norm2 =
          Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
@@ -58,19 +53,24 @@ void SMEM_Solve(AllData *all_data)
       }
       for (int k = 0; k < all_data->input.num_cycles; k++){
          if (all_data->input.solver == MULTADD){
-            if (all_data->input.thread_part_type == ALL_LEVELS){
-               SMEM_Sync_Add_Vcycle(all_data);
+            if (all_data->input.num_threads == 1){
+               SEQ_Add_Vcycle(all_data);
             }
             else{
+               if (all_data->input.thread_part_type == ALL_LEVELS){
+                  SMEM_Sync_Add_Vcycle(all_data);
+               }
+               else{
+               }
             } 
          }
          else if (all_data->input.solver == AFACX){
-            if (all_data->input.thread_part_type == ALL_LEVELS){
-               SMEM_Sync_Add_Vcycle(all_data);
+            if (all_data->input.num_threads == 1){
+               SEQ_Add_Vcycle(all_data);
             }
             else{
-               if (all_data->input.num_threads == 1){
-                  SEQ_AFACx_Vcycle(all_data);
+               if (all_data->input.thread_part_type == ALL_LEVELS){
+                  SMEM_Sync_Add_Vcycle(all_data);
                }
                else{
                   SMEM_Sync_Parfor_AFACx_Vcycle(all_data);

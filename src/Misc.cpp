@@ -14,7 +14,7 @@ void PrintOutput(AllData all_data)
    mean_smooth_sweeps =
       (int)((double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads);
    mean_correct =
-      (int)((double)SumInt(all_data.grid.num_correct, all_data.grid.num_levels)/(double)all_data.grid.num_levels);
+      (int)((double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/(double)all_data.grid.num_levels);
    mean_smooth_wtime =
       SumDbl(all_data.output.smooth_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
    mean_residual_wtime =
@@ -204,7 +204,7 @@ int CheckConverge(AllData *all_data,
    }
    if (all_data->input.converge_test_type == ALL_LEVELS){
       for (int q = 0; q < all_data->grid.num_levels; q++){
-         if (all_data->grid.num_correct[q] < all_data->input.num_cycles){
+         if (all_data->grid.local_num_correct[q] < all_data->input.num_cycles){
             return 0;
          }
       }
@@ -264,7 +264,8 @@ int SMEM_LevelBarrier(AllData *all_data,
 
 void InitVectors(AllData *all_data)
 {
-   if (all_data->input.thread_part_type == ALL_LEVELS){
+   if (all_data->input.thread_part_type == ALL_LEVELS &&
+       all_data->input.num_threads > 1){
       for (int level = 0; level < all_data->grid.num_levels; level++){
          for (int inner_level = 0; inner_level < level+2; inner_level++){
             if (inner_level < all_data->grid.num_levels){
@@ -299,7 +300,9 @@ void InitVectors(AllData *all_data)
       for (int level = 0; level < all_data->grid.num_levels; level++){
          int n = all_data->grid.n[level];
          for (int i = 0; i < n; i++){
-            all_data->vector.f[level][i] = 0;
+            if (level > 0){
+               all_data->vector.f[level][i] = 0;
+            }
             all_data->vector.u[level][i] = 0;
             all_data->vector.u_prev[level][i] = 0;
             all_data->vector.u_coarse[level][i] = 0;
@@ -314,17 +317,19 @@ void InitVectors(AllData *all_data)
          }
       }
    }
-   int level = 0;
-   for (int i = 0; i < all_data->grid.n[level]; i++){
-      all_data->vector.f[level][i] = RandDouble(-1.0, 1.0);
-   }
 }
 
 void InitSolve(AllData *all_data)
 {
    InitVectors(all_data);
+   all_data->output.model_time = 0;
+   all_data->grid.global_num_correct = 0;
+   all_data->grid.global_cycle_num_correct = 0;
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      all_data->grid.num_correct[level] = 0;
+      all_data->grid.local_num_correct[level] = 0;
+      all_data->grid.local_cycle_num_correct[level] = 0;
+      all_data->grid.last_read_correct[level] = 0;
+      all_data->grid.last_read_cycle_correct[level] = 0;
    }
    all_data->thread.converge_flag = 0;
 

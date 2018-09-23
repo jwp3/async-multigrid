@@ -84,6 +84,8 @@ int main (int argc, char *argv[])
    all_data.input.hypre_test_error_flag = 0;
    all_data.input.mfem_test_error_flag = 0;
    all_data.input.mfem_solve_print_flag = 0;
+   all_data.input.sim_grid_wait = 0;
+   all_data.input.sim_read_delay = 0;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
@@ -272,6 +274,16 @@ int main (int argc, char *argv[])
          arg_index++;
          num_runs = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-sim_grid_wait") == 0)
+      {
+         arg_index++;
+         all_data.input.sim_grid_wait = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-sim_read_delay") == 0)
+      {
+         arg_index++;
+         all_data.input.sim_read_delay = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-format_output") == 0)
       {
          all_data.input.format_output_flag = 1;
@@ -300,7 +312,7 @@ int main (int argc, char *argv[])
       all_data.input.thread_part_type = ONE_LEVEL;
    }
    
-   srand(0);
+   srand(time(NULL));
    omp_set_num_threads(1);
    mkl_set_num_threads(1);
 

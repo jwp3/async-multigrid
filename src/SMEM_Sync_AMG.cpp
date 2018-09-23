@@ -72,7 +72,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
    for (int t = 0; t < all_data->input.num_threads; t++){
       all_data->output.smooth_wtime[t] += omp_get_wtime() - smooth_start;
    }
-   all_data->grid.num_correct[coarsest_level]++;
+   all_data->grid.local_num_correct[coarsest_level]++;
 
    #pragma omp parallel
    {
@@ -109,7 +109,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                      0, 0);
          all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          if (tid == 0){
-            all_data->grid.num_correct[level]++;
+            all_data->grid.local_num_correct[level]++;
          }
       }
    }
@@ -160,7 +160,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
    for (int t = 0; t < all_data->input.num_threads; t++){
       all_data->output.smooth_wtime[t] += omp_get_wtime() - smooth_start;
    }
-   all_data->grid.num_correct[coarsest_level]++;
+   all_data->grid.local_num_correct[coarsest_level]++;
 
    #pragma omp parallel
    {
@@ -217,7 +217,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                         0, 0);
             all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
             if (tid == 0){
-               all_data->grid.num_correct[level]++;
+               all_data->grid.local_num_correct[level]++;
             }
          }
 
@@ -419,7 +419,7 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
             all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
          }
          if (tid == all_data->thread.barrier_root[thread_level]){
-            all_data->grid.num_correct[thread_level]++;
+            all_data->grid.local_num_correct[thread_level]++;
          }
       }
    }
