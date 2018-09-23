@@ -180,7 +180,7 @@ void SEQ_Add_Vcycle(AllData *all_data)
                        all_data->vector.e[fine_grid]);
             SEQ_Residual(all_data,
                          all_data->matrix.A[fine_grid],
-                         all_data->vector.r_fine[fine_grid],
+                         all_data->vector.r[fine_grid],
                          all_data->vector.e[fine_grid],
                          all_data->vector.y[fine_grid],
                          all_data->vector.r_fine[fine_grid]);
@@ -361,7 +361,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                                 all_data->vector.e[fine_grid]);
                      SEQ_Residual(all_data,
                                   all_data->matrix.A[fine_grid],
-                                  all_data->vector.r_fine[fine_grid],
+                                  all_data->vector.r[fine_grid],
                                   all_data->vector.e[fine_grid],
                                   all_data->vector.y[fine_grid],
                                   all_data->vector.r_fine[fine_grid]);
