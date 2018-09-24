@@ -229,7 +229,7 @@ int main (int argc, char *argv[])
          arg_index++;
          strcpy(all_data.mfem.mesh_file, argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-thread_level_part") == 0)
+      else if (strcmp(argv[arg_index], "-thread_part_type") == 0)
       {
          arg_index++;
          if (strcmp(argv[arg_index], "one") == 0){

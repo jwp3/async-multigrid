@@ -245,24 +245,41 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
       grid_wait_list[level] = (int)round(RandDouble(0.0, all_data->input.sim_grid_wait));
    }
 
-   for (int k = 0; k < all_data->input.num_cycles; k++){
+   vector<int> level_perm(all_data->grid.num_levels);
+   for (int level = 0; level < all_data->grid.num_levels; level++){
+      level_perm[level] = level;
+   }
+
+   int num_cycles;
+   if (all_data->input.converge_test_type == ONE_LEVEL){
+      num_cycles = 1;
+   }
+   else {
+      num_cycles = all_data->input.num_cycles;
+   }
+
+   for (int k = 0; k < num_cycles; k++){
       while(1){
          for (int level = 0; level < all_data->grid.num_levels; level++){
-            fine_grid = 0;
-            for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
-               e_write[level][i] = 0;
-            }
             correct_flags[level] = 0;
-            if (grid_time_count[level] == grid_wait_list[level]){
-               correct_flags[level] = 1;
+            if (all_data->input.converge_test_type == ONE_LEVEL){
+               if (grid_time_count[level] == grid_wait_list[level] &&
+                   all_data->grid.local_num_correct[level] < all_data->input.num_cycles){
+                  correct_flags[level] = 1;
+               } 
+            }
+            else{
+               if (grid_time_count[level] == grid_wait_list[level]){
+                  correct_flags[level] = 1;
+               }
             }
             if (correct_flags[level] == 1){
                if (all_data->input.async_type == FULL_ASYNC){ 
                   fine_grid = 0;
                   for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
-                     int rand_low =
+                     int rand_low = //max(0, all_data->grid.global_num_correct - all_data->input.sim_read_delay);
                         max(all_data->grid.last_read_correct[level],
-                            all_data->grid.global_num_correct - all_data->input.sim_read_delay);
+                               all_data->grid.global_num_correct - all_data->input.sim_read_delay);
                      int rand_high = all_data->grid.global_num_correct;
                      int col = (int)round(RandDouble((double)rand_low, (double)rand_high)); 
                      col *= all_data->grid.n[0];
@@ -401,10 +418,6 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
             }
          }
 
-         vector<int> level_perm(all_data->grid.num_levels);
-         for (int level = 0; level < all_data->grid.num_levels; level++){
-            level_perm[level] = level;
-         }
          random_shuffle(level_perm.begin(), level_perm.end());
 
          for (int i = 0; i < all_data->grid.num_levels; i++){
@@ -438,17 +451,30 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
          }
 
          int break_flag = 1;
-         for (int level = 0; level < all_data->grid.num_levels; level++){
-            if (all_data->grid.local_num_correct[level] == 0){
-               break_flag = 0;
+         if (all_data->input.converge_test_type == ONE_LEVEL){
+            for (int level = 0; level < all_data->grid.num_levels; level++){
+               if (all_data->grid.local_num_correct[level] < all_data->input.num_cycles){
+                  break_flag = 0;
+                  break;
+               }
+            }
+            if (break_flag == 1){
                break;
             }
          }
-         if (break_flag == 1){
+         else{
             for (int level = 0; level < all_data->grid.num_levels; level++){
-               all_data->grid.local_num_correct[level] = 0;
+               if (all_data->grid.local_num_correct[level] == 0){
+                  break_flag = 0;
+                  break;
+               }
             }
-            break;
+            if (break_flag == 1){
+               for (int level = 0; level < all_data->grid.num_levels; level++){
+                  all_data->grid.local_num_correct[level] = 0;
+               }
+               break;
+            }
          }
       }
       all_data->output.sim_cycle_time_instance = all_data->output.sim_time_instance;
