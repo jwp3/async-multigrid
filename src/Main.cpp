@@ -87,6 +87,7 @@ int main (int argc, char *argv[])
    all_data.input.mfem_solve_print_flag = 0;
    all_data.input.sim_grid_wait = 0;
    all_data.input.sim_read_delay = 0;
+   all_data.input.print_grid_wait_flag = 0;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
@@ -297,9 +298,13 @@ int main (int argc, char *argv[])
       {
          all_data.input.format_output_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-hypre_print") == 0)
+      else if (strcmp(argv[arg_index], "-print_hypre") == 0)
       {
          hypre_print_level = 3;
+      }
+      else if (strcmp(argv[arg_index], "-print_grid_wait") == 0)
+      {
+         all_data.input.print_grid_wait_flag = 1;
       }
       else if (strcmp(argv[arg_index], "-hypre_test_error") == 0)
       {

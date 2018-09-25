@@ -108,6 +108,7 @@ typedef struct{
    int mfem_solve_print_flag;
    int sim_grid_wait;
    int sim_read_delay;
+   int print_grid_wait_flag;
 }InputData;
 
 typedef struct{
@@ -172,9 +173,6 @@ typedef struct{
    vector<vector<int>> thread_levels;
    vector<vector<int>> level_threads;
    omp_lock_t lock;
-   int tot_work;
-   int *level_work;
-   double *frac_level_work;
    int *barrier_root;
    int **barrier_flags;
    double *loc_sum;
@@ -196,6 +194,13 @@ typedef struct{
    int *local_cycle_num_correct;
    int *last_read_correct;
    int *last_read_cycle_correct;
+   double *mean_grid_wait;
+   double *max_grid_wait;
+   double *min_grid_wait;
+   vector<int> grid_wait_hist;
+   int tot_work;
+   int *level_work;
+   double *frac_level_work;
 }GridData;
 
 typedef struct{

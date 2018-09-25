@@ -10,6 +10,26 @@ void PrintOutput(AllData all_data)
    double mean_residual_wtime;
    double mean_prolong_wtime;
    double mean_correct;
+   double mean_grid_wait;
+   double max_grid_wait;
+   double min_grid_wait;
+
+   if (all_data.input.async_flag == 1){
+      for (int level = 0; level < all_data.grid.num_levels; level++){
+         all_data.grid.mean_grid_wait[level] /= (double)all_data.grid.local_num_correct[level];
+      }
+   }
+   else{
+      for (int level = 0; level < all_data.grid.num_levels; level++){
+         all_data.grid.min_grid_wait[level] = 0;
+      }
+   }
+   mean_grid_wait =
+      SumDbl(all_data.grid.mean_grid_wait, all_data.grid.num_levels)/(double)all_data.grid.num_levels;
+   max_grid_wait =
+      MaxDouble(all_data.grid.max_grid_wait, all_data.grid.num_levels);
+   min_grid_wait =
+      MaxDouble(all_data.grid.min_grid_wait, all_data.grid.num_levels);
 
    mean_smooth_sweeps =
       (int)((double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads);
@@ -26,7 +46,7 @@ void PrintOutput(AllData all_data)
 
    char print_str[1000];
    if (all_data.input.format_output_flag == 0){
-      strcpy(print_str, "\nSetup stats:\n"
+      strcpy(print_str, "Setup stats:\n"
                         "\tHypre setup time = %e\n"
                         "\tRemaining setup time = %e\n"
                         "\tTotal setup time = %e\n"
@@ -37,10 +57,13 @@ void PrintOutput(AllData all_data)
 		        "\tMean smooth time = %e\n" 
 			"\tMean residual time = %e\n"
 			"\tMean restrict time = %e\n"
-		        "\tMean prolong time = %e\n");
+		        "\tMean prolong time = %e\n"
+			"\tMean grid wait = %f\n"
+			"\tMax grid wait = %f\n"
+                        "\tMin grid wait = %f\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e ");
+      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %f %f %f ");
    }
 
    printf(print_str,
@@ -53,7 +76,10 @@ void PrintOutput(AllData all_data)
           mean_smooth_wtime,
           mean_residual_wtime,
           mean_restrict_wtime,
-          mean_prolong_wtime);
+          mean_prolong_wtime,
+          mean_grid_wait,
+          max_grid_wait,
+          min_grid_wait);
 
    if (all_data.input.mfem_test_error_flag == 1){
       if (all_data.input.format_output_flag == 0){
@@ -74,6 +100,22 @@ void PrintOutput(AllData all_data)
    if (all_data.input.format_output_flag == 1){
       printf("\n");
    }
+   if (all_data.input.print_grid_wait_flag == 1){
+      for (int i = 0; i < all_data.grid.grid_wait_hist.size(); i++){
+         printf("%d\n", all_data.grid.grid_wait_hist[i]);
+      }
+   }
+}
+
+double MaxDouble(double *x, int n)
+{
+   double max_val = x[0];
+   for(int i = 1; i < n; i++){
+      if(x[i] > max_val){
+         max_val = x[i];
+      }
+   }
+   return max_val;
 }
 
 double RandDouble(double low, double high)
@@ -331,6 +373,9 @@ void InitSolve(AllData *all_data)
       all_data->grid.local_cycle_num_correct[level] = 0;
       all_data->grid.last_read_correct[level] = 0;
       all_data->grid.last_read_cycle_correct[level] = 0;
+      all_data->grid.mean_grid_wait[level] = 0;
+      all_data->grid.max_grid_wait[level] = 0;
+      all_data->grid.min_grid_wait[level] = DBL_MAX;
    }
    all_data->thread.converge_flag = 0;
 
@@ -340,5 +385,9 @@ void InitSolve(AllData *all_data)
       all_data->output.residual_wtime[t] = 0;
       all_data->output.restrict_wtime[t] = 0;
       all_data->output.prolong_wtime[t] = 0;
+   }
+
+   if (all_data->input.print_grid_wait_flag == 1){
+      all_data->grid.grid_wait_hist.resize(0);
    }
 }

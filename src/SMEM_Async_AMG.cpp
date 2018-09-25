@@ -195,12 +195,28 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             if (all_data->input.async_type == SEMI_ASYNC){
                if (tid == all_data->thread.barrier_root[thread_level]){
                   omp_set_lock(&(all_data->thread.lock));
+
+                  double grid_wait = 
+                     (double)(all_data->grid.global_num_correct - all_data->grid.last_read_correct[thread_level]);
+                  all_data->grid.mean_grid_wait[thread_level] += grid_wait;
+                  all_data->grid.min_grid_wait[thread_level] = 
+                     fmin(grid_wait, all_data->grid.min_grid_wait[thread_level]);
+                  all_data->grid.max_grid_wait[thread_level] =
+                     fmax(grid_wait, all_data->grid.max_grid_wait[thread_level]);
+
+                  if (all_data->input.print_grid_wait_flag == 1){
+                     all_data->grid.grid_wait_hist.push_back((int)grid_wait);  
+                  }
+                  
+                  all_data->grid.last_read_correct[thread_level] = all_data->grid.global_num_correct;
+                  all_data->grid.global_num_correct++;
                }
                SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                for (int i = ns; i < ne; i++){
                   all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
                   all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
                }
+               
                if (tid == all_data->thread.barrier_root[thread_level]){
                   omp_unset_lock(&(all_data->thread.lock));
                }

@@ -433,6 +433,19 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                   }
                }
                u_hist.insert(u_hist.end(), temp.begin(), temp.end());
+
+               double grid_wait =
+                  (double)(all_data->grid.global_num_correct - all_data->grid.last_read_correct[level]);
+               all_data->grid.mean_grid_wait[level] += grid_wait;
+               all_data->grid.min_grid_wait[level] =
+                  fmin(grid_wait, all_data->grid.min_grid_wait[level]);
+               all_data->grid.max_grid_wait[level] =
+                  fmax(grid_wait, all_data->grid.max_grid_wait[level]);
+
+               if (all_data->input.print_grid_wait_flag == 1){
+                  all_data->grid.grid_wait_hist.push_back((int)grid_wait);
+               }
+
                all_data->grid.local_num_correct[level]++;
                all_data->grid.global_num_correct++;
                all_data->grid.last_read_correct[level] = all_data->grid.global_num_correct;

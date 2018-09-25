@@ -40,6 +40,17 @@ void SMEM_Setup(void *amg_vdata,
                 AllData *all_data)
 {
    InitAlgebra(amg_vdata, all_data);
+
+   all_data->grid.local_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.local_cycle_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.last_read_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.last_read_cycle_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+
+   all_data->grid.mean_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
+   all_data->grid.max_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
+   all_data->grid.min_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
+
+   ComputeWork(all_data);
    PartitionLevels(all_data);
    PartitionGrids(all_data);
 }
@@ -96,13 +107,6 @@ void InitAlgebra(void *amg_vdata,
          (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    all_data->vector.f =
          (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-
-   all_data->grid.local_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
-   all_data->grid.local_cycle_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
-   all_data->grid.last_read_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
-   all_data->grid.last_read_cycle_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
-
-   ComputeWork(all_data);
 
    if (all_data->input.thread_part_type == ALL_LEVELS &&
        all_data->input.num_threads > 1){
@@ -397,7 +401,7 @@ void PartitionLevels(AllData *all_data)
                   balanced_threads = num_threads;
                }
                else {
-                  balanced_threads = max((int)ceil(all_data->thread.frac_level_work[level] *
+                  balanced_threads = max((int)ceil(all_data->grid.frac_level_work[level] *
                                                         (double)all_data->input.num_threads), 1);
                   while (balanced_threads >= num_threads){
                      balanced_threads--;
@@ -405,10 +409,10 @@ void PartitionLevels(AllData *all_data)
                   while (1){
                      int candidate = balanced_threads-1;
                      double diff_current =
-                        fabs(all_data->thread.frac_level_work[level] -
+                        fabs(all_data->grid.frac_level_work[level] -
                              (double)balanced_threads/(double)all_data->input.num_threads);
                      double diff_candidate =
-                        fabs(all_data->thread.frac_level_work[level] -
+                        fabs(all_data->grid.frac_level_work[level] -
                              (double)candidate/(double)all_data->input.num_threads);
                      if (diff_current <= diff_candidate ||
                          balanced_threads == 1){
@@ -416,18 +420,18 @@ void PartitionLevels(AllData *all_data)
                      }
                      balanced_threads--;
                   }
-                 // balanced_threads = max((int)floor(all_data->thread.frac_level_work[level] *
+                 // balanced_threads = max((int)floor(all_data->grid.frac_level_work[level] *
                  //                                       (double)all_data->input.num_threads), 1);
                  // while (1){
                  //    int candidate = balanced_threads+1;
                  //    double diff_current =
-                 //       fabs(all_data->thread.frac_level_work[level] -
+                 //       fabs(all_data->grid.frac_level_work[level] -
                  //            (double)balanced_threads/(double)all_data->input.num_threads);
                  //    double diff_candidate =
-                 //       fabs(all_data->thread.frac_level_work[level] -
+                 //       fabs(all_data->grid.frac_level_work[level] -
                  //            (double)candidate/(double)all_data->input.num_threads);
                  //    if (diff_current <= diff_candidate ||
-                 //        (double)candidate/(double)all_data->input.num_threads > all_data->thread.frac_level_work[level]){
+                 //        (double)candidate/(double)all_data->input.num_threads > all_data->grid.frac_level_work[level]){
                  //       break;
                  //    }
                  //    balanced_threads++;
@@ -447,7 +451,7 @@ void PartitionLevels(AllData *all_data)
             }
 	   // printf("\tlevel %d: %f, %f\n",
            //           level,
-           //           all_data->thread.frac_level_work[level],
+           //           all_data->grid.frac_level_work[level],
            //           (double)balanced_threads/(double)all_data->input.num_threads);
            // printf("\n");
          }
@@ -576,9 +580,9 @@ void ComputeWork(AllData *all_data)
 {
    int coarsest_level;
    int fine_grid, coarse_grid;
-   all_data->thread.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      all_data->thread.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+      all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
       if (all_data->input.solver == MULTADD ||
           all_data->input.solver == ASYNC_MULTADD){
          coarsest_level = level;
@@ -592,14 +596,14 @@ void ComputeWork(AllData *all_data)
          coarse_grid = inner_level + 1;
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
-            all_data->thread.level_work[level] +=
+            all_data->grid.level_work[level] +=
                hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
 
          }
          else if (all_data->input.solver == AFACX ||
                   all_data->input.solver == ASYNC_AFACX){
             if (level < all_data->grid.num_levels-1){
-               all_data->thread.level_work[level] +=
+               all_data->grid.level_work[level] +=
                   hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
             }
          }
@@ -608,17 +612,17 @@ void ComputeWork(AllData *all_data)
       fine_grid = level;
       coarse_grid = level + 1;
       if (level == all_data->grid.num_levels-1){
-         all_data->thread.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+         all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
       }
       else {
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
-            all_data->thread.level_work[level] +=
+            all_data->grid.level_work[level] +=
 	       all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
          }
          else if (all_data->input.solver == AFACX ||
                   all_data->input.solver == ASYNC_AFACX){
-            all_data->thread.level_work[level] +=
+            all_data->grid.level_work[level] +=
                all_data->input.num_coarse_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[coarse_grid]) +
                hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]) +
 	       hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
@@ -632,25 +636,25 @@ void ComputeWork(AllData *all_data)
          coarse_grid = inner_level + 1;
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
-            all_data->thread.level_work[level] +=
+            all_data->grid.level_work[level] +=
                hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
 
          }
          else if (all_data->input.solver == AFACX ||
                   all_data->input.solver == ASYNC_AFACX){
-            all_data->thread.level_work[level] +=
+            all_data->grid.level_work[level] +=
                hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
          }
       }
    }
-   all_data->thread.tot_work = 0;
-   all_data->thread.frac_level_work = (double *)calloc(all_data->grid.num_levels, sizeof(double));
+   all_data->grid.tot_work = 0;
+   all_data->grid.frac_level_work = (double *)calloc(all_data->grid.num_levels, sizeof(double));
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      all_data->thread.tot_work += all_data->thread.level_work[level];
+      all_data->grid.tot_work += all_data->grid.level_work[level];
    }
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      all_data->thread.frac_level_work[level] = (double)all_data->thread.level_work[level] / (double)all_data->thread.tot_work;
-     // printf("hello %e\n", all_data->thread.frac_level_work[level]);
+      all_data->grid.frac_level_work[level] = (double)all_data->grid.level_work[level] / (double)all_data->grid.tot_work;
+     // printf("hello %e\n", all_data->grid.frac_level_work[level]);
    }
 }
 
