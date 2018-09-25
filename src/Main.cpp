@@ -77,7 +77,6 @@ int main (int argc, char *argv[])
    all_data.input.num_coarse_smooth_sweeps = 1;
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
-   all_data.input.print_reshist_flag = 1;
    all_data.input.print_output_flag = 1;
    all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
@@ -88,6 +87,8 @@ int main (int argc, char *argv[])
    all_data.input.sim_grid_wait = 0;
    all_data.input.sim_read_delay = 0;
    all_data.input.print_grid_wait_flag = 0;
+   all_data.input.print_level_stats_flag = 0;
+   all_data.input.print_reshist_flag = 0;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
@@ -286,10 +287,6 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.input.sim_read_delay = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-no_reshist") == 0)
-      {
-         all_data.input.print_reshist_flag = 0;
-      }
       else if (strcmp(argv[arg_index], "-no_output") == 0)
       {
          all_data.input.print_output_flag = 0;
@@ -298,6 +295,10 @@ int main (int argc, char *argv[])
       {
          all_data.input.format_output_flag = 1;
       }
+      else if (strcmp(argv[arg_index], "-print_reshist") == 0)
+      {
+         all_data.input.print_reshist_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-print_hypre") == 0)
       {
          hypre_print_level = 3;
@@ -305,6 +306,10 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-print_grid_wait") == 0)
       {
          all_data.input.print_grid_wait_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-print_level_stats") == 0)
+      {
+         all_data.input.print_level_stats_flag = 1;
       }
       else if (strcmp(argv[arg_index], "-hypre_test_error") == 0)
       {
@@ -346,7 +351,8 @@ int main (int argc, char *argv[])
       MPI_Finalize();
       return 0;
    }
-  
+ 
+   start = omp_get_wtime(); 
    if (all_data.input.test_problem == LAPLACE_2D5PT){
       Laplacian_2D_5pt(&A, n);
       HYPRE_IJMatrixAssemble(A);
@@ -368,9 +374,9 @@ int main (int argc, char *argv[])
    else{
       return 1;
    }
+   all_data.output.prob_setup_wtime = omp_get_wtime() - start;
 
-
-   
+   start = omp_get_wtime();
    HYPRE_BoomerAMGCreate(&solver);
 
    HYPRE_BoomerAMGSetPrintLevel(solver, hypre_print_level);
@@ -380,12 +386,11 @@ int main (int argc, char *argv[])
    HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
    HYPRE_BoomerAMGSetAggNumLevels(solver, agg_num_levels);
 
-   start = omp_get_wtime();
    HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
    all_data.output.hypre_setup_wtime = omp_get_wtime() - start;
 
-   omp_set_num_threads(all_data.input.num_threads);
    start = omp_get_wtime();
+   omp_set_num_threads(all_data.input.num_threads);
    SMEM_Setup(solver, &all_data);
    all_data.output.setup_wtime = omp_get_wtime() - start; 
 

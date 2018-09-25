@@ -109,6 +109,7 @@ typedef struct{
    int sim_grid_wait;
    int sim_read_delay;
    int print_grid_wait_flag;
+   int print_level_stats_flag;
 }InputData;
 
 typedef struct{
