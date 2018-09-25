@@ -208,7 +208,7 @@ void InitAlgebra(void *amg_vdata,
    }
    int level = 0;
    for (int i = 0; i < all_data->grid.n[level]; i++){
-      all_data->vector.f[level][i] = 1.0;//RandDouble(-1.0, 1.0);
+      all_data->vector.f[level][i] = RandDouble(-1.0, 1.0);
    }
 
    level = all_data->grid.num_levels-1;         

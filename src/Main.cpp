@@ -326,7 +326,7 @@ int main (int argc, char *argv[])
       all_data.input.thread_part_type = ONE_LEVEL;
    }
    
-   srand(time(NULL));
+   srand(0);
    omp_set_num_threads(1);
    mkl_set_num_threads(1);
 
@@ -428,6 +428,7 @@ int main (int argc, char *argv[])
       HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
    }
 
+   srand(time(NULL));
    for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){   
       all_data.input.num_cycles = cycle;
       for (int run = 1; run <= num_runs; run++){

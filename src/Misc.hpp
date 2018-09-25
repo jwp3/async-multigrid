@@ -22,6 +22,8 @@ double SumDbl(double *x, int n);
 
 double MaxDouble(double *x, int n);
 
+double MinDouble(double *x, int n);
+
 void QuicksortPair_int_double(int *x, double *y, int first, int last);
 
 void BubblesortPair_int_double(int *x, double *y, int n);
