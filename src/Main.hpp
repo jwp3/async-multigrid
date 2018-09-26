@@ -191,7 +191,6 @@ typedef struct{
 }ThreadData;
 
 typedef struct{
-   int Vcycle_direction;
    int num_levels;
    int *n;
    int global_num_correct;

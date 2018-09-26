@@ -632,10 +632,10 @@ void ComputeWork(AllData *all_data)
          else if (all_data->input.solver == AFACX ||
                   all_data->input.solver == ASYNC_AFACX){
             all_data->grid.level_work[level] +=
-               all_data->input.num_coarse_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[coarse_grid]) +
+               (all_data->input.num_coarse_smooth_sweeps-1) * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[coarse_grid]) +
                hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]) +
 	       hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
-               all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+               (all_data->input.num_fine_smooth_sweeps-1) * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
          }
       }
 
@@ -703,21 +703,19 @@ void SmoothTransfer(AllData *all_data,
          diag[i] = A_data[A_i[i]];
       }
       for (int i = 0; i < num_rows; i++){
-         G_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
-         GT_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
+         G_data[A_i[i]] = GT_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
          for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
-            G_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[A_j[jj]];
-            GT_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[i];
+            G_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[i];
+            GT_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[A_j[jj]];
          }
       }
    }
    else{
       for (int i = 0; i < num_rows; i++){
-         G_data[A_i[i]] = 1.0 - A_data[A_i[i]] / all_data->matrix.L1_row_norm[level][i];
-         GT_data[A_i[i]] = 1.0 - A_data[A_i[i]] / all_data->matrix.L1_row_norm[level][i];
+         G_data[A_i[i]] = GT_data[A_i[i]] = 1.0 - A_data[A_i[i]] / all_data->matrix.L1_row_norm[level][i];
          for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
-            G_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][A_j[jj]];
-            GT_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][i];
+            G_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][i];
+            GT_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][A_j[jj]];
          }
       }
    }

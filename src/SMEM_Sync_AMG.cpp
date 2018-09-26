@@ -253,7 +253,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
 
 void SMEM_Sync_Add_Vcycle(AllData *all_data)
 {
-   all_data->vector.zero_flag = 1;
+   all_data->vector.zero_flag = 0;
    omp_init_lock(&(all_data->thread.lock));
    #pragma omp parallel
    {
