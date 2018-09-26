@@ -94,4 +94,14 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
                                int thread_level,
                                int ns, int ne);
 
+void SMEM_Sync_SymmetricL1Jacobi(AllData *all_data,
+                                 hypre_CSRMatrix *A,
+                                 HYPRE_Real *f,
+                                 HYPRE_Real *u,
+                                 HYPRE_Real *y,
+                                 HYPRE_Real *r,
+                                 int num_sweeps,
+                                 int thread_level,
+                                 int ns, int ne);
+
 #endif

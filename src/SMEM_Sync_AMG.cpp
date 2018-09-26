@@ -6,6 +6,7 @@
 
 void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
 {
+   all_data->vector.zero_flag = 0;
    #pragma omp parallel
    {
       int fine_grid, coarse_grid;
@@ -48,8 +49,10 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
          for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
             all_data->vector.u[coarse_grid][i] = 0;
          }
+         all_data->vector.zero_flag = 1;
       }
    }
+   all_data->vector.zero_flag = 0;
 
    int coarsest_level = all_data->grid.num_levels-1;
    double smooth_start = omp_get_wtime();
@@ -117,6 +120,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
 
 void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
 {
+   all_data->vector.zero_flag = 1;
    #pragma omp parallel
    {
       int fine_grid, coarse_grid;
@@ -249,6 +253,8 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
 
 void SMEM_Sync_Add_Vcycle(AllData *all_data)
 {
+   all_data->vector.zero_flag = 1;
+   omp_init_lock(&(all_data->thread.lock));
    #pragma omp parallel
    {
       int tid = omp_get_thread_num();
@@ -414,13 +420,29 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
          fine_grid = 0;
          ns = all_data->thread.A_ns[fine_grid][tid];
          ne = all_data->thread.A_ne[fine_grid][tid];
-         for (int i = ns; i < ne; i++){
-            #pragma omp atomic
-            all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
-         }
+        // if (all_data->input.async_type == SEMI_ASYNC){
+        //    if (tid == all_data->thread.barrier_root[thread_level]){
+        //       omp_set_lock(&(all_data->thread.lock));
+        //       all_data->grid.global_num_correct++;
+        //    }
+        //    SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+        //    for (int i = ns; i < ne; i++){
+        //       all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+        //    }
+        //    if (tid == all_data->thread.barrier_root[thread_level]){
+        //       omp_unset_lock(&(all_data->thread.lock));
+        //    }
+        // }
+        // else {
+            for (int i = ns; i < ne; i++){
+               #pragma omp atomic
+               all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+            }
+        // }
          if (tid == all_data->thread.barrier_root[thread_level]){
             all_data->grid.local_num_correct[thread_level]++;
          }
       }
    }
+   omp_destroy_lock(&(all_data->thread.lock));
 }

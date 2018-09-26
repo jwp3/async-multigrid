@@ -130,9 +130,6 @@ void SMEM_Smooth(AllData *all_data,
          if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
             SMEM_Sync_HybridJacobiGaussSeidel(all_data, A, f, u, y, num_sweeps, level, ns, ne);
          }
-         else if (all_data->input.smoother == SYMM_JACOBI){
-            SMEM_Sync_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
-         }
          else if (all_data->input.smoother == ASYNC_GAUSS_SEIDEL){
             SMEM_Async_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
          }
@@ -140,10 +137,22 @@ void SMEM_Smooth(AllData *all_data,
             SMEM_SemiAsync_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
          }
          else if (all_data->input.smoother == L1_JACOBI){
-            SMEM_Sync_L1Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+            if (all_data->input.solver == MULTADD ||
+                all_data->input.solver == ASYNC_MULTADD){
+               SMEM_Sync_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
+            }
+            else {
+               SMEM_Sync_L1Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+            }
          }
          else {
-            SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+            if (all_data->input.solver == MULTADD ||
+                all_data->input.solver == ASYNC_MULTADD){
+               SMEM_Sync_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
+            }
+            else {
+               SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+            }
          }
       }
       else{
@@ -170,10 +179,22 @@ void SMEM_Smooth(AllData *all_data,
          SEQ_GaussSeidel(all_data, A, f, u, num_sweeps);
       }
       else if (all_data->input.smoother == L1_JACOBI){
-         SEQ_L1Jacobi(all_data, A, f, u, y, all_data->matrix.L1_row_norm[level], num_sweeps);
+         if (all_data->input.solver == MULTADD ||
+             all_data->input.solver == ASYNC_MULTADD){
+            SEQ_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level);
+         }
+         else{
+            SEQ_L1Jacobi(all_data, A, f, u, y, all_data->matrix.L1_row_norm[level], num_sweeps);
+         }
       }
       else {
-         SEQ_Jacobi(all_data, A, f, u, y, num_sweeps);
+         if (all_data->input.solver == MULTADD ||
+             all_data->input.solver == ASYNC_MULTADD){
+            SEQ_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level);
+         }
+         else {
+            SEQ_Jacobi(all_data, A, f, u, y, num_sweeps);
+         }
       }
    }
 }

@@ -127,6 +127,7 @@ typedef struct{
    HYPRE_Real **r_fine;
    HYPRE_Real **r_coarse;
    HYPRE_Real **e;
+   int zero_flag;
 }VectorData;
 
 typedef struct{
@@ -190,6 +191,7 @@ typedef struct{
 }ThreadData;
 
 typedef struct{
+   int Vcycle_direction;
    int num_levels;
    int *n;
    int global_num_correct;

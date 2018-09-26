@@ -80,6 +80,7 @@ int main (int argc, char *argv[])
    all_data.input.print_output_flag = 1;
    all_data.input.smooth_weight = .8;
    all_data.input.smoother = JACOBI;
+   all_data.input.smooth_interp_type = JACOBI;
    all_data.input.solver = MULT;
    all_data.input.hypre_test_error_flag = 0;
    all_data.input.mfem_test_error_flag = 0;
@@ -126,15 +127,13 @@ int main (int argc, char *argv[])
          arg_index++;
          if (strcmp(argv[arg_index], "j") == 0){
             all_data.input.smoother = JACOBI;
+            all_data.input.smooth_interp_type = JACOBI;
          }
          else if (strcmp(argv[arg_index], "gs") == 0){
             all_data.input.smoother = GAUSS_SEIDEL;
          }
          else if (strcmp(argv[arg_index], "hybrid_jgs") == 0){
             all_data.input.smoother = HYBRID_JACOBI_GAUSS_SEIDEL;
-         }
-         else if (strcmp(argv[arg_index], "symm_j") == 0){
-            all_data.input.smoother = SYMM_JACOBI;
          }
          else if (strcmp(argv[arg_index], "async_gs") == 0){
             all_data.input.smoother = ASYNC_GAUSS_SEIDEL;
@@ -144,6 +143,7 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "L1j") == 0){
             all_data.input.smoother = L1_JACOBI;
+            all_data.input.smooth_interp_type = L1_JACOBI;
          }
       }
       else if (strcmp(argv[arg_index], "-solver") == 0)

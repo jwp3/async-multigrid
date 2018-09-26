@@ -6,6 +6,7 @@
 
 void SMEM_Async_Add_AMG(AllData *all_data)
 {
+   all_data->vector.zero_flag = 1;
    omp_init_lock(&(all_data->thread.lock));
    #pragma omp parallel
    {

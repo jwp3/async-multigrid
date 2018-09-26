@@ -15,7 +15,8 @@ void SEQ_Vcycle(AllData *all_data)
    double smooth_start;
    double restrict_start;
    double prolong_start;
-
+   
+   all_data->vector.zero_flag = 0;
    for (int level = 0; level < all_data->grid.num_levels-1; level++){
       fine_grid = level;
       coarse_grid = level + 1;
@@ -47,8 +48,10 @@ void SEQ_Vcycle(AllData *all_data)
       for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
          all_data->vector.u[coarse_grid][i] = 0;
       }
+      all_data->vector.zero_flag = 1;
    }
 
+   all_data->vector.zero_flag = 0;
    this_grid = all_data->grid.num_levels-1;
    smooth_start = omp_get_wtime();
    PARDISO(all_data->pardiso.info.pt,
@@ -100,6 +103,7 @@ void SEQ_Vcycle(AllData *all_data)
 
 void SEQ_Add_Vcycle(AllData *all_data)
 {
+   all_data->vector.zero_flag = 1;
    int fine_grid, coarse_grid, this_grid;
    int tid = 0;
 
@@ -223,6 +227,7 @@ void SEQ_Add_Vcycle(AllData *all_data)
 
 void SEQ_Add_Vcycle_Sim(AllData *all_data)
 {
+   all_data->vector.zero_flag = 1;
    int fine_grid, coarse_grid, this_grid;
    int tid = 0;
 
