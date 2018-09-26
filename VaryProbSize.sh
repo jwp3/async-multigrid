@@ -21,5 +21,5 @@ n_list=(65 129 257 513 1025)
 
 for n in ${n_list[@]}
 do
-	KMP_AFFINITY=compact ./Main -format_output -no_reshist -smoother ${smoother} -num_smooth_sweeps ${num_smooth_sweeps} -num_runs ${num_runs} -n ${n} -num_cycles ${num_cycles} -num_threads ${num_threads} -solver ${solver} -problem ${problem} -async_type ${async_type} -converge_test_type all | tee -a ${file_name}
+	KMP_AFFINITY=compact ./Main -format_output -smoother ${smoother} -num_smooth_sweeps ${num_smooth_sweeps} -num_runs ${num_runs} -n ${n} -num_cycles ${num_cycles} -num_threads ${num_threads} -solver ${solver} -problem ${problem} -async_type ${async_type} -converge_test_type all | tee -a ${file_name}
 done

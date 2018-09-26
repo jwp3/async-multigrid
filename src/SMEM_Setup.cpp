@@ -77,10 +77,20 @@ void InitAlgebra(void *amg_vdata,
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
    all_data->matrix.R =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
+   all_data->matrix.L1_row_norm = (double **)malloc(all_data->grid.num_levels * sizeof(double *));
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
       all_data->matrix.A[level] = hypre_ParCSRMatrixDiag(parA[level]);
       all_data->grid.n[level] = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+      HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
+      HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
+      all_data->matrix.L1_row_norm[level] = (double *)malloc(all_data->grid.n[level] * sizeof(double));
+      for (int i = 0; i < all_data->grid.n[level]; i++){
+         all_data->matrix.L1_row_norm[level][i] = 0;
+         for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+            all_data->matrix.L1_row_norm[level][i] += fabs(A_data[jj]);
+         }
+      }
       if (level < all_data->grid.num_levels-1){
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
@@ -236,7 +246,6 @@ void InitAlgebra(void *amg_vdata,
                                 &all_data->pardiso.csr.a[all_data->pardiso.csr.ia[i]],
                                 all_data->pardiso.csr.ia[i+1] - all_data->pardiso.csr.ia[i]);
    }
-   
 
    for (int i = 0; i < 64; i++){
       all_data->pardiso.info.iparm[i] = 0;
@@ -687,13 +696,25 @@ void SmoothTransfer(AllData *all_data,
    HYPRE_Real *G_data = (HYPRE_Real *)calloc(nnz, sizeof(HYPRE_Real));
    HYPRE_Real *GT_data = (HYPRE_Real *)calloc(nnz, sizeof(HYPRE_Real));
 
-   for (int i = 0; i < num_rows; i++){
-      if (A_data[A_i[i]] != 0.0){
-         G_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
-         GT_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
+   if (all_data->input.smooth_interp_type == JACOBI){
+      for (int i = 0; i < num_rows; i++){
+         if (A_data[A_i[i]] != 0.0){
+            G_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
+            GT_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
+            for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
+               G_data[jj] = -all_data->input.smooth_weight * A_data[jj] / A_data[A_i[i]];
+               GT_data[jj] = -all_data->input.smooth_weight * A_data[jj] / A_data[A_i[A_j[jj]]];
+            }
+         }
+      }
+   }
+   else{
+      for (int i = 0; i < num_rows; i++){
+         G_data[A_i[i]] = 1.0 - A_data[A_i[i]] / all_data->matrix.L1_row_norm[level][i];
+         GT_data[A_i[i]] = 1.0 - A_data[A_i[i]] / all_data->matrix.L1_row_norm[level][i];
          for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
-            G_data[jj] = -all_data->input.smooth_weight * A_data[jj] / A_data[A_i[i]];
-            GT_data[jj] = -all_data->input.smooth_weight * A_data[jj] / A_data[A_i[A_j[jj]]];
+            G_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][i];
+            GT_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][A_j[jj]];
          }
       }
    }
@@ -751,10 +772,29 @@ void EigenMatMat(AllData *all_data,
    eigen_B.setFromTriplets(B_eigtrip.begin(), B_eigtrip.end());
    eigen_A.makeCompressed();
    eigen_B.makeCompressed();
-   eigen_C = (eigen_A * eigen_B).pruned();
+   eigen_C = (eigen_A * eigen_B);
    eigen_C.makeCompressed();
 
+  // vector<double> row_sum(eigen_C.rows());
+  // for (int i = 0; i < eigen_C.rows(); i++){
+  //    row_sum[i] = 0;
+  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+  //       row_sum[i] += it.value();
+  //    }
+  // }
+  // eigen_C = (eigen_A * eigen_B).pruned(.5,1.0);
+  // for (int i = 0; i < eigen_C.rows(); i++){
+  //    double pruned_row_sum = 0;
+  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+  //       pruned_row_sum += it.value();
+  //    }
+  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+  //       it.valueRef() /= pruned_row_sum / row_sum[i];
+  //    }
+  // }
+
    int num_rows, num_cols, nnz;
+   
    hypre_CSRMatrixNumRows(C) = num_rows = eigen_C.rows();
    hypre_CSRMatrixNumCols(C) = num_cols = eigen_C.cols();
    hypre_CSRMatrixNumNonzeros(C) = nnz = eigen_C.nonZeros();

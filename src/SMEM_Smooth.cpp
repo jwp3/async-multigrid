@@ -21,11 +21,7 @@ void SMEM_Sync_Parfor_Jacobi(AllData *all_data,
 
    for (int k = 0; k < num_sweeps; k++){
       #pragma omp for
-     // if (tid == all_data->thread.barrier_root[level]){
-         for (int i = 0; i < n; i++) u_prev[i] = u[i];
-     // }
-     // SMEM_LevelBarrier(all_data, level);
-     // #pragma omp barrier
+      for (int i = 0; i < n; i++) u_prev[i] = u[i];
       #pragma omp for
       for (int i = 0; i < n; i++){
          if (A->data[A->i[i]] != 0.0)
@@ -42,6 +38,37 @@ void SMEM_Sync_Parfor_Jacobi(AllData *all_data,
    }
 }
 
+void SMEM_Sync_Parfor_L1Jacobi(AllData *all_data,
+                               hypre_CSRMatrix *A,
+                               HYPRE_Real *f,
+                               HYPRE_Real *u,
+                               HYPRE_Real *u_prev,
+                               int num_sweeps,
+                               int level)
+{
+   HYPRE_Int ii;
+   HYPRE_Real res;
+
+   HYPRE_Int n = hypre_CSRMatrixNumRows(A);
+
+   int tid = omp_get_thread_num();
+
+   for (int k = 0; k < num_sweeps; k++){
+      #pragma omp for
+      for (int i = 0; i < n; i++) u_prev[i] = u[i];
+      #pragma omp for
+      for (int i = 0; i < n; i++){
+         res = f[i];
+         for (int jj = A->i[i]; jj < A->i[i+1]; jj++)
+         {
+            ii = A->j[jj];
+            res -= A->data[jj] * u_prev[ii];
+         }
+         u[i] += res / all_data->matrix.L1_row_norm[level][i];
+      }
+   }
+}
+
 void SMEM_SemiAsync_Parfor_GaussSeidel(AllData *all_data,
                                       hypre_CSRMatrix *A,
                                       HYPRE_Real *f,
@@ -54,8 +81,6 @@ void SMEM_SemiAsync_Parfor_GaussSeidel(AllData *all_data,
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
 
-   double smooth_weight = all_data->input.smooth_weight;
-
    for (int k = 0; k < num_sweeps; k++){
       #pragma omp for
       for (int i = 0; i < n; i++){
@@ -67,7 +92,7 @@ void SMEM_SemiAsync_Parfor_GaussSeidel(AllData *all_data,
                ii = A->j[jj];
                res -= A->data[jj] * u[ii];
             }
-            u[i] += smooth_weight * res / A->data[A->i[i]];
+            u[i] += res / A->data[A->i[i]];
          }
       }
    }
@@ -85,8 +110,6 @@ void SMEM_Async_Parfor_GaussSeidel(AllData *all_data,
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
 
-   double smooth_weight = all_data->input.smooth_weight;
-
    for (int k = 0; k < num_sweeps; k++){
       #pragma omp for nowait
       for (int i = 0; i < n; i++){
@@ -98,7 +121,7 @@ void SMEM_Async_Parfor_GaussSeidel(AllData *all_data,
                ii = A->j[jj];
                res -= A->data[jj] * u[ii];
             }
-            u[i] += smooth_weight * res / A->data[A->i[i]];
+            u[i] += res / A->data[A->i[i]];
          }
       }
    }
@@ -173,6 +196,36 @@ void SMEM_Sync_Jacobi(AllData *all_data,
             }
             u[i] += smooth_weight * res / A->data[A->i[i]];
          }
+      }
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+   }
+}
+
+void SMEM_Sync_L1Jacobi(AllData *all_data,
+                        hypre_CSRMatrix *A,
+                        HYPRE_Real *f,
+                        HYPRE_Real *u,
+                        HYPRE_Real *u_prev,
+                        int num_sweeps,
+                        int thread_level,
+                        int ns, int ne)
+{
+   HYPRE_Int ii;
+   HYPRE_Real res;
+
+   HYPRE_Int n = hypre_CSRMatrixNumRows(A);
+
+   for (int k = 0; k < num_sweeps; k++){
+      for (int i = ns; i < ne; i++) u_prev[i] = u[i];
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      for (int i = ns; i < ne; i++){
+         res = f[i];
+         for (int jj = A->i[i]; jj < A->i[i+1]; jj++)
+         {
+            ii = A->j[jj];
+            res -= A->data[jj] * u_prev[ii];
+         }
+         u[i] += res / all_data->matrix.L1_row_norm[thread_level][i];
       }
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
    }

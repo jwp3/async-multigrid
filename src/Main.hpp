@@ -35,6 +35,7 @@
 #define SYMM_JACOBI 3
 #define SEMI_ASYNC_GAUSS_SEIDEL 4
 #define ASYNC_GAUSS_SEIDEL 5
+#define L1_JACOBI 6
 
 #define MULT 0
 #define AFACX 1
@@ -110,6 +111,7 @@ typedef struct{
    int sim_read_delay;
    int print_grid_wait_flag;
    int print_level_stats_flag;
+   int smooth_interp_type;
 }InputData;
 
 typedef struct{
@@ -168,6 +170,7 @@ typedef struct{
    hypre_CSRMatrix **A;
    hypre_CSRMatrix **P;
    hypre_CSRMatrix **R;
+   double **L1_row_norm;
 }MatrixData;
 
 typedef struct{

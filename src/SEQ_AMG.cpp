@@ -447,6 +447,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                }
 
                all_data->grid.local_num_correct[level]++;
+               all_data->grid.local_cycle_num_correct[level]++;
                all_data->grid.global_num_correct++;
                all_data->grid.last_read_correct[level] = all_data->grid.global_num_correct;
             }
@@ -477,14 +478,14 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
          }
          else{
             for (int level = 0; level < all_data->grid.num_levels; level++){
-               if (all_data->grid.local_num_correct[level] == 0){
+               if (all_data->grid.local_cycle_num_correct[level] == 0){
                   break_flag = 0;
                   break;
                }
             }
             if (break_flag == 1){
                for (int level = 0; level < all_data->grid.num_levels; level++){
-                  all_data->grid.local_num_correct[level] = 0;
+                  all_data->grid.local_cycle_num_correct[level] = 0;
                }
                break;
             }

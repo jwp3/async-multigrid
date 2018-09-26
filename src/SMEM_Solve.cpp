@@ -139,6 +139,9 @@ void SMEM_Smooth(AllData *all_data,
          else if (all_data->input.smoother == SEMI_ASYNC_GAUSS_SEIDEL){
             SMEM_SemiAsync_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
          }
+         else if (all_data->input.smoother == L1_JACOBI){
+            SMEM_Sync_L1Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+         }
          else {
             SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
          }
@@ -153,14 +156,21 @@ void SMEM_Smooth(AllData *all_data,
          else if (all_data->input.smoother == SEMI_ASYNC_GAUSS_SEIDEL){
             SMEM_SemiAsync_Parfor_GaussSeidel(all_data, A, f, u, num_sweeps, level);
          }
+         else if (all_data->input.smoother == L1_JACOBI){
+            SMEM_Sync_Parfor_L1Jacobi(all_data, A, f, u, y, num_sweeps, level);
+         }
          else {
             SMEM_Sync_Parfor_Jacobi(all_data, A, f, u, y, num_sweeps, level);
          }
       }
    }
    else{
-      if (all_data->input.smoother == GAUSS_SEIDEL){
+      if (all_data->input.smoother == GAUSS_SEIDEL ||
+          all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
          SEQ_GaussSeidel(all_data, A, f, u, num_sweeps);
+      }
+      else if (all_data->input.smoother == L1_JACOBI){
+         SEQ_L1Jacobi(all_data, A, f, u, y, all_data->matrix.L1_row_norm[level], num_sweeps);
       }
       else {
          SEQ_Jacobi(all_data, A, f, u, y, num_sweeps);

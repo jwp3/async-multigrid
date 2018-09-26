@@ -34,6 +34,36 @@ void SEQ_Jacobi(AllData *all_data,
    }
 }
 
+void SEQ_L1Jacobi(AllData *all_data,
+                  hypre_CSRMatrix *A,
+                  HYPRE_Real *f,
+                  HYPRE_Real *u,
+                  HYPRE_Real *u_prev,
+                  double *L1_row_norm,
+                  int num_sweeps)
+{
+   HYPRE_Int ii;
+   HYPRE_Real res;
+
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+   HYPRE_Int n = hypre_CSRMatrixNumRows(A);
+
+   for (int k = 0; k < num_sweeps; k++){
+      for (int i = 0; i < n; i++) u_prev[i] = u[i];
+      for (int i = 0; i < n; i++){
+         res = f[i];
+         for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
+         {
+            ii = A_j[jj];
+            res -= A_data[jj] * u_prev[ii];
+         }
+         u[i] += res / L1_row_norm[i];
+      }
+   }
+}
+
 void SEQ_GaussSeidel(AllData *all_data,
                      hypre_CSRMatrix *A,
                      HYPRE_Real *f,

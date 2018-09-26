@@ -16,4 +16,12 @@ void SEQ_GaussSeidel(AllData *all_data,
                      HYPRE_Real *u,
                      int num_sweeps);
 
+void SEQ_L1Jacobi(AllData *all_data,
+                  hypre_CSRMatrix *A,
+                  HYPRE_Real *f,
+                  HYPRE_Real *u,
+                  HYPRE_Real *u_prev,
+		  double *L1_row_norm,
+                  int num_sweeps);
+
 #endif

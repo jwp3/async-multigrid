@@ -92,10 +92,13 @@ void PrintOutput(AllData all_data)
 		        "\tMean prolong time = %e\n"
 			"\tMean grid wait = %e\n"
 			"\tMax grid wait = %e\n"
-                        "\tMin grid wait = %e\n");
+                        "\tMin grid wait = %e\n"
+			"\tMean grid wait / num levels = %e\n"
+                        "\tMax grid wait / num levels = %e\n"
+                        "\tMin grid wait / num levels = %e\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %e %e %e ");
+      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %e %e %e %e %e %e ");
    }
 
    printf(print_str,
@@ -109,6 +112,9 @@ void PrintOutput(AllData all_data)
           mean_residual_wtime,
           mean_restrict_wtime,
           mean_prolong_wtime,
+          mean_grid_wait,
+          max_grid_wait,
+          min_grid_wait,
           mean_grid_wait/(double)all_data.grid.num_levels,
           max_grid_wait/(double)all_data.grid.num_levels,
           min_grid_wait/(double)all_data.grid.num_levels);
