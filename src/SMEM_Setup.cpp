@@ -41,6 +41,9 @@ void SMEM_Setup(void *amg_vdata,
 {
    InitAlgebra(amg_vdata, all_data);
 
+   all_data->grid.num_smooth_wait = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.finest_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   all_data->grid.local_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.local_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.local_cycle_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.last_read_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
@@ -591,7 +594,15 @@ void ComputeWork(AllData *all_data)
    int fine_grid, coarse_grid;
    all_data->grid.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+      if (level == 0){
+         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+      }
+      else{
+         if (all_data->input.async_flag == 1 && all_data->input.converge_test_type == LOCAL){
+            all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+         }
+      }
+
       if (all_data->input.solver == MULTADD ||
           all_data->input.solver == ASYNC_MULTADD){
          coarsest_level = level;

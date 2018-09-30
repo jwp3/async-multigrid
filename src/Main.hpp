@@ -107,6 +107,7 @@ typedef struct{
    int thread_part_type;
    int thread_part_distr_type;
    int converge_test_type;
+   int res_compute_type;
    int test_problem;
    int hypre_test_error_flag;
    int mfem_test_error_flag;
@@ -199,6 +200,9 @@ typedef struct{
    int *n;
    int global_num_correct;
    int global_cycle_num_correct;
+   int *num_smooth_wait;
+   int *finest_num_res_compute;
+   int *local_num_res_compute;
    int *local_num_correct;
    int *local_cycle_num_correct;
    int *last_read_correct;

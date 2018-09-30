@@ -72,6 +72,7 @@ int main (int argc, char *argv[])
    all_data.input.global_conv_flag = 0;
    all_data.input.thread_part_type = ALL_LEVELS;
    all_data.input.converge_test_type = LOCAL;
+   all_data.input.res_compute_type = LOCAL;
    all_data.input.thread_part_distr_type = BALANCED_THREADS;
    all_data.input.num_pre_smooth_sweeps = 1;
    all_data.input.num_post_smooth_sweeps = 1;
@@ -273,6 +274,16 @@ int main (int argc, char *argv[])
             all_data.input.global_conv_flag = 1;
          }
       }
+      else if (strcmp(argv[arg_index], "-res_compute_type") == 0)
+      {
+         arg_index++;
+         if (strcmp(argv[arg_index], "local") == 0){
+            all_data.input.res_compute_type = LOCAL;
+         }
+         else if (strcmp(argv[arg_index], "global") == 0){
+            all_data.input.res_compute_type = GLOBAL;
+         }
+      }
       else if (strcmp(argv[arg_index], "-check_resnorm") == 0)
       {
          all_data.input.check_resnorm_flag = 1;
@@ -349,6 +360,9 @@ int main (int argc, char *argv[])
 
    if (all_data.input.solver == MULT){
       all_data.input.thread_part_type = ONE_LEVEL;
+   }
+   if (all_data.input.converge_test_type == LOCAL){
+      all_data.input.res_compute_type = LOCAL;
    }
    
    srand(0);

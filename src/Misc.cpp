@@ -438,6 +438,8 @@ void InitSolve(AllData *all_data)
    all_data->grid.global_num_correct = 0;
    all_data->grid.global_cycle_num_correct = 0;
    for (int level = 0; level < all_data->grid.num_levels; level++){
+      all_data->grid.num_smooth_wait[level] = 0;
+      all_data->grid.local_num_res_compute[level] = 0;
       all_data->grid.local_num_correct[level] = 0;
       all_data->grid.local_cycle_num_correct[level] = 0;
       all_data->grid.last_read_correct[level] = 0;

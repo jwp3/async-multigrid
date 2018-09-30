@@ -6,7 +6,7 @@
 
 void SMEM_Async_Add_AMG(AllData *all_data)
 {
-   all_data->vector.zero_flag = 1;
+
    omp_init_lock(&(all_data->thread.lock));
    #pragma omp parallel
    {
@@ -24,32 +24,74 @@ void SMEM_Async_Add_AMG(AllData *all_data)
       while(1){
          for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
             thread_level = all_data->thread.thread_levels[tid][q];
+	    if (tid == all_data->thread.barrier_root[thread_level]){
+               all_data->grid.num_smooth_wait[thread_level] = 0;
+	       all_data->vector.zero_flag = 1;
+            }
             fine_grid = 0;
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
-            if (tid == 0){
-               all_data->output.r_norm2 = 0;
-            }
-            residual_start = omp_get_wtime();
-            SMEM_Residual(all_data,
-                          all_data->matrix.A[fine_grid],
-                          all_data->vector.f[fine_grid],
-                          all_data->level_vector[thread_level].u[fine_grid],
-                          all_data->level_vector[thread_level].y[fine_grid],
-                          all_data->level_vector[thread_level].r[fine_grid],
-                          ns, ne);
-            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-            all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
 
-            if (thread_level == 0 &&
-                all_data->input.check_resnorm_flag == 1){
-               Par_Norm2(all_data,
-                         all_data->level_vector[thread_level].r[fine_grid],
-                         thread_level,
-                         ns, ne);
+
+            if (all_data->input.res_compute_type == LOCAL){
+               residual_start = omp_get_wtime();
+               SMEM_Residual(all_data,
+                             all_data->matrix.A[fine_grid],
+                             all_data->vector.f[fine_grid],
+                             all_data->level_vector[thread_level].u[fine_grid],
+                             all_data->level_vector[thread_level].y[fine_grid],
+                             all_data->level_vector[thread_level].r[fine_grid],
+                             ns, ne);
+               all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
+	       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             }
-            if (tid == 0){
-               all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
+	    else{
+               if (all_data->input.async_type == SEMI_ASYNC){
+	          if (tid == all_data->thread.barrier_root[thread_level]){
+                     omp_set_lock(&(all_data->thread.lock));
+
+                     double grid_wait =
+                        (double)(all_data->grid.global_num_correct - all_data->grid.last_read_correct[thread_level]);
+                     all_data->grid.mean_grid_wait[thread_level] += grid_wait;
+                     all_data->grid.min_grid_wait[thread_level] =
+                        fmin(grid_wait, all_data->grid.min_grid_wait[thread_level]);
+                     all_data->grid.max_grid_wait[thread_level] =
+                        fmax(grid_wait, all_data->grid.max_grid_wait[thread_level]);
+
+                     if (all_data->input.print_grid_wait_flag == 1){
+                        all_data->grid.grid_wait_hist.push_back((int)grid_wait);
+                     }
+
+                     all_data->grid.last_read_correct[thread_level] = all_data->grid.global_num_correct;
+                     all_data->grid.global_num_correct++;
+                  }
+               }
+               if (thread_level == 0){
+                  residual_start = omp_get_wtime();
+                  SMEM_Residual(all_data,
+                                all_data->matrix.A[fine_grid],
+                                all_data->vector.f[fine_grid],
+                                all_data->level_vector[thread_level].u[fine_grid],
+                                all_data->level_vector[thread_level].y[fine_grid],
+                                all_data->level_vector[thread_level].r[fine_grid],
+                                ns, ne);
+                  all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
+		  if (tid == all_data->thread.barrier_root[thread_level]){
+                     all_data->grid.local_num_res_compute[thread_level]++;
+                  }
+               }
+               else{
+                  for (int i = ns; i < ne; i++){
+                     all_data->level_vector[thread_level].r[fine_grid][i] =
+                        all_data->level_vector[0].r[fine_grid][i];
+                  }
+               }
+	       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               if (all_data->input.async_type == SEMI_ASYNC){
+                  if (tid == all_data->thread.barrier_root[thread_level]){
+                     omp_unset_lock(&(all_data->thread.lock));
+                  }
+               }
             }
 
             int coarsest_level;
@@ -78,102 +120,135 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             }
             fine_grid = thread_level;
             coarse_grid = thread_level + 1;
-            smooth_start = omp_get_wtime();
-            if (thread_level == all_data->grid.num_levels-1){
-               if (tid == all_data->thread.level_threads[thread_level][0]){
-                  PARDISO(all_data->pardiso.info.pt,
-                          &(all_data->pardiso.info.maxfct),
-                          &(all_data->pardiso.info.mnum),
-                          &(all_data->pardiso.info.mtype),
-                          &(all_data->pardiso.info.phase),
-                          &(all_data->pardiso.csr.n),
-                          all_data->pardiso.csr.a,
-                          all_data->pardiso.csr.ia,
-                          all_data->pardiso.csr.ja,
-                          &(all_data->pardiso.info.idum),
-                          &(all_data->pardiso.info.nrhs),
-                          all_data->pardiso.info.iparm,
-                          &(all_data->pardiso.info.msglvl),
-                          all_data->level_vector[thread_level].r[thread_level],
-                          all_data->level_vector[thread_level].e[thread_level],
-                          &(all_data->pardiso.info.error));
-               }
-               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-            }
-            else {
-               if (all_data->input.solver == ASYNC_MULTADD){
-                  ns = all_data->thread.A_ns[thread_level][tid];
-                  ne = all_data->thread.A_ne[thread_level][tid];
-                  for (int i = ns; i < ne; i++){
-                     all_data->level_vector[thread_level].e[thread_level][i] = 0;
+            while(1){
+               smooth_start = omp_get_wtime();
+               if (thread_level == all_data->grid.num_levels-1){
+                  if (tid == all_data->thread.level_threads[thread_level][0] &&
+                      all_data->grid.num_smooth_wait[thread_level] == 0){
+                     PARDISO(all_data->pardiso.info.pt,
+                             &(all_data->pardiso.info.maxfct),
+                             &(all_data->pardiso.info.mnum),
+                             &(all_data->pardiso.info.mtype),
+                             &(all_data->pardiso.info.phase),
+                             &(all_data->pardiso.csr.n),
+                             all_data->pardiso.csr.a,
+                             all_data->pardiso.csr.ia,
+                             all_data->pardiso.csr.ja,
+                             &(all_data->pardiso.info.idum),
+                             &(all_data->pardiso.info.nrhs),
+                             all_data->pardiso.info.iparm,
+                             &(all_data->pardiso.info.msglvl),
+                             all_data->level_vector[thread_level].r[thread_level],
+                             all_data->level_vector[thread_level].e[thread_level],
+                             &(all_data->pardiso.info.error));
                   }
                   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-                  SMEM_Smooth(all_data,
-                              all_data->matrix.A[thread_level],
-                              all_data->level_vector[thread_level].r[thread_level],
-                              all_data->level_vector[thread_level].e[thread_level],
-                              all_data->level_vector[thread_level].u_prev[thread_level],
-                              all_data->level_vector[thread_level].y[thread_level],
-                              all_data->input.num_fine_smooth_sweeps,
-                              thread_level,
-                              ns, ne);
+               }
+               else {
+                  if (all_data->input.solver == ASYNC_MULTADD){
+                     ns = all_data->thread.A_ns[thread_level][tid];
+                     ne = all_data->thread.A_ne[thread_level][tid];
+		     if (all_data->grid.num_smooth_wait[thread_level] == 0){
+                        for (int i = ns; i < ne; i++){
+                           all_data->level_vector[thread_level].e[thread_level][i] = 0;
+                        }
+		     }
+                     SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+                     SMEM_Smooth(all_data,
+                                 all_data->matrix.A[thread_level],
+                                 all_data->level_vector[thread_level].r[thread_level],
+                                 all_data->level_vector[thread_level].e[thread_level],
+                                 all_data->level_vector[thread_level].u_prev[thread_level],
+                                 all_data->level_vector[thread_level].y[thread_level],
+                                 all_data->input.num_fine_smooth_sweeps,
+                                 thread_level,
+                                 ns, ne);
+                  }
+                  else{
+		     if (all_data->grid.num_smooth_wait[thread_level] == 0){
+                        ns = all_data->thread.A_ns[fine_grid][tid];
+                        ne = all_data->thread.A_ne[fine_grid][tid];
+                        for (int i = ns; i < ne; i++){
+                           all_data->level_vector[thread_level].u_fine[fine_grid][i] = 0;
+                        }
+                        ns = all_data->thread.A_ns[coarse_grid][tid];
+                        ne = all_data->thread.A_ne[coarse_grid][tid];
+                        for (int i = ns; i < ne; i++){
+                           all_data->level_vector[thread_level].u_coarse[coarse_grid][i] = 0;
+                        }
+                        SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+                        SMEM_Smooth(all_data,
+                                    all_data->matrix.A[coarse_grid],
+                                    all_data->level_vector[thread_level].r[coarse_grid],
+                                    all_data->level_vector[thread_level].u_coarse[coarse_grid],
+                                    all_data->level_vector[thread_level].u_coarse_prev[coarse_grid],
+                                    all_data->level_vector[thread_level].y[coarse_grid],
+                                    all_data->input.num_coarse_smooth_sweeps,
+                                    thread_level,
+                                    ns, ne);
+                        ns = all_data->thread.A_ns[fine_grid][tid];
+                        ne = all_data->thread.A_ne[fine_grid][tid];
+                        SMEM_MatVec(all_data,
+                                    all_data->matrix.P[fine_grid],
+                                    all_data->level_vector[thread_level].u_coarse[coarse_grid],
+                                    all_data->level_vector[thread_level].e[fine_grid],
+                                    ns, ne);
+                        SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+                        SMEM_Residual(all_data,
+                                      all_data->matrix.A[fine_grid],
+                                      all_data->level_vector[thread_level].r[fine_grid],
+                                      all_data->level_vector[thread_level].e[fine_grid],
+                                      all_data->level_vector[thread_level].y[fine_grid],
+                                      all_data->level_vector[thread_level].r_fine[fine_grid],
+                                      ns, ne);
+                     }
+		     SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+                     SMEM_Smooth(all_data,
+                                 all_data->matrix.A[fine_grid],
+                                 all_data->level_vector[thread_level].r_fine[fine_grid],
+                                 all_data->level_vector[thread_level].u_fine[fine_grid],
+                                 all_data->level_vector[thread_level].u_fine_prev[fine_grid],
+                                 all_data->level_vector[thread_level].y[fine_grid],
+                                 all_data->input.num_fine_smooth_sweeps,
+                                 thread_level,
+                                 ns, ne);
+                     ns = all_data->thread.A_ns[thread_level][tid];
+                     ne = all_data->thread.A_ne[thread_level][tid];
+                     for (int i = ns; i < ne; i++){
+                        all_data->level_vector[thread_level].e[thread_level][i] =
+                           all_data->level_vector[thread_level].u_fine[thread_level][i];
+                     }
+                     SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+                  }
+               }
+               all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+               if (thread_level == 0 || all_data->input.res_compute_type == LOCAL){
+                  break;
                }
                else{
-                  ns = all_data->thread.A_ns[fine_grid][tid];
-                  ne = all_data->thread.A_ne[fine_grid][tid];
-                  for (int i = ns; i < ne; i++){
-                     all_data->level_vector[thread_level].u_fine[fine_grid][i] = 0;
+		  if (tid == all_data->thread.barrier_root[thread_level]){
+                     all_data->grid.finest_num_res_compute[thread_level] = all_data->grid.local_num_res_compute[0];
                   }
-                  ns = all_data->thread.A_ns[coarse_grid][tid];
-                  ne = all_data->thread.A_ne[coarse_grid][tid];
-                  for (int i = ns; i < ne; i++){
-                     all_data->level_vector[thread_level].u_coarse[coarse_grid][i] = 0;
+	         // printf("%d\n", all_data->grid.finest_num_res_compute[thread_level]);
+                  tid_converge = SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);                            if ((all_data->grid.finest_num_res_compute[thread_level] >
+                       all_data->grid.local_num_res_compute[thread_level]) ||
+                       tid_converge == 1){
+		     SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+		     if (tid == all_data->thread.barrier_root[thread_level]){
+                        all_data->grid.local_num_res_compute[thread_level] =
+                           all_data->grid.finest_num_res_compute[thread_level];
+                     }
+                     break;
                   }
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-                  SMEM_Smooth(all_data,
-                              all_data->matrix.A[coarse_grid],
-                              all_data->level_vector[thread_level].r[coarse_grid],
-                              all_data->level_vector[thread_level].u_coarse[coarse_grid],
-                              all_data->level_vector[thread_level].u_coarse_prev[coarse_grid],
-                              all_data->level_vector[thread_level].y[coarse_grid],
-                              all_data->input.num_coarse_smooth_sweeps,
-                              thread_level,
-                              ns, ne);
-                  ns = all_data->thread.A_ns[fine_grid][tid];
-                  ne = all_data->thread.A_ne[fine_grid][tid];
-                  SMEM_MatVec(all_data,
-                              all_data->matrix.P[fine_grid],
-                              all_data->level_vector[thread_level].u_coarse[coarse_grid],
-                              all_data->level_vector[thread_level].e[fine_grid],
-                              ns, ne);
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-                  SMEM_Residual(all_data,
-                                all_data->matrix.A[fine_grid],
-                                all_data->level_vector[thread_level].r[fine_grid],
-                                all_data->level_vector[thread_level].e[fine_grid],
-                                all_data->level_vector[thread_level].y[fine_grid],
-                                all_data->level_vector[thread_level].r_fine[fine_grid],
-                                ns, ne);
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-                  SMEM_Smooth(all_data,
-                              all_data->matrix.A[fine_grid],
-                              all_data->level_vector[thread_level].r_fine[fine_grid],
-                              all_data->level_vector[thread_level].u_fine[fine_grid],
-                              all_data->level_vector[thread_level].u_fine_prev[fine_grid],
-                              all_data->level_vector[thread_level].y[fine_grid],
-                              all_data->input.num_fine_smooth_sweeps,
-                              thread_level,
-                              ns, ne);
-                  ns = all_data->thread.A_ns[thread_level][tid];
-                  ne = all_data->thread.A_ne[thread_level][tid];
-                  for (int i = ns; i < ne; i++){
-                     all_data->level_vector[thread_level].e[thread_level][i] =
-                        all_data->level_vector[thread_level].u_fine[thread_level][i];
+	          else {
+                     if (tid == all_data->thread.barrier_root[thread_level]){
+			all_data->vector.zero_flag = 0;
+                        all_data->grid.num_smooth_wait[thread_level]++;
+                     }
+		     SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                   }
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                }
-            }
-            all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+	    }
 
             for (int level = thread_level-1; level > -1; level--){
                fine_grid = level;
@@ -193,7 +268,8 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             fine_grid = 0;
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
-            if (all_data->input.async_type == SEMI_ASYNC){
+            if (all_data->input.async_type == SEMI_ASYNC && 
+                all_data->input.res_compute_type == LOCAL){
                if (tid == all_data->thread.barrier_root[thread_level]){
                   omp_set_lock(&(all_data->thread.lock));
 
@@ -223,25 +299,39 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                }
             }
             else {
-               for (int i = ns; i < ne; i++){
-                  #pragma omp atomic
-                  all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
-                  all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
+	       if (all_data->input.res_compute_type == LOCAL || thread_level == 0){
+                  for (int i = ns; i < ne; i++){
+                     #pragma omp atomic
+                     all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+                        all_data->level_vector[thread_level].u[fine_grid][i] = all_data->vector.u[fine_grid][i];
+                  }
+	       }
+               else {
+                  for (int i = ns; i < ne; i++){
+                     #pragma omp atomic
+                     all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+                  }
                }
             }
 
-            if (tid == all_data->thread.barrier_root[thread_level]){
-               all_data->grid.local_num_correct[thread_level]++;
+            if (tid_converge == 1){
+               break;
             }
-            if (tid == 0 && all_data->thread.converge_flag == 0){
-               all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
-            }
-            if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
-               tid_converge = 1;
-            }
-            if (all_data->input.converge_test_type == LOCAL){
-               if (all_data->grid.local_num_correct[thread_level] == all_data->input.num_cycles){
+            else{
+               if (tid == all_data->thread.barrier_root[thread_level]){
+                  all_data->grid.local_num_correct[thread_level]++;
+               }
+               if (tid == all_data->thread.barrier_root[0] && all_data->thread.converge_flag == 0){
+                  all_data->thread.converge_flag = CheckConverge(all_data, thread_level);
+		  #pragma omp flush (all_data)
+               }
+               if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
                   tid_converge = 1;
+               }
+               if (all_data->input.converge_test_type == LOCAL){
+                  if (all_data->grid.local_num_correct[thread_level] == all_data->input.num_cycles){
+                     tid_converge = 1;
+                  }
                }
             }
          }
