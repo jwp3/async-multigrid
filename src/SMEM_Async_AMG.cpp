@@ -239,7 +239,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             if (SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level) == 1){
                tid_converge = 1;
             }
-            if (all_data->input.converge_test_type == ONE_LEVEL){
+            if (all_data->input.converge_test_type == LOCAL){
                if (all_data->grid.local_num_correct[thread_level] == all_data->input.num_cycles){
                   tid_converge = 1;
                }
