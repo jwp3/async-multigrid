@@ -293,7 +293,7 @@ int CheckConverge(AllData *all_data,
          return 1;
       }
    }
-   if (all_data->input.converge_test_type == ALL_LEVELS){
+   if (all_data->input.converge_test_type == GLOBAL){
       for (int q = 0; q < all_data->grid.num_levels; q++){
          if (all_data->grid.local_num_correct[q] < all_data->input.num_cycles){
             return 0;

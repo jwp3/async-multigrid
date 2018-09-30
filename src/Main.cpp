@@ -19,6 +19,7 @@
 #include "Main.hpp"
 #include "Laplacian.hpp"
 #include "Elasticity.hpp"
+#include "Maxwell.hpp"
 #include "SEQ_MatVec.hpp"
 #include "SEQ_AMG.hpp"
 #include "SMEM_Setup.hpp"
@@ -53,6 +54,7 @@ int main (int argc, char *argv[])
    int solver_id = 0;
    HYPRE_Int agg_num_levels = 0;
    HYPRE_Int coarsen_type = 10;
+   HYPRE_Int interp_type = 6;
    int hypre_print_level = 0;
    int hypre_solve_flag = 0;
 
@@ -69,7 +71,7 @@ int main (int argc, char *argv[])
    all_data.input.check_resnorm_flag = 0;
    all_data.input.global_conv_flag = 0;
    all_data.input.thread_part_type = ALL_LEVELS;
-   all_data.input.converge_test_type = ONE_LEVEL;
+   all_data.input.converge_test_type = LOCAL;
    all_data.input.thread_part_distr_type = BALANCED_THREADS;
    all_data.input.num_pre_smooth_sweeps = 1;
    all_data.input.num_post_smooth_sweeps = 1;
@@ -78,7 +80,7 @@ int main (int argc, char *argv[])
    all_data.input.format_output_flag = 0;
    all_data.input.num_threads = 1;
    all_data.input.print_output_flag = 1;
-   all_data.input.smooth_weight = .8;
+   all_data.input.smooth_weight = 1;
    all_data.input.smoother = JACOBI;
    all_data.input.smooth_interp_type = JACOBI;
    all_data.input.solver = MULT;
@@ -229,6 +231,11 @@ int main (int argc, char *argv[])
          arg_index++;
          coarsen_type = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-interp_type") == 0)
+      {
+         arg_index++;
+         interp_type = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-mfem_ref_levels") == 0)
       {
          arg_index++;
@@ -257,12 +264,12 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-converge_test_type") == 0)
       {
          arg_index++;
-         if (strcmp(argv[arg_index], "one") == 0){
-            all_data.input.converge_test_type = ONE_LEVEL;
+         if (strcmp(argv[arg_index], "local") == 0){
+            all_data.input.converge_test_type = LOCAL;
             all_data.input.global_conv_flag = 0;
          }
-         else if (strcmp(argv[arg_index], "all") == 0){
-            all_data.input.converge_test_type = ALL_LEVELS;
+         else if (strcmp(argv[arg_index], "global") == 0){
+            all_data.input.converge_test_type = GLOBAL;
             all_data.input.global_conv_flag = 1;
          }
       }
@@ -395,7 +402,10 @@ int main (int argc, char *argv[])
    HYPRE_BoomerAMGSetPrintLevel(solver, hypre_print_level);
    HYPRE_BoomerAMGSetOldDefault(solver);
 
+   HYPRE_BoomerAMGSetPostInterpType(solver, 0);
+   HYPRE_BoomerAMGSetRestriction(solver, 0);
    HYPRE_BoomerAMGSetCoarsenType(solver, coarsen_type);
+   HYPRE_BoomerAMGSetInterpType(solver, interp_type);
    HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
    HYPRE_BoomerAMGSetAggNumLevels(solver, agg_num_levels);
 
@@ -408,6 +418,17 @@ int main (int argc, char *argv[])
    all_data.output.setup_wtime = omp_get_wtime() - start; 
 
    if (all_data.input.hypre_test_error_flag == 1){
+      int relax_type;
+      if (all_data.input.smoother == L1_JACOBI){
+         relax_type = 16;
+      }
+      else if (all_data.input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
+	       all_data.input.smoother == GAUSS_SEIDEL){
+         relax_type = 3;
+      }
+      else{
+         relax_type = 0;
+      }
       HYPRE_BoomerAMGSetRelaxType(solver, 0);
       HYPRE_BoomerAMGSetRelaxWt(solver, all_data.input.smooth_weight);
       HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &b);

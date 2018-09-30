@@ -46,6 +46,9 @@
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1
 
+#define LOCAL 0
+#define GLOBAL 1
+
 #define HALF_THREADS 0
 #define EQUAL_THREADS 1
 #define BALANCED_THREADS 2

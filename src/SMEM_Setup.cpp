@@ -591,7 +591,13 @@ void ComputeWork(AllData *all_data)
    int fine_grid, coarse_grid;
    all_data->grid.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+      if (all_data->input.async_flag == 1){
+         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+      }
+      else{
+         all_data->grid.level_work[level] = 0;
+      }
+
       if (all_data->input.solver == MULTADD ||
           all_data->input.solver == ASYNC_MULTADD){
          coarsest_level = level;

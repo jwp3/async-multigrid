@@ -256,7 +256,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
    }
 
    int num_cycles;
-   if (all_data->input.converge_test_type == ONE_LEVEL){
+   if (all_data->input.converge_test_type == LOCAL){
       num_cycles = 1;
    }
    else {
@@ -267,7 +267,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
       while(1){
          for (int level = 0; level < all_data->grid.num_levels; level++){
             correct_flags[level] = 0;
-            if (all_data->input.converge_test_type == ONE_LEVEL){
+            if (all_data->input.converge_test_type == LOCAL){
                if (grid_time_count[level] == grid_wait_list[level] &&
                    all_data->grid.local_num_correct[level] < all_data->input.num_cycles){
                   correct_flags[level] = 1;
@@ -470,7 +470,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
          }
 
          int break_flag = 1;
-         if (all_data->input.converge_test_type == ONE_LEVEL){
+         if (all_data->input.converge_test_type == LOCAL){
             for (int level = 0; level < all_data->grid.num_levels; level++){
                if (all_data->grid.local_num_correct[level] < all_data->input.num_cycles){
                   break_flag = 0;
