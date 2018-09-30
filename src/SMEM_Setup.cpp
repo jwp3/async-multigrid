@@ -455,8 +455,8 @@ void PartitionLevels(AllData *all_data)
                   all_data->thread.barrier_flags[level][t] = 0;
                }
                num_threads -= balanced_threads;
+	       all_data->thread.barrier_root[level] = tid;
                tid += balanced_threads;
-               all_data->thread.barrier_root[level] = tid-1;
             }
 	   // printf("\tlevel %d: %f, %f\n",
            //           level,
@@ -591,13 +591,7 @@ void ComputeWork(AllData *all_data)
    int fine_grid, coarse_grid;
    all_data->grid.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      if (all_data->input.async_flag == 1){
-         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
-      }
-      else{
-         all_data->grid.level_work[level] = 0;
-      }
-
+      all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
       if (all_data->input.solver == MULTADD ||
           all_data->input.solver == ASYNC_MULTADD){
          coarsest_level = level;
@@ -704,7 +698,8 @@ void SmoothTransfer(AllData *all_data,
 
    vector<double> diag(num_rows);
 
-   if (all_data->input.smooth_interp_type == JACOBI){
+   if (all_data->input.smooth_interp_type == JACOBI ||
+       all_data->input.smooth_interp_type == HYBRID_JACOBI_GAUSS_SEIDEL){
       for (int i = 0; i < num_rows; i++){
          diag[i] = A_data[A_i[i]];
       }

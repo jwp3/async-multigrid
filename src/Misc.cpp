@@ -49,6 +49,19 @@ void PrintOutput(AllData all_data)
 
    if (all_data.input.print_level_stats_flag == 1){
       for (int level = 0; level < all_data.grid.num_levels; level++){
+         int root = all_data.thread.barrier_root[level];
+	 double level_mean_smooth_wtime =
+            SumDbl(&all_data.output.smooth_wtime[root], all_data.thread.level_threads[level].size())/
+		(double)all_data.thread.level_threads[level].size();
+         double level_mean_residual_wtime =
+            SumDbl(&all_data.output.residual_wtime[root], all_data.thread.level_threads[level].size())/
+		(double)all_data.thread.level_threads[level].size();
+         double level_mean_restrict_wtime =
+            SumDbl(&all_data.output.restrict_wtime[root], all_data.thread.level_threads[level].size())/
+		(double)all_data.thread.level_threads[level].size();
+         double level_mean_prolong_wtime =
+            SumDbl(&all_data.output.prolong_wtime[root], all_data.thread.level_threads[level].size())/
+		(double)all_data.thread.level_threads[level].size();
          if (all_data.input.format_output_flag == 0){
             strcpy(print_str, "Level %d stats:\n"
                               "\tcorrections = %d\n"
@@ -67,10 +80,10 @@ void PrintOutput(AllData all_data)
          printf(print_str,
                 level,
                 all_data.grid.local_num_correct[level],
-                all_data.output.smooth_wtime[level],
-                all_data.output.residual_wtime[level],
-                all_data.output.restrict_wtime[level],
-                all_data.output.prolong_wtime[level],
+                level_mean_smooth_wtime,
+                level_mean_residual_wtime,
+                level_mean_restrict_wtime,
+                level_mean_prolong_wtime,
                 all_data.grid.mean_grid_wait[level]/(double)all_data.grid.num_levels,
                 all_data.grid.max_grid_wait[level]/(double)all_data.grid.num_levels,
                 all_data.grid.min_grid_wait[level]/(double)all_data.grid.num_levels);
@@ -90,6 +103,7 @@ void PrintOutput(AllData all_data)
 			"\tMean residual time = %e\n"
 			"\tMean restrict time = %e\n"
 		        "\tMean prolong time = %e\n"
+			"\tMean computation time = %e\n"
 			"\tMean grid wait = %e\n"
 			"\tMax grid wait = %e\n"
                         "\tMin grid wait = %e\n"
@@ -98,9 +112,13 @@ void PrintOutput(AllData all_data)
                         "\tMin grid wait / num levels = %e\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %e %e %e %e %e %e ");
+      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %e %e %e %e %e %e %e ");
    }
 
+   double mean_comp_time = mean_smooth_wtime + 
+			   mean_residual_wtime +
+			   mean_restrict_wtime +
+			   mean_prolong_wtime;
    printf(print_str,
           all_data.output.prob_setup_wtime,
           all_data.output.hypre_setup_wtime,
@@ -112,6 +130,7 @@ void PrintOutput(AllData all_data)
           mean_residual_wtime,
           mean_restrict_wtime,
           mean_prolong_wtime,
+	  mean_comp_time,
           mean_grid_wait,
           max_grid_wait,
           min_grid_wait,
@@ -293,7 +312,7 @@ int CheckConverge(AllData *all_data,
          return 1;
       }
    }
-   if (all_data->input.converge_test_type == GLOBAL){
+   if (all_data->input.converge_test_type == ALL_LEVELS){
       for (int q = 0; q < all_data->grid.num_levels; q++){
          if (all_data->grid.local_num_correct[q] < all_data->input.num_cycles){
             return 0;
@@ -313,10 +332,11 @@ int SMEM_LevelBarrier(AllData *all_data,
    int t;
 
    barrier_flags[level][tid] = 1;
+   #pragma omp flush (barrier_flags)
    while (1){
       if (tid == root){
          int s = 0;
-         #pragma omp flush (barrier_flags)
+        // #pragma omp flush (barrier_flags)
          for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
             t = all_data->thread.level_threads[level][i];
             s += barrier_flags[level][t];
@@ -332,7 +352,7 @@ int SMEM_LevelBarrier(AllData *all_data,
                   barrier_flags[level][t] = all_data->thread.level_threads[level].size();
                }
             }
-            #pragma omp flush (barrier_flags)
+           // #pragma omp flush (barrier_flags)
             if (read_converge_flag == 1){
                return 1;
             }
@@ -342,7 +362,7 @@ int SMEM_LevelBarrier(AllData *all_data,
          }
       }
       else{
-         #pragma omp flush (barrier_flags)
+        // #pragma omp flush (barrier_flags)
          if (barrier_flags[level][tid] == 2*all_data->thread.level_threads[level].size()){
             return 1;
          }

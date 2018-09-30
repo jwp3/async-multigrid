@@ -162,6 +162,7 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
    int t = omp_get_thread_num();
    int ns = all_data->thread.A_ns[level][t];
    int ne = all_data->thread.A_ne[level][t];
+
    double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
@@ -354,6 +355,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
    HYPRE_Real res;
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
+   double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
       if (k == 0 && all_data->vector.zero_flag == 1){
@@ -366,7 +368,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
                      res -= A->data[jj] * u[ii];
                   }
                }
-               u[i] += res / A->data[A->i[i]];
+               u[i] += smooth_weight * res / A->data[A->i[i]];
             }
          }
       }
@@ -385,7 +387,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
                      res -= A->data[jj] * u_prev[ii];
                   }
                }
-               u[i] += res / A->data[A->i[i]];
+               u[i] += smooth_weight * res / A->data[A->i[i]];
             }
          }
       }

@@ -403,9 +403,9 @@ int main (int argc, char *argv[])
    HYPRE_BoomerAMGSetOldDefault(solver);
 
    HYPRE_BoomerAMGSetPostInterpType(solver, 0);
+   HYPRE_BoomerAMGSetInterpType(solver, interp_type);
    HYPRE_BoomerAMGSetRestriction(solver, 0);
    HYPRE_BoomerAMGSetCoarsenType(solver, coarsen_type);
-   HYPRE_BoomerAMGSetInterpType(solver, interp_type);
    HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
    HYPRE_BoomerAMGSetAggNumLevels(solver, agg_num_levels);
 

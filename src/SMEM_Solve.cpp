@@ -97,19 +97,26 @@ void SMEM_Solve(AllData *all_data)
          else{
             #pragma omp parallel
             {
+	       int tid = omp_get_thread_num();
+	       double residual_start = omp_get_wtime();
                SMEM_Sync_Parfor_Residual(all_data,
                                          all_data->matrix.A[fine_grid],
                                          all_data->vector.f[fine_grid],
                                          all_data->vector.u[fine_grid],
                                          all_data->vector.y[fine_grid],
                                          all_data->vector.r[fine_grid]);
+	       all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
             }
          }
-         all_data->output.r_norm2 =
-            Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
          if (all_data->input.print_reshist_flag){
+            all_data->output.r_norm2 =
+               Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
             printf("%d\t%e\n",
                    k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
+         }
+         else if(k == all_data->input.num_cycles-1){
+            all_data->output.r_norm2 =
+               Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
          }
       }
    }

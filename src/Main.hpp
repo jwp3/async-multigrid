@@ -60,6 +60,7 @@
 #define LAPLACE_3D27PT 1
 #define MFEM_LAPLACE 2
 #define MFEM_ELAST 3
+#define LAPLACE_3D7PT 4
 
 using namespace std;
 using namespace mfem;
