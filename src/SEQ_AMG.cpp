@@ -16,8 +16,13 @@ void SEQ_Vcycle(AllData *all_data)
    double restrict_start;
    double prolong_start;
    
-   all_data->vector.zero_flag = 0;
    for (int level = 0; level < all_data->grid.num_levels-1; level++){
+      if (level == 0){
+         all_data->grid.zero_flags[level] = 0;
+      }
+      else {
+         all_data->grid.zero_flags[level] = 1;
+      }
       fine_grid = level;
       coarse_grid = level + 1;
       smooth_start = omp_get_wtime();
@@ -48,10 +53,8 @@ void SEQ_Vcycle(AllData *all_data)
       for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
          all_data->vector.u[coarse_grid][i] = 0;
       }
-      all_data->vector.zero_flag = 1;
    }
 
-   all_data->vector.zero_flag = 0;
    this_grid = all_data->grid.num_levels-1;
    smooth_start = omp_get_wtime();
    PARDISO(all_data->pardiso.info.pt,
@@ -75,6 +78,7 @@ void SEQ_Vcycle(AllData *all_data)
 
 
    for (int level = all_data->grid.num_levels-2; level > -1; level--){
+      all_data->grid.zero_flags[level] = 0;
       fine_grid = level;
       coarse_grid = level + 1;
       prolong_start = omp_get_wtime();
@@ -103,7 +107,6 @@ void SEQ_Vcycle(AllData *all_data)
 
 void SEQ_Add_Vcycle(AllData *all_data)
 {
-   all_data->vector.zero_flag = 1;
    int fine_grid, coarse_grid, this_grid;
    int tid = 0;
 
@@ -113,6 +116,7 @@ void SEQ_Add_Vcycle(AllData *all_data)
    double prolong_start;
 
    for (int level = 0; level < all_data->grid.num_levels-1; level++){
+      all_data->grid.zero_flags[level] = 1;
       fine_grid = level;
       coarse_grid = level + 1;
       restrict_start = omp_get_wtime();
@@ -227,7 +231,6 @@ void SEQ_Add_Vcycle(AllData *all_data)
 
 void SEQ_Add_Vcycle_Sim(AllData *all_data)
 {
-   all_data->vector.zero_flag = 1;
    int fine_grid, coarse_grid, this_grid;
    int tid = 0;
 
@@ -266,6 +269,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
    for (int k = 0; k < num_cycles; k++){
       while(1){
          for (int level = 0; level < all_data->grid.num_levels; level++){
+	    all_data->grid.zero_flags[level] = 1;
             correct_flags[level] = 0;
             if (all_data->input.converge_test_type == LOCAL){
                if (grid_time_count[level] == grid_wait_list[level] &&

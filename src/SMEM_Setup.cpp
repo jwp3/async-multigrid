@@ -41,6 +41,7 @@ void SMEM_Setup(void *amg_vdata,
 {
    InitAlgebra(amg_vdata, all_data);
 
+   all_data->grid.zero_flags = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.num_smooth_wait = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.finest_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.local_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
@@ -598,7 +599,7 @@ void ComputeWork(AllData *all_data)
          all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
       }
       else{
-         if (all_data->input.async_flag == 1 && all_data->input.converge_test_type == LOCAL){
+         if (all_data->input.async_flag == 1 && all_data->input.res_compute_type == LOCAL){
             all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
          }
       }

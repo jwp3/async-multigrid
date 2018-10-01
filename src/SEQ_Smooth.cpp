@@ -6,7 +6,8 @@ void SEQ_Jacobi(AllData *all_data,
                 HYPRE_Real *f,
                 HYPRE_Real *u,
                 HYPRE_Real *u_prev,
-                int num_sweeps)
+                int num_sweeps,
+                int level)
 {
    HYPRE_Int ii;
    HYPRE_Real res;
@@ -19,7 +20,7 @@ void SEQ_Jacobi(AllData *all_data,
    double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          for (int i = 0; i < n; i++){
             if (A_data[A_i[i]] != 0.0){
                res = f[i];
@@ -50,7 +51,8 @@ void SEQ_L1Jacobi(AllData *all_data,
                   HYPRE_Real *u,
                   HYPRE_Real *u_prev,
                   double *L1_row_norm,
-                  int num_sweeps)
+                  int num_sweeps,
+                  int level)
 {
    HYPRE_Int ii;
    HYPRE_Real res;
@@ -61,7 +63,7 @@ void SEQ_L1Jacobi(AllData *all_data,
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          for (int i = 0; i < n; i++){
             if (A_data[A_i[i]] != 0.0){
                res = f[i];

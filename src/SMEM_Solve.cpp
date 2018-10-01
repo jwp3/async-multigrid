@@ -191,7 +191,7 @@ void SMEM_Smooth(AllData *all_data,
             SEQ_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level);
          }
          else{
-            SEQ_L1Jacobi(all_data, A, f, u, y, all_data->matrix.L1_row_norm[level], num_sweeps);
+            SEQ_L1Jacobi(all_data, A, f, u, y, all_data->matrix.L1_row_norm[level], num_sweeps, level);
          }
       }
       else {
@@ -200,7 +200,7 @@ void SMEM_Smooth(AllData *all_data,
             SEQ_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level);
          }
          else {
-            SEQ_Jacobi(all_data, A, f, u, y, num_sweeps);
+            SEQ_Jacobi(all_data, A, f, u, y, num_sweeps, level);
          }
       }
    }

@@ -7,11 +7,11 @@
 void Laplacian_2D_5pt(HYPRE_IJMatrix *A,
                       int n);
 
-void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
-                       int n);
-
 void Laplacian_3D_7pt(HYPRE_ParCSRMatrix *A_ptr,
-                      int n);
+                      int nx, int ny, int nz);
+
+void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
+                       int nx, int ny, int nz);
 
 void MFEM_Laplacian(AllData *all_data,
                     HYPRE_IJMatrix *Aij);

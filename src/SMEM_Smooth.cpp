@@ -20,7 +20,7 @@ void SMEM_Sync_Parfor_Jacobi(AllData *all_data,
    double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          #pragma omp for
          for (int i = 0; i < n; i++){
             if (A->data[A->i[i]] != 0.0){
@@ -65,7 +65,7 @@ void SMEM_Sync_Parfor_L1Jacobi(AllData *all_data,
    int tid = omp_get_thread_num();
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          #pragma omp for
          for (int i = 0; i < n; i++){
             res = f[i];
@@ -166,7 +166,7 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
    double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -209,7 +209,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
                       HYPRE_Real *u,
                       HYPRE_Real *u_prev,
                       int num_sweeps,
-                      int thread_level,
+                      int level,
                       int ns, int ne)
 {
    HYPRE_Int ii;
@@ -219,7 +219,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
    double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -229,7 +229,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
       }
       else{
          for (int i = ns; i < ne; i++) u_prev[i] = u[i];
-         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -241,7 +241,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
             }
          }
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
    }
 }
 
@@ -251,7 +251,7 @@ void SMEM_Sync_L1Jacobi(AllData *all_data,
                         HYPRE_Real *u,
                         HYPRE_Real *u_prev,
                         int num_sweeps,
-                        int thread_level,
+                        int level,
                         int ns, int ne)
 {
    HYPRE_Int ii;
@@ -260,25 +260,25 @@ void SMEM_Sync_L1Jacobi(AllData *all_data,
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          for (int i = ns; i < ne; i++){
             res = f[i];
-            u[i] += res / all_data->matrix.L1_row_norm[thread_level][i];
+            u[i] += res / all_data->matrix.L1_row_norm[level][i];
          }
       }
       else{
          for (int i = ns; i < ne; i++) u_prev[i] = u[i];
-         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
          for (int i = ns; i < ne; i++){
             res = f[i];
             for (int jj = A->i[i]; jj < A->i[i+1]; jj++){
                ii = A->j[jj];
                res -= A->data[jj] * u_prev[ii];
             }
-            u[i] += res / all_data->matrix.L1_row_norm[thread_level][i];
+            u[i] += res / all_data->matrix.L1_row_norm[level][i];
          }
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
    }
 }
 
@@ -287,7 +287,7 @@ void SMEM_SemiAsync_GaussSeidel(AllData *all_data,
                                 HYPRE_Real *f,
                                 HYPRE_Real *u,
                                 int num_sweeps,
-                                int thread_level,
+                                int level,
                                 int ns, int ne)
 {
    HYPRE_Int ii;
@@ -308,7 +308,7 @@ void SMEM_SemiAsync_GaussSeidel(AllData *all_data,
             u[i] += res / A->data[A->i[i]];
          }
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
    }
 }
 
@@ -317,7 +317,7 @@ void SMEM_Async_GaussSeidel(AllData *all_data,
                             HYPRE_Real *f,
                             HYPRE_Real *u,
                             int num_sweeps,
-                            int thread_level,
+                            int level,
                             int ns, int ne)
 {
    HYPRE_Int ii;
@@ -338,7 +338,7 @@ void SMEM_Async_GaussSeidel(AllData *all_data,
          }
       }
    }
-   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 }
 
 
@@ -348,7 +348,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
                                        HYPRE_Real *u,
                                        HYPRE_Real *u_prev,
                                        int num_sweeps,
-                                       int thread_level,
+                                       int level,
                                        int ns, int ne)
 {
    HYPRE_Int ii;
@@ -358,7 +358,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
    double smooth_weight = all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
-      if (k == 0 && all_data->vector.zero_flag == 1){
+      if (k == 0 && all_data->grid.zero_flags[level] == 1){
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -374,7 +374,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
       }
       else{
          for (int i = ns; i < ne; i++) u_prev[i] = u[i];
-         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+         SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -391,7 +391,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
             }
          }
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
    }
 }
 
@@ -402,12 +402,17 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
                                HYPRE_Real *y,
                                HYPRE_Real *r,
                                int num_sweeps,
-                               int thread_level,
+                               int level,
                                int ns, int ne)
 {
    int k = 0;
-   for (int i = ns; i < ne; i++){
-      r[i] = f[i];
+   if (all_data->grid.zero_flags[level] == 1){
+      for (int i = ns; i < ne; i++){
+         r[i] = f[i];
+      }
+   }
+   else {
+      SMEM_Residual(all_data, A, f, u, y, r, ns, ne);
    }
    while(1){
       for (int i = ns; i < ne; i++){
@@ -415,10 +420,10 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
             r[i] *= all_data->input.smooth_weight / A->data[A->i[i]];
          }
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
       SMEM_MatVec(all_data, A, r, y, ns, ne);
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
       for (int i = ns; i < ne; i++){
          if (A->data[A->i[i]] != 0.0){
@@ -427,7 +432,7 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
          }
          u[i] += r[i];
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
       k++;
       if (k == num_sweeps){
          break;
@@ -443,28 +448,33 @@ void SMEM_Sync_SymmetricL1Jacobi(AllData *all_data,
                                  HYPRE_Real *y,
                                  HYPRE_Real *r,
                                  int num_sweeps,
-                                 int thread_level,
+                                 int level,
                                  int ns, int ne)
 {
    int k = 0;
-   for (int i = ns; i < ne; i++){
-      r[i] = f[i];
+   if (all_data->grid.zero_flags[level] == 1){
+      for (int i = ns; i < ne; i++){
+         r[i] = f[i];
+      }
+   }
+   else {
+      SMEM_Residual(all_data, A, f, u, y, r, ns, ne);
    }
    while(1){
       for (int i = ns; i < ne; i++){
-         r[i] /= all_data->matrix.L1_row_norm[thread_level][i];
+         r[i] /= all_data->matrix.L1_row_norm[level][i];
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
       SMEM_MatVec(all_data, A, r, y, ns, ne);
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
       for (int i = ns; i < ne; i++){
-         r[i] = (2.0 * all_data->matrix.L1_row_norm[thread_level][i] * r[i]) - y[i];
-         r[i] /= all_data->matrix.L1_row_norm[thread_level][i];
+         r[i] = (2.0 * all_data->matrix.L1_row_norm[level][i] * r[i]) - y[i];
+         r[i] /= all_data->matrix.L1_row_norm[level][i];
          u[i] += r[i];
       }
-      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+      SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
       k++;
       if (k == num_sweeps){
          break;

@@ -8,7 +8,8 @@ void SEQ_Jacobi(AllData *all_data,
                 HYPRE_Real *f_data,
                 HYPRE_Real *u_data,
                 HYPRE_Real *u_data_prev,
-                int num_sweeps);
+                int num_sweeps,
+		int level);
 
 void SEQ_GaussSeidel(AllData *all_data,
                      hypre_CSRMatrix *A,
@@ -22,7 +23,8 @@ void SEQ_L1Jacobi(AllData *all_data,
                   HYPRE_Real *u,
                   HYPRE_Real *u_prev,
 		  double *L1_row_norm,
-                  int num_sweeps);
+                  int num_sweeps,
+		  int level);
 
 void SEQ_SymmetricJacobi(AllData *all_data,
                          hypre_CSRMatrix *A,

@@ -7,7 +7,9 @@
 void SMEM_Async_Add_AMG(AllData *all_data)
 {
 
-   omp_init_lock(&(all_data->thread.lock));
+   if (all_data->input.async_type == SEMI_ASYNC){
+      omp_init_lock(&(all_data->thread.lock));
+   }
    #pragma omp parallel
    {
       int tid = omp_get_thread_num();
@@ -26,7 +28,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
             thread_level = all_data->thread.thread_levels[tid][q];
 	    if (tid == all_data->thread.barrier_root[thread_level]){
                all_data->grid.num_smooth_wait[thread_level] = 0;
-	       all_data->vector.zero_flag = 1;
+	       all_data->grid.zero_flags[thread_level] = 1;
             }
             fine_grid = 0;
             ns = all_data->thread.A_ns[fine_grid][tid];
@@ -222,6 +224,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                   }
                }
                all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+	  // while(1){
                if (thread_level == 0 || all_data->input.res_compute_type == LOCAL){
                   break;
                }
@@ -242,8 +245,9 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                   }
 	          else {
                      if (tid == all_data->thread.barrier_root[thread_level]){
-			all_data->vector.zero_flag = 0;
+			all_data->grid.zero_flags[thread_level] = 0;
                         all_data->grid.num_smooth_wait[thread_level]++;
+                       // printf("%d\n", all_data->grid.num_smooth_wait[thread_level]);
                      }
 		     SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                   }
@@ -340,7 +344,9 @@ void SMEM_Async_Add_AMG(AllData *all_data)
          }
       }
    }
-   omp_destroy_lock(&(all_data->thread.lock));
+   if (all_data->input.async_type == SEMI_ASYNC){
+      omp_destroy_lock(&(all_data->thread.lock));
+   }
   // for (int level = 0; level < all_data->grid.num_levels; level++){
   //    printf("level %d: %d\n", 
   //           level,

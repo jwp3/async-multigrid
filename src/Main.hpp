@@ -132,7 +132,6 @@ typedef struct{
    HYPRE_Real **r_fine;
    HYPRE_Real **r_coarse;
    HYPRE_Real **e;
-   int zero_flag;
 }VectorData;
 
 typedef struct{
@@ -214,6 +213,7 @@ typedef struct{
    int tot_work;
    int *level_work;
    double *frac_level_work;
+   int *zero_flags;
 }GridData;
 
 typedef struct{

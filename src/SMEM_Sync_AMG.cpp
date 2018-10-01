@@ -6,7 +6,6 @@
 
 void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
 {
-   all_data->vector.zero_flag = 0;
    #pragma omp parallel
    {
       int fine_grid, coarse_grid;
@@ -18,6 +17,12 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
       double prolong_start;
 
       for (int level = 0; level < all_data->grid.num_levels-1; level++){
+         if (level == 0){
+            all_data->grid.zero_flags[level] = 0;
+         }
+         else {
+            all_data->grid.zero_flags[level] = 1;
+         }
          fine_grid = level;
          coarse_grid = level + 1;
          smooth_start = omp_get_wtime();
@@ -49,10 +54,8 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
          for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
             all_data->vector.u[coarse_grid][i] = 0;
          }
-         all_data->vector.zero_flag = 1;
       }
    }
-   all_data->vector.zero_flag = 0;
 
    int coarsest_level = all_data->grid.num_levels-1;
    double smooth_start = omp_get_wtime();
@@ -88,6 +91,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
       double prolong_start;
 
       for (int level = all_data->grid.num_levels-2; level > -1; level--){
+	 all_data->grid.zero_flags[level] = 0;
          fine_grid = level;
          coarse_grid = level + 1;
          prolong_start = omp_get_wtime();
@@ -120,7 +124,6 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
 
 void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
 {
-   all_data->vector.zero_flag = 1;
    #pragma omp parallel
    {
       int fine_grid, coarse_grid;
@@ -177,6 +180,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
       double prolong_start;
 
       for (int level = all_data->grid.num_levels-1; level > -1; level--){
+	 all_data->grid.zero_flags[level] = 1;
          if (level != all_data->grid.num_levels-1){
             fine_grid = level;
             coarse_grid = level + 1;
@@ -253,7 +257,6 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
 
 void SMEM_Sync_Add_Vcycle(AllData *all_data)
 {
-   all_data->vector.zero_flag = 0;
    omp_init_lock(&(all_data->thread.lock));
    #pragma omp parallel
    {
@@ -269,6 +272,7 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
 
       for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
          thread_level = all_data->thread.thread_levels[tid][q];
+         all_data->grid.zero_flags[thread_level] = 1;
 
          int coarsest_level;
          if (all_data->input.solver == MULTADD){

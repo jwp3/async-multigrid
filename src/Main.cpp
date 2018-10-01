@@ -49,6 +49,7 @@ int main (int argc, char *argv[])
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
    int n = 10;
+   int nx = n, ny = n, nz = n;
    /* Hypre parameters */
    int max_levels = 20;
    int solver_id = 0;
@@ -107,7 +108,23 @@ int main (int argc, char *argv[])
       if (strcmp(argv[arg_index], "-n") == 0)
       {
          arg_index++;
-         n = atoi(argv[arg_index]);
+	 n = atoi(argv[arg_index]);
+         nx = ny = nz = n;
+      }
+      else if (strcmp(argv[arg_index], "-nx") == 0)
+      {
+         arg_index++;
+         nx = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-ny") == 0)
+      {
+         arg_index++;
+         ny = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-nz") == 0)
+      {
+         arg_index++;
+         nz = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-problem") == 0)
       {
@@ -117,6 +134,9 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "27pt") == 0){
             all_data.input.test_problem = LAPLACE_3D27PT;
+         }
+	 else if (strcmp(argv[arg_index], "7pt") == 0){
+            all_data.input.test_problem = LAPLACE_3D7PT;
          }
          else if (strcmp(argv[arg_index], "mfem_laplace") == 0){
             all_data.input.test_problem = MFEM_LAPLACE;
@@ -393,7 +413,10 @@ int main (int argc, char *argv[])
       HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
    }
    else if (all_data.input.test_problem == LAPLACE_3D27PT){
-      Laplacian_3D_27pt(&parcsr_A, n);
+      Laplacian_3D_27pt(&parcsr_A, nx, ny, nz);
+   }
+   else if (all_data.input.test_problem == LAPLACE_3D7PT){
+      Laplacian_3D_7pt(&parcsr_A, nx, ny, nz);
    }
    else if (all_data.input.test_problem == MFEM_LAPLACE){
       MFEM_Laplacian(&all_data, &A);

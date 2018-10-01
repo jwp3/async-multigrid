@@ -47,7 +47,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
                       HYPRE_Real *u,
                       HYPRE_Real *u_prev,
                       int num_sweeps,
-                      int thread_level,
+                      int level,
                       int ns, int ne);
 
 void SMEM_Sync_L1Jacobi(AllData *all_data,
@@ -56,7 +56,7 @@ void SMEM_Sync_L1Jacobi(AllData *all_data,
                         HYPRE_Real *u,
                         HYPRE_Real *u_prev,
                         int num_sweeps,
-                        int thread_level,
+                        int level,
                         int ns, int ne);
 
 void SMEM_SemiAsync_GaussSeidel(AllData *all_data,
@@ -64,7 +64,7 @@ void SMEM_SemiAsync_GaussSeidel(AllData *all_data,
                                 HYPRE_Real *f,
                                 HYPRE_Real *u,
                                 int num_sweeps,
-                                int thread_level,
+                                int level,
                                 int ns, int ne);
 
 void SMEM_Async_GaussSeidel(AllData *all_data,
@@ -72,7 +72,7 @@ void SMEM_Async_GaussSeidel(AllData *all_data,
                             HYPRE_Real *f,
                             HYPRE_Real *u,
                             int num_sweeps,
-                            int thread_level,
+                            int level,
                             int ns, int ne);
 
 void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
@@ -81,7 +81,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
                                        HYPRE_Real *u,
                                        HYPRE_Real *u_prev,
                                        int num_sweeps,
-                                       int thread_level,
+                                       int level,
                                        int ns, int ne);
 
 void SMEM_Sync_SymmetricJacobi(AllData *all_data,
@@ -91,7 +91,7 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
                                HYPRE_Real *y,
                                HYPRE_Real *r,
 			       int num_sweeps,
-                               int thread_level,
+                               int level,
                                int ns, int ne);
 
 void SMEM_Sync_SymmetricL1Jacobi(AllData *all_data,
@@ -101,7 +101,7 @@ void SMEM_Sync_SymmetricL1Jacobi(AllData *all_data,
                                  HYPRE_Real *y,
                                  HYPRE_Real *r,
                                  int num_sweeps,
-                                 int thread_level,
+                                 int level,
                                  int ns, int ne);
 
 #endif

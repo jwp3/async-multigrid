@@ -23,8 +23,7 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
     u_hist = u;
     
     r = (b - A{1}*u);
-    for k = 1:q
-        
+    for k = 1:q     
         if (strcmp(async_type, 'full-async') == 1)
             last_correct_read{k} = ones(N(1),1);
         end
@@ -64,6 +63,7 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
             c_ind = [];
             for k = 1:q
                 if (grid_time_count(k) == grid_wait(k))
+                    grid_flag(k) = 1;
                     c_ind = [c_ind k];
                     if (async_flag == 1)
                         u_read = zeros(N(1),1);
@@ -132,6 +132,8 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
                             f = e;
                             if (strcmp(smooth_type, 'Jacobi') == 1)
                                 e = Jacobi(A{k}, zeros(N(k),1), f, num_relax, 1);
+                            elseif (strcmp(smooth_type, 'symm-Jacobi') == 1)
+                                e = SymmJacobi(A{k}, zeros(N(k),1), f, num_relax, omega);
                             elseif (strcmp(smooth_type, 'wJacobi') == 1)
                                 e = Jacobi(A{k}, zeros(N(k),1), f, num_relax, omega);
                             elseif (strcmp(smooth_type, 'async-Jacobi') == 1)
@@ -149,9 +151,11 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
                             e = G{i}*(P{i}*e);
                         end
                     end
-                    
-                    e_write{k} = e;
-                    grid_flag(k) = 1;
+                    if (k == 1)
+                        e_write{k} = e;
+                    else
+                        e_write{k} = zeros(N(1),1);
+                    end
                 else
                     e_write{k} = zeros(N(1),1);
                 end

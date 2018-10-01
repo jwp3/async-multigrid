@@ -69,9 +69,8 @@ void Laplacian_2D_5pt(HYPRE_IJMatrix *A, int n)
 }
 
 void Laplacian_3D_7pt(HYPRE_ParCSRMatrix *A_ptr,
-                      int n)
+                      int nx, int ny, int nz)
 {
-   HYPRE_Int nx, ny, nz;
    HYPRE_Int P, Q, R;
 
    HYPRE_ParCSRMatrix A;
@@ -84,10 +83,6 @@ void Laplacian_3D_7pt(HYPRE_ParCSRMatrix *A_ptr,
 
    hypre_MPI_Comm_size(hypre_MPI_COMM_WORLD, &num_procs );
    hypre_MPI_Comm_rank(hypre_MPI_COMM_WORLD, &myid );
-
-   nx = n;
-   ny = n;
-   nz = n;
 
    P  = 1;
    Q  = num_procs;
@@ -130,9 +125,8 @@ void Laplacian_3D_7pt(HYPRE_ParCSRMatrix *A_ptr,
 }
 
 void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
-                       int n)
+		       int nx, int ny, int nz)
 {
-   HYPRE_Int nx, ny, nz;
    HYPRE_Int P, Q, R;
 
    HYPRE_ParCSRMatrix A;
@@ -144,10 +138,6 @@ void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
 
    hypre_MPI_Comm_size(hypre_MPI_COMM_WORLD, &num_procs );
    hypre_MPI_Comm_rank(hypre_MPI_COMM_WORLD, &myid );
-
-   nx = n;
-   ny = n;
-   nz = n;
 
    P  = 1;
    Q  = num_procs;
