@@ -33,6 +33,7 @@ int main (int argc, char *argv[])
 
    double start;
    int num_runs = 1;
+   int time_barrier_flag = 0;
 
    HYPRE_IJMatrix A;
    HYPRE_ParCSRMatrix parcsr_A;
@@ -178,7 +179,6 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "multadd") == 0){
             all_data.input.solver = MULTADD;
-            all_data.input.thread_part_type = ALL_LEVELS;
          }
          else if (strcmp(argv[arg_index], "afacx") == 0){
             all_data.input.solver = AFACX;
@@ -186,12 +186,10 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "async_multadd") == 0){
             all_data.input.solver = ASYNC_MULTADD;
             all_data.input.async_flag = 1;
-            all_data.input.thread_part_type = ALL_LEVELS;
          }
          else if (strcmp(argv[arg_index], "async_afacx") == 0){
             all_data.input.solver = ASYNC_AFACX;
             all_data.input.async_flag = 1;
-            all_data.input.thread_part_type = ALL_LEVELS;
          }
       }
       else if (strcmp(argv[arg_index], "-smooth_interp") == 0)
@@ -304,10 +302,10 @@ int main (int argc, char *argv[])
             all_data.input.res_compute_type = GLOBAL;
          }
       }
-      else if (strcmp(argv[arg_index], "-check_resnorm") == 0)
-      {
-         all_data.input.check_resnorm_flag = 1;
-      }
+     // else if (strcmp(argv[arg_index], "-check_resnorm") == 0)
+     // {
+     //    all_data.input.check_resnorm_flag = 1;
+     // }
       else if (strcmp(argv[arg_index], "-async_type") == 0)
       {
          arg_index++;
@@ -370,6 +368,10 @@ int main (int argc, char *argv[])
       {
          all_data.input.mfem_test_error_flag = 1;
       }
+      else if (strcmp(argv[arg_index], "-time_barrier") == 0)
+      {
+         time_barrier_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-help") == 0)
       {
          print_usage = 1;
@@ -381,8 +383,13 @@ int main (int argc, char *argv[])
    if (all_data.input.solver == MULT){
       all_data.input.thread_part_type = ONE_LEVEL;
    }
-   if (all_data.input.converge_test_type == LOCAL){
-      all_data.input.res_compute_type = LOCAL;
+   else{
+      all_data.input.thread_part_type = ALL_LEVELS;
+   }
+   if (all_data.input.solver == AFACX ||
+       all_data.input.solver == ASYNC_AFACX ||
+       all_data.input.solver == MULT){
+      all_data.input.res_compute_type = LOCAL; 
    }
    
    srand(0);
@@ -504,6 +511,34 @@ int main (int argc, char *argv[])
       HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
    }
 
+  // if (time_barrier_flag == 1 && all_data.input.thread_part_type == ONE_LEVEL){
+  //    double start, barrier_wtime;
+  //    all_data.barrier.counter = 0;
+  //    all_data.barrier.flag = 0;
+  //    omp_init_lock(&(all_data.barrier.lock));
+  //    start = omp_get_wtime();
+  //    #pragma omp parallel
+  //    {
+  //       for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){
+  //          SMEM_LevelBarrier(&all_data, all_data.thread.barrier_flags, 0);
+  //         // SMEM_SRCLevelBarrier(&all_data, &(all_data.barrier.flag), 0);
+  //         // #pragma omp flush(all_data)
+  //       }
+  //    }
+  //    printf("my time = %e\n", omp_get_wtime() - start);
+  //    omp_destroy_lock(&(all_data.barrier.lock));
+  //    start = omp_get_wtime();
+  //    #pragma omp parallel
+  //    {
+  //       for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){
+  //          #pragma omp barrier
+  //          SMEM_LevelBarrier(&all_data, all_data.thread.barrier_flags, 0);
+  //       }
+  //    }
+  //    printf("OpenMP time = %e\n", omp_get_wtime() - start);
+  //    return 0;
+  // }
+
    srand(time(NULL));
    for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){   
       all_data.input.num_cycles = cycle;
@@ -520,7 +555,6 @@ int main (int argc, char *argv[])
                all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
             }
          }
-
          if (all_data.input.print_output_flag == 1){         
             PrintOutput(all_data);
          }

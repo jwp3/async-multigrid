@@ -163,7 +163,7 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
    int ns = all_data->thread.A_ns[level][t];
    int ne = all_data->thread.A_ne[level][t];
 
-   double smooth_weight = all_data->input.smooth_weight;
+   double smooth_weight = 1.0;//all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
       if (k == 0 && all_data->grid.zero_flags[level] == 1){
@@ -355,7 +355,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
    HYPRE_Real res;
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
-   double smooth_weight = all_data->input.smooth_weight;
+   double smooth_weight = 1.0;//all_data->input.smooth_weight;
 
    for (int k = 0; k < num_sweeps; k++){
       if (k == 0 && all_data->grid.zero_flags[level] == 1){

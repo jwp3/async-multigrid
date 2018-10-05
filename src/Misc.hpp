@@ -32,6 +32,10 @@ int SMEM_LevelBarrier(AllData *all_data,
                       int **barrier_flags,
                       int level);
 
+int SMEM_SRCLevelBarrier(AllData *all_data,
+			 int *flag,
+                         int level);
+
 int CheckConverge(AllData *all_data, int thread_level);
 
 void InitSolve(AllData *all_data);

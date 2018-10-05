@@ -270,9 +270,39 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
       double restrict_start;
       double prolong_start;
 
+      if (all_data->input.res_compute_type == GLOBAL){
+	 all_data->grid.global_smooth_flags[tid] = 1;
+         fine_grid = 0;
+         thread_level = all_data->thread.thread_levels[tid][0];
+         ns = all_data->thread.A_ns_global[tid];
+         ne = all_data->thread.A_ne_global[tid];
+         for (int i = ns; i < ne; i++){
+            all_data->level_vector[thread_level].e[fine_grid][i] = 0;
+         }
+         smooth_start = omp_get_wtime();
+         SMEM_Smooth(all_data,
+                     all_data->matrix.A[fine_grid],
+                     all_data->vector.r[fine_grid],
+                     all_data->level_vector[thread_level].e[fine_grid],
+                     all_data->level_vector[thread_level].u_prev[fine_grid],
+                     all_data->level_vector[thread_level].y[fine_grid],
+                     all_data->input.num_fine_smooth_sweeps,
+                     thread_level,
+                     ns, ne);
+         all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+         for (int i = ns; i < ne; i++){
+            #pragma omp atomic
+            all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+         }
+	 all_data->grid.global_smooth_flags[tid] = 0;
+	 #pragma omp barrier
+      }
+
       for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
          thread_level = all_data->thread.thread_levels[tid][q];
-         all_data->grid.zero_flags[thread_level] = 1;
+	 if (tid == all_data->thread.barrier_root[thread_level]){
+            all_data->grid.zero_flags[thread_level] = 1;
+	 }
 
          int coarsest_level;
          if (all_data->input.solver == MULTADD){

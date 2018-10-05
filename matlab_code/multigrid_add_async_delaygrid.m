@@ -136,6 +136,10 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
                                 e = SymmJacobi(A{k}, zeros(N(k),1), f, num_relax, omega);
                             elseif (strcmp(smooth_type, 'wJacobi') == 1)
                                 e = Jacobi(A{k}, zeros(N(k),1), f, num_relax, omega);
+                            elseif (strcmp(smooth_type, 'par-Southwell') == 1)
+                                e = ParSouthwell(A{k}, zeros(N(k),1), f, num_relax, omega);
+                            elseif (strcmp(smooth_type, 'Southwell') == 1)
+                                e = Southwell(A{k}, zeros(N(k),1), f, num_relax, omega);
                             elseif (strcmp(smooth_type, 'async-Jacobi') == 1)
                                 e = async_Jacobi(A{k}, zeros(N(k),1), f, num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, 1);
                             elseif (strcmp(smooth_type, 'async-wJacobi') == 1)
@@ -151,11 +155,7 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
                             e = G{i}*(P{i}*e);
                         end
                     end
-                    if (k == 1)
-                        e_write{k} = e;
-                    else
-                        e_write{k} = zeros(N(1),1);
-                    end
+                    e_write{k} = e;
                 else
                     e_write{k} = zeros(N(1),1);
                 end

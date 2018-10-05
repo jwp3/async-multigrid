@@ -41,6 +41,11 @@ void SMEM_Setup(void *amg_vdata,
 {
    InitAlgebra(amg_vdata, all_data);
 
+   all_data->barrier.local_sense = (int *)calloc(all_data->input.num_threads, sizeof(int));
+  // all_data->barrier.counter = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+  // all_data->barrier.flag = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+
+   all_data->grid.global_smooth_flags = (int *)calloc(all_data->input.num_threads, sizeof(int));
    all_data->grid.zero_flags = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.num_smooth_wait = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.finest_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
@@ -317,8 +322,15 @@ void PartitionLevels(AllData *all_data)
       for (int level = 0; level < num_levels; level++){
          all_data->thread.barrier_flags[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
       }
+      int finest_level;
+      if (all_data->input.res_compute_type == GLOBAL){
+         finest_level = 1;
+      }
+      else{
+         finest_level = 0;
+      }
       if (all_data->input.thread_part_distr_type == HALF_THREADS){
-         for (int level = 0; level < num_levels; level++){
+         for (int level = finest_level; level < num_levels; level++){
            // printf("level %d:\n\t", level);
             if (num_threads == 1){
               // printf("%d ", tid);
@@ -360,7 +372,7 @@ void PartitionLevels(AllData *all_data)
       }
       else if (all_data->input.thread_part_distr_type == EQUAL_THREADS){
          int equal_threads = max(all_data->input.num_threads/all_data->grid.num_levels, 1);
-         for (int level = 0; level < num_levels; level++){
+         for (int level = finest_level; level < num_levels; level++){
            // printf("level %d:\n\t", level);
             if (num_threads == 1){
               // printf("%d ", tid);
@@ -400,7 +412,7 @@ void PartitionLevels(AllData *all_data)
          }
       }
       else{
-         for (int level = 0; level < num_levels; level++){
+         for (int level = finest_level; level < num_levels; level++){
             int balanced_threads;
             if (num_threads == 1){
               // printf("%d ", tid);
@@ -505,7 +517,30 @@ void PartitionGrids(AllData *all_data)
          all_data->thread.P_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
       }
 
-      for (int level = 0; level < num_levels; level++){
+      int finest_level;
+      if (all_data->input.res_compute_type == GLOBAL){
+         all_data->thread.A_ns_global = (int *)calloc(all_data->input.num_threads, sizeof(int));
+         all_data->thread.A_ne_global = (int *)calloc(all_data->input.num_threads, sizeof(int));
+	 int n = all_data->grid.n[0];
+	 int size = n/all_data->input.num_threads;
+	 int rest = n - size*all_data->input.num_threads;
+	 for (int t = 0; t < all_data->input.num_threads; t++){
+            if (t < rest){
+               all_data->thread.A_ns_global[t] = t*size + t;
+               all_data->thread.A_ne_global[t] = (t + 1)*size + t + 1;
+            }
+            else{
+               all_data->thread.A_ns_global[t] = t*size + rest;
+               all_data->thread.A_ne_global[t] = (t + 1)*size + rest;
+            }
+	 }
+	 finest_level = 0;
+      }
+      else{
+         finest_level = 0;
+      }
+
+      for (int level = finest_level; level < num_levels; level++){
          num_level_threads = all_data->thread.level_threads[level].size();
         // printf("level %d/%d:", level, num_levels-1);
          for (int inner_level = 0; inner_level < level+2; inner_level++){
@@ -514,10 +549,12 @@ void PartitionGrids(AllData *all_data)
                for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
                   int n = all_data->grid.n[inner_level];
                   int t = all_data->thread.level_threads[level][i];
-     
-                  int shift_t = t - all_data->thread.level_threads[level][0];
-                  int size = n/num_level_threads;
-                  int rest = n - size*num_level_threads;
+		  int size, rest;
+
+		  int shift_t = t - all_data->thread.level_threads[level][0];
+                  
+                  size = n/num_level_threads;
+                  rest = n - size*num_level_threads;
                   if (shift_t < rest){
                      all_data->thread.A_ns[inner_level][t] = shift_t*size + shift_t;
                      all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
@@ -599,7 +636,11 @@ void ComputeWork(AllData *all_data)
          all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
       }
       else{
-         if (all_data->input.async_flag == 1 && all_data->input.res_compute_type == LOCAL){
+         if (all_data->input.res_compute_type == LOCAL){
+	    all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0])/
+					       all_data->grid.num_levels;
+	 }
+	 else{
             all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
          }
       }

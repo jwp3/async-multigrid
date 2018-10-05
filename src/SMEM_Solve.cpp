@@ -28,7 +28,6 @@ void SMEM_Solve(AllData *all_data)
       else {
          SMEM_Async_Add_AMG(all_data);
       }
-      all_data->output.solve_wtime = omp_get_wtime() - start;
       #pragma omp parallel
       {
          SMEM_Sync_Parfor_Residual(all_data,
@@ -132,34 +131,67 @@ void SMEM_Smooth(AllData *all_data,
                  int level,
                  int ns, int ne)
 {
+   int tid = omp_get_thread_num();
    if (all_data->input.num_threads > 1){
       if (all_data->input.thread_part_type == ALL_LEVELS){
          if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
-            SMEM_Sync_HybridJacobiGaussSeidel(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+	    if (all_data->input.res_compute_type == LOCAL ||
+                all_data->grid.global_smooth_flags[tid] == 0){
+               SMEM_Sync_HybridJacobiGaussSeidel(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+	    }
+	    else{
+               SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+            }
          }
          else if (all_data->input.smoother == ASYNC_GAUSS_SEIDEL){
-            SMEM_Async_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
+	    if (all_data->input.res_compute_type == LOCAL ||
+                all_data->grid.global_smooth_flags[tid] == 0){
+               SMEM_Async_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
+	    }
+	    else{
+               SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+            }
          }
          else if (all_data->input.smoother == SEMI_ASYNC_GAUSS_SEIDEL){
-            SMEM_SemiAsync_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
+	    if (all_data->input.res_compute_type == LOCAL ||
+                all_data->grid.global_smooth_flags[tid] == 0){
+               SMEM_SemiAsync_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
+	    }
+	    else{
+               SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+            }
          }
          else if (all_data->input.smoother == L1_JACOBI){
-            if (all_data->input.solver == MULTADD ||
+	    if (all_data->input.solver == MULTADD ||
                 all_data->input.solver == ASYNC_MULTADD){
-               SMEM_Sync_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
+               if (all_data->input.res_compute_type == LOCAL ||
+                   all_data->grid.global_smooth_flags[tid] == 0){
+                  SMEM_Sync_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
+               }
+               else{
+		 // SMEM_Async_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
+	          SMEM_Sync_L1Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+               }
             }
-            else {
+            else{
                SMEM_Sync_L1Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
             }
          }
          else {
-            if (all_data->input.solver == MULTADD ||
+	    if (all_data->input.solver == MULTADD ||
                 all_data->input.solver == ASYNC_MULTADD){
-               SMEM_Sync_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
-            }
-            else {
-               SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
-            }
+	       if (all_data->input.res_compute_type == LOCAL ||
+                   all_data->grid.global_smooth_flags[tid] == 0){
+                SMEM_Sync_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
+               }
+               else{
+	         // SMEM_Async_GaussSeidel(all_data, A, f, u, num_sweeps, level, ns, ne);
+	          SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+               }
+	    }
+	    else{
+	       SMEM_Sync_Jacobi(all_data, A, f, u, y, num_sweeps, level, ns, ne);
+	    }
          }
       }
       else{

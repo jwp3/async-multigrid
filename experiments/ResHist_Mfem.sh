@@ -32,9 +32,9 @@ rm -f ${file_name}
 
 smooth_weight=.5
 num_runs=20
-num_cycles=100
-start_cycle=2
-incr_cycle=2
+num_cycles=200
+start_cycle=4
+incr_cycle=4
 
 KMP_AFFINITY=compact ./Main -format_output \
 	-num_runs ${num_runs} \

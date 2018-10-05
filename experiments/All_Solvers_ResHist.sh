@@ -1,9 +1,9 @@
 #!/bin/bash
 
 num_threads=32
-problem="27pt"
+problem="7pt"
 num_smooth_sweeps=1
-n=30
+n=20
 
 smoother="L1j"
 ./Solvers_ResHist.sh ${smoother} ${num_threads} ${problem} ${num_smooth_sweeps} ${n} 

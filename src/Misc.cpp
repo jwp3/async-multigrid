@@ -16,7 +16,15 @@ void PrintOutput(AllData all_data)
 
    char print_str[1000];
 
-   if (all_data.input.async_flag == 1){
+   int finest_level;
+   if (all_data.input.res_compute_type == GLOBAL){
+      finest_level = 1;
+   }
+   else{
+      finest_level = 0;
+   }
+
+   if (all_data.input.async_flag == 1 && all_data.input.async_type == SEMI_ASYNC){
       for (int level = 0; level < all_data.grid.num_levels; level++){
          all_data.grid.mean_grid_wait[level] /= (double)all_data.grid.local_num_correct[level];
       }
@@ -35,9 +43,9 @@ void PrintOutput(AllData all_data)
       MinDouble(all_data.grid.min_grid_wait, all_data.grid.num_levels);
 
    mean_smooth_sweeps =
-      (int)((double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads);
+      (double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads;
    mean_correct =
-      (int)((double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/(double)all_data.grid.num_levels);
+      (double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/(double)(all_data.grid.num_levels-finest_level);
    mean_smooth_wtime =
       SumDbl(all_data.output.smooth_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
    mean_residual_wtime =
@@ -313,8 +321,15 @@ int CheckConverge(AllData *all_data,
       }
    }
    if (all_data->input.converge_test_type == ALL_LEVELS){
-      for (int q = 0; q < all_data->grid.num_levels; q++){
-         if (all_data->grid.local_num_correct[q] < all_data->input.num_cycles){
+      int finest_level;
+      if (all_data->input.res_compute_type == GLOBAL){
+         finest_level = 1;
+      }
+      else{
+         finest_level = 0;
+      }
+      for (int level = finest_level; level < all_data->grid.num_levels; level++){
+         if (all_data->grid.local_num_correct[level] < all_data->input.num_cycles){
             return 0;
          }
       }
@@ -369,6 +384,35 @@ int SMEM_LevelBarrier(AllData *all_data,
          else if (barrier_flags[level][tid] == all_data->thread.level_threads[level].size()){
             return 0;
          }
+      }
+   }
+}
+
+int SMEM_SRCLevelBarrier(AllData *all_data,
+		         int *flag,
+                         int level)
+{
+   int tid = omp_get_thread_num();
+   if (all_data->barrier.local_sense[tid] == 0){
+      all_data->barrier.local_sense[tid] = 1;
+   }
+   else{
+      all_data->barrier.local_sense[tid] = 0;
+   }
+   omp_set_lock(&(all_data->barrier.lock));
+   all_data->barrier.counter++;
+   int arrived = all_data->barrier.counter;
+   if (arrived == all_data->thread.level_threads[level].size()){
+     // int read_converge_flag = all_data->thread.converge_flag;
+      omp_unset_lock(&(all_data->barrier.lock));
+      all_data->barrier.counter = 0;
+      *flag = all_data->barrier.local_sense[tid];
+      #pragma omp flush(flag)
+   }
+   else{
+      omp_unset_lock(&(all_data->barrier.lock));
+      while (*flag != all_data->barrier.local_sense[tid]){
+         #pragma omp flush(flag)
       }
    }
 }

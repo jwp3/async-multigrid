@@ -66,6 +66,13 @@ using namespace std;
 using namespace mfem;
 
 typedef struct{
+   int counter;
+   int flag;
+   omp_lock_t lock;
+   int *local_sense;
+}BarrierData;
+
+typedef struct{
    int *smooth_relax;
    int *smooth_sweeps;
    int *cycles;
@@ -73,6 +80,7 @@ typedef struct{
    double *residual_wtime;
    double *restrict_wtime;
    double *prolong_wtime;
+   double *correct_time;
    double setup_wtime;
    double hypre_setup_wtime;
    double prob_setup_wtime;
@@ -185,6 +193,8 @@ typedef struct{
    int *barrier_root;
    int **barrier_flags;
    double *loc_sum;
+   int *A_ns_global;
+   int *A_ne_global;
    int **A_ns;
    int **A_ne;
    int **R_ns;
@@ -214,9 +224,11 @@ typedef struct{
    int *level_work;
    double *frac_level_work;
    int *zero_flags;
+   int *global_smooth_flags;
 }GridData;
 
 typedef struct{
+   BarrierData barrier;
    ThreadData thread;
    MatrixData data;
    VectorData vector;
