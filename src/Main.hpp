@@ -61,6 +61,7 @@
 #define MFEM_LAPLACE 2
 #define MFEM_ELAST 3
 #define LAPLACE_3D7PT 4
+#define MFEM_MAXWELL 5
 
 using namespace std;
 using namespace mfem;
@@ -140,6 +141,7 @@ typedef struct{
    HYPRE_Real **r_fine;
    HYPRE_Real **r_coarse;
    HYPRE_Real **e;
+   vector<vector<int>> i;
 }VectorData;
 
 typedef struct{

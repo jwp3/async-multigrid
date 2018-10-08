@@ -2,6 +2,7 @@
 #include "SMEM_Setup.hpp"
 #include "Misc.hpp"
 #include "../eigen/Eigen/Sparse"
+#include "../eigen/Eigen/Cholesky"
 
 using namespace std;
 typedef Eigen::SparseMatrix<double,Eigen::RowMajor> EigenSpMat;
@@ -76,9 +77,12 @@ void InitAlgebra(void *amg_vdata,
    parA = hypre_ParAMGDataAArray(amg_data);
    parP = hypre_ParAMGDataPArray(amg_data);
    parR = hypre_ParAMGDataRArray(amg_data);
+   
 
    all_data->grid.num_levels = (int)hypre_ParAMGDataNumLevels(amg_data);
    all_data->grid.n = (int *)malloc(all_data->grid.num_levels * sizeof(int));
+
+   all_data->vector.i.resize(all_data->grid.num_levels, vector<int>(0));
 
    all_data->matrix.A =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
@@ -99,6 +103,10 @@ void InitAlgebra(void *amg_vdata,
          for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
             all_data->matrix.L1_row_norm[level][i] += fabs(A_data[jj]);
          }
+      }
+      all_data->vector.i[level].resize(all_data->grid.n[0]);
+      for (int i = 0; i < all_data->grid.n[0]; i++){
+         all_data->vector.i[level][i] = i;
       }
       if (level < all_data->grid.num_levels-1){
          if (all_data->input.solver == MULTADD ||
@@ -227,7 +235,7 @@ void InitAlgebra(void *amg_vdata,
    }
    int level = 0;
    for (int i = 0; i < all_data->grid.n[level]; i++){
-      all_data->vector.f[level][i] = RandDouble(-1.0, 1.0);
+      all_data->vector.f[level][i] = 1.0;//RandDouble(-1.0, 1.0);
    }
 
    level = all_data->grid.num_levels-1;         
@@ -323,7 +331,9 @@ void PartitionLevels(AllData *all_data)
          all_data->thread.barrier_flags[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
       }
       int finest_level;
-      if (all_data->input.res_compute_type == GLOBAL){
+      if ((all_data->input.solver == MULTADD ||
+          all_data->input.solver == ASYNC_MULTADD) &&
+	  all_data->input.res_compute_type == GLOBAL){
          finest_level = 1;
       }
       else{
@@ -632,17 +642,12 @@ void ComputeWork(AllData *all_data)
    int fine_grid, coarse_grid;
    all_data->grid.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    for (int level = 0; level < all_data->grid.num_levels; level++){
-      if (level == 0){
-         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+      if (all_data->input.res_compute_type == GLOBAL){
+         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0])/
+             			       all_data->grid.num_levels;
       }
       else{
-         if (all_data->input.res_compute_type == LOCAL){
-	    all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0])/
-					       all_data->grid.num_levels;
-	 }
-	 else{
-            all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
-         }
+         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
       }
 
       if (all_data->input.solver == MULTADD ||

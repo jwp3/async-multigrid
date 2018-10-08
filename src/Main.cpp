@@ -145,6 +145,9 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "mfem_elast") == 0){
             all_data.input.test_problem = MFEM_ELAST;
          }
+	 else if (strcmp(argv[arg_index], "mfem_maxwell") == 0){
+            all_data.input.test_problem = MFEM_MAXWELL;
+         }
       }
       else if (strcmp(argv[arg_index], "-smoother") == 0)
       {
@@ -386,9 +389,9 @@ int main (int argc, char *argv[])
    else{
       all_data.input.thread_part_type = ALL_LEVELS;
    }
-   if (all_data.input.solver == AFACX ||
-       all_data.input.solver == ASYNC_AFACX ||
-       all_data.input.solver == MULT){
+   if (all_data.input.solver == MULT ||
+       all_data.input.solver == AFACX ||
+       all_data.input.solver == ASYNC_AFACX){
       all_data.input.res_compute_type = LOCAL; 
    }
    
@@ -432,6 +435,11 @@ int main (int argc, char *argv[])
    }
    else if (all_data.input.test_problem == MFEM_ELAST){
       MFEM_Elasticity(&all_data, &A);
+      HYPRE_IJMatrixAssemble(A);
+      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
+   }
+   else if (all_data.input.test_problem == MFEM_MAXWELL){
+      MFEM_Maxwell(&all_data, &A);
       HYPRE_IJMatrixAssemble(A);
       HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
    }
@@ -548,6 +556,9 @@ int main (int argc, char *argv[])
          if (all_data.input.mfem_test_error_flag == 1){
             for (int i = 0; i < all_data.grid.n[0]; i++){
                all_data.output.mfem_e_norm2 += pow(all_data.mfem.u[i] - all_data.vector.u[0][i], 2.0);
+	      // printf("%e, %e, %e, %e\n",
+              //        all_data.mfem.u[i], par_x->local_vector->data[i], all_data.vector.u[0][i],
+              //        all_data.mfem.u[i] - par_x->local_vector->data[i]);
             }
          }
          if (all_data.input.hypre_test_error_flag == 1){

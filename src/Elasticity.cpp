@@ -175,3 +175,237 @@ void MFEM_Elasticity(AllData *all_data,
    delete fec;
    delete mesh;
 }
+
+//                                MFEM Example 17
+//
+// Compile with: make ex17
+//
+// Sample runs:
+//
+//       ex17 -m ../data/beam-tri.mesh
+//       ex17 -m ../data/beam-quad.mesh
+//       ex17 -m ../data/beam-tet.mesh
+//       ex17 -m ../data/beam-hex.mesh
+//       ex17 -m ../data/beam-quad.mesh -r 2 -o 3
+//       ex17 -m ../data/beam-quad.mesh -r 2 -o 2 -a 1 -k 1
+//       ex17 -m ../data/beam-hex.mesh -r 2 -o 2
+//
+// Description:  This example code solves a simple linear elasticity problem
+//               describing a multi-material cantilever beam using symmetric or
+//               non-symmetric discontinuous Galerkin (DG) formulation.
+//
+//               Specifically, we approximate the weak form of -div(sigma(u))=0
+//               where sigma(u)=lambda*div(u)*I+mu*(grad*u+u*grad) is the stress
+//               tensor corresponding to displacement field u, and lambda and mu
+//               are the material Lame constants. The boundary conditions are
+//               Dirichlet, u=u_D on the fixed part of the boundary, namely
+//               boundary attributes 1 and 2; on the rest of the boundary we use
+//               sigma(u).n=0 b.c. The geometry of the domain is assumed to be
+//               as follows:
+//
+//                                 +----------+----------+
+//                    boundary --->| material | material |<--- boundary
+//                    attribute 1  |    1     |    2     |     attribute 2
+//                    (fixed)      +----------+----------+     (fixed, nonzero)
+//
+//               The example demonstrates the use of high-order DG vector finite
+//               element spaces with the linear DG elasticity bilinear form,
+//               meshes with curved elements, and the definition of piece-wise
+//               constant and function vector-coefficient objects. The use of
+//               non-homogeneous Dirichlet b.c. imposed weakly, is also
+//               illustrated.
+//
+//               We recommend viewing examples 2 and 14 before viewing this
+//               example.
+
+#include "mfem.hpp"
+#include <fstream>
+#include <iostream>
+
+using namespace std;
+using namespace mfem;
+
+// Initial displacement, used for Dirichlet boundary conditions on boundary
+// attributes 1 and 2.
+void InitDisplacement(const Vector &x, Vector &u);
+
+// A Coefficient for computing the components of the stress.
+class StressCoefficient : public Coefficient
+{
+protected:
+   Coefficient &lambda, &mu;
+   GridFunction *u; // displacement
+   int si, sj; // component of the stress to evaluate, 0 <= si,sj < dim
+
+   DenseMatrix grad; // auxiliary matrix, used in Eval
+
+public:
+   StressCoefficient(Coefficient &lambda_, Coefficient &mu_)
+      : lambda(lambda_), mu(mu_), u(NULL), si(0), sj(0) { }
+
+   void SetDisplacement(GridFunction &u_) { u = &u_; }
+   void SetComponent(int i, int j) { si = i; sj = j; }
+
+   virtual double Eval(ElementTransformation &T, const IntegrationPoint &ip);
+};
+
+
+void MFEM_Elasticity2(AllData *all_data,
+                      HYPRE_IJMatrix *Aij)
+{
+   double alpha = -1.0;
+   double kappa = -1.0;
+
+   if (kappa < 0)
+   {
+      kappa = (all_data->mfem.order+1)*(all_data->mfem.order+1);
+   }
+
+   // 2. Read the mesh from the given mesh file.
+   Mesh mesh(all_data->mfem.mesh_file, 1, 1);
+   int dim = mesh.Dimension();
+
+   // 3. Refine the mesh to increase the resolution.
+   for (int l = 0; l < all_data->mfem.ref_levels; l++)
+   {
+      mesh.UniformRefinement();
+   }
+   // Since NURBS meshes do not support DG integrators, we convert them to
+   // regular polynomial mesh of the specified (solution) order.
+   if (mesh.NURBSext) { mesh.SetCurvature(all_data->mfem.order); }
+
+   // 4. Define a DG vector finite element space on the mesh. Here, we use
+   //    Gauss-Lobatto nodal basis because it gives rise to a sparser matrix
+   //    compared to the default Gauss-Legendre nodal basis.
+   DG_FECollection fec(all_data->mfem.order, dim, BasisType::GaussLobatto);
+   FiniteElementSpace fespace(&mesh, &fec, dim);
+
+   // 5. In this example, the Dirichlet boundary conditions are defined by
+   //    marking boundary attributes 1 and 2 in the marker Array 'dir_bdr'.
+   //    These b.c. are imposed weakly, by adding the appropriate boundary
+   //    integrators over the marked 'dir_bdr' to the bilinear and linear forms.
+   //    With this DG formulation, there are no essential boundary conditions.
+   Array<int> ess_tdof_list; // no essential b.c. (empty list)
+   Array<int> dir_bdr(mesh.bdr_attributes.Max());
+   dir_bdr = 0;
+   dir_bdr[0] = 1; // boundary attribute 1 is Dirichlet
+   dir_bdr[1] = 1; // boundary attribute 2 is Dirichlet
+
+   // 6. Define the DG solution vector 'x' as a finite element grid function
+   //    corresponding to fespace. Initialize 'x' using the 'InitDisplacement'
+   //    function.
+   GridFunction x(&fespace);
+   VectorFunctionCoefficient init_x(dim, InitDisplacement);
+   x.ProjectCoefficient(init_x);
+
+   // 7. Set up the Lame constants for the two materials. They are defined as
+   //    piece-wise (with respect to the element attributes) constant
+   //    coefficients, i.e. type PWConstCoefficient.
+   Vector lambda(mesh.attributes.Max());
+   lambda = 1.0;      // Set lambda = 1 for all element attributes.
+   lambda(0) = 50.0;  // Set lambda = 50 for element attribute 1.
+   PWConstCoefficient lambda_c(lambda);
+   Vector mu(mesh.attributes.Max());
+   mu = 1.0;      // Set mu = 1 for all element attributes.
+   mu(0) = 50.0;  // Set mu = 50 for element attribute 1.
+   PWConstCoefficient mu_c(mu);
+
+   // 8. Set up the linear form b(.) which corresponds to the right-hand side of
+   //    the FEM linear system. In this example, the linear form b(.) consists
+   //    only of the terms responsible for imposing weakly the Dirichlet
+   //    boundary conditions, over the attributes marked in 'dir_bdr'. The
+   //    values for the Dirichlet boundary condition are taken from the
+   //    VectorFunctionCoefficient 'x_init' which in turn is based on the
+   //    function 'InitDisplacement'.
+   LinearForm b(&fespace);
+   b.AddBdrFaceIntegrator(
+      new DGElasticityDirichletLFIntegrator(
+         init_x, lambda_c, mu_c, alpha, kappa), dir_bdr);
+   b.Assemble();
+
+   // 9. Set up the bilinear form a(.,.) on the DG finite element space
+   //    corresponding to the linear elasticity integrator with coefficients
+   //    lambda and mu as defined above. The additional interior face integrator
+   //    ensures the weak continuity of the displacement field. The additional
+   //    boundary face integrator works together with the boundary integrator
+   //    added to the linear form b(.) to impose weakly the Dirichlet boundary
+   //    conditions.
+   BilinearForm a(&fespace);
+   a.AddDomainIntegrator(new ElasticityIntegrator(lambda_c, mu_c));
+   a.AddInteriorFaceIntegrator(
+      new DGElasticityIntegrator(lambda_c, mu_c, alpha, kappa));
+   a.AddBdrFaceIntegrator(
+      new DGElasticityIntegrator(lambda_c, mu_c, alpha, kappa), dir_bdr);
+
+   a.Assemble();
+
+   SparseMatrix A;
+   Vector B, X;
+   a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
+   
+   if (all_data->input.mfem_test_error_flag == 1){
+      for (int i = 0; i < A.Height(); i++){
+         B[i] = 1.0;
+      }
+
+      GSSmoother M(A);
+      PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
+
+      all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double));
+      for (int i = 0; i < A.Height(); i++){
+         all_data->mfem.u[i] = X[i];
+      }
+   }
+
+   HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, A.Height()-1, 0, A.Height()-1, Aij);
+   HYPRE_IJMatrixSetObjectType(*Aij, HYPRE_PARCSR);
+   HYPRE_IJMatrixInitialize(*Aij);
+
+   for (int i = 0; i < A.Height(); i++)
+   {
+
+      Array<int> mfem_cols;
+      Vector mfem_srow;
+      A.GetRow(i, mfem_cols, mfem_srow);
+
+      int nnz = mfem_srow.Size();
+
+      double *values = (double *)malloc(nnz * sizeof(double));
+      int *cols = (int *)malloc(nnz * sizeof(int));
+
+      for (int j = 0; j < nnz; j++){
+         cols[j] = mfem_cols[j];
+         values[j] = mfem_srow[j];
+      }
+
+      /* Set the values for row i */
+      HYPRE_IJMatrixSetValues(*Aij, 1, &nnz, &i, cols, values);
+   }
+}
+
+
+void InitDisplacement(const Vector &x, Vector &u)
+{
+   u = 0.0;
+   u(u.Size()-1) = -0.2*x(0);
+}
+
+
+double StressCoefficient::Eval(ElementTransformation &T,
+                               const IntegrationPoint &ip)
+{
+   MFEM_ASSERT(u != NULL, "displacement field is not set");
+
+   double L = lambda.Eval(T, ip);
+   double M = mu.Eval(T, ip);
+   u->GetVectorGradient(T, grad);
+   if (si == sj)
+   {
+      double div_u = grad.Trace();
+      return L*div_u + 2*M*grad(si,si);
+   }
+   else
+   {
+      return M*(grad(si,sj) + grad(sj,si));
+   }
+}

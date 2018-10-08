@@ -25,27 +25,27 @@ void PrintOutput(AllData all_data)
    }
 
    if (all_data.input.async_flag == 1 && all_data.input.async_type == SEMI_ASYNC){
-      for (int level = 0; level < all_data.grid.num_levels; level++){
+      for (int level = finest_level; level < all_data.grid.num_levels; level++){
          all_data.grid.mean_grid_wait[level] /= (double)all_data.grid.local_num_correct[level];
       }
    }
    else{
-      for (int level = 0; level < all_data.grid.num_levels; level++){
-         all_data.grid.min_grid_wait[level] = 0;
+      for (int level = finest_level; level < all_data.grid.num_levels; level++){
+         all_data.grid.mean_grid_wait[level] = 0;
       }
    }
 
    mean_grid_wait =
-      SumDbl(all_data.grid.mean_grid_wait, all_data.grid.num_levels)/(double)all_data.grid.num_levels;
+      SumDbl(all_data.grid.mean_grid_wait, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
    max_grid_wait =
-      MaxDouble(all_data.grid.max_grid_wait, all_data.grid.num_levels);
+      MaxDouble(&all_data.grid.max_grid_wait[finest_level], all_data.grid.num_levels);
    min_grid_wait =
-      MinDouble(all_data.grid.min_grid_wait, all_data.grid.num_levels);
+      MinDouble(&all_data.grid.min_grid_wait[finest_level], all_data.grid.num_levels);
 
    mean_smooth_sweeps =
       (double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads;
    mean_correct =
-      (double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/(double)(all_data.grid.num_levels-finest_level);
+      (double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
    mean_smooth_wtime =
       SumDbl(all_data.output.smooth_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
    mean_residual_wtime =

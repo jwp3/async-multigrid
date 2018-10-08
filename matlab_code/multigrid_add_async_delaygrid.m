@@ -106,7 +106,7 @@ function [u, model_time, grid_wait_list, solve_hist, num_correct] = ...
                                 e = Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, 1);
                                 e = Jacobi(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax, 1);
                             elseif (strcmp(smooth_type, 'wJacobi') == 1)
-                                e = Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, 2*num_relax, omega);
+                                e = Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, omega);
                                 e = Jacobi(A{k}, zeros(N(k),1), f - A{k}*(P{k}*e), num_relax, omega);
                             elseif (strcmp(smooth_type, 'async-Jacobi') == 1)
                                 e = async_Jacobi(A{k+1}, zeros(N(k+1),1), R{k+1}*e, num_relax, num_relax, max_smooth_wait, max_smooth_read_delay, 1);
