@@ -18,30 +18,7 @@ ${num_smooth_sweeps} \
 ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
-"global" \
-
-./VaryProbSize.sh \
-async_multadd \
-full \
-${problem} \
-${smoother} \
-${num_threads} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${interp_type} \
 "local" \
-
-./VaryProbSize.sh \
-async_multadd \
-semi \
-${problem} \
-${smoother} \
-${num_threads} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${interp_type} \
 "global" \
 
 ./VaryProbSize.sh \
@@ -55,9 +32,10 @@ ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
 "local" \
+"global" \
 
 ./VaryProbSize.sh \
-async_afacx \
+async_multadd \
 full \
 ${problem} \
 ${smoother} \
@@ -66,7 +44,21 @@ ${num_smooth_sweeps} \
 ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
-"global" \
+"local" \
+"local" \
+
+./VaryProbSize.sh \
+async_multadd \
+semi \
+${problem} \
+${smoother} \
+${num_threads} \
+${num_smooth_sweeps} \
+${coarsen_type} \
+${agg_nl} \
+${interp_type} \
+"local" \
+"local" \
 
 ./VaryProbSize.sh \
 async_afacx \
@@ -79,18 +71,7 @@ ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
 "local" \
-
-./VaryProbSize.sh \
-async_afacx \
-semi \
-${problem} \
-${smoother} \
-${num_threads} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${interp_type} \
-"global" \
+"local" \
 
 ./VaryProbSize.sh \
 async_afacx \
@@ -103,10 +84,11 @@ ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
 "local" \
+"local" \
 
 ./VaryProbSize.sh \
-mult \
-full \
+multadd \
+semi \
 ${problem} \
 ${smoother} \
 ${num_threads} \
@@ -114,6 +96,7 @@ ${num_smooth_sweeps} \
 ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
+"local" \
 "local" \
 
 ./VaryProbSize.sh \
@@ -127,6 +110,20 @@ ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
 "local" \
+"local" \
+
+./VaryProbSize.sh \
+afacx \
+semi \
+${problem} \
+${smoother} \
+${num_threads} \
+${num_smooth_sweeps} \
+${coarsen_type} \
+${agg_nl} \
+${interp_type} \
+"local" \
+"local" \
 
 ./VaryProbSize.sh \
 afacx \
@@ -138,4 +135,18 @@ ${num_smooth_sweeps} \
 ${coarsen_type} \
 ${agg_nl} \
 ${interp_type} \
+"local" \
+"local" \
+
+./VaryProbSize.sh \
+mult \
+full \
+${problem} \
+${smoother} \
+${num_threads} \
+${num_smooth_sweeps} \
+${coarsen_type} \
+${agg_nl} \
+${interp_type} \
+"local" \
 "local" \

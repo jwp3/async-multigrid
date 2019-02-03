@@ -111,8 +111,16 @@ void InitAlgebra(void *amg_vdata,
       if (level < all_data->grid.num_levels-1){
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
-            all_data->matrix.P[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+            if (all_data->input.num_post_smooth_sweeps > 0){
+               all_data->matrix.P[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+	    }
+	    else {
+	       all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
+	    }
             all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+	    if (all_data->input.num_pre_smooth_sweeps == 0){
+	       CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
+	    }
             SmoothTransfer(all_data,
                            hypre_ParCSRMatrixDiag(parP[level]),
                            hypre_ParCSRMatrixDiag(parR[level]),
@@ -146,7 +154,7 @@ void InitAlgebra(void *amg_vdata,
          all_data->level_vector[level].f = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          all_data->level_vector[level].u = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          all_data->level_vector[level].u_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-         all_data->level_vector[level].u_coarse =(HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+         all_data->level_vector[level].u_coarse = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          all_data->level_vector[level].u_coarse_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          all_data->level_vector[level].u_fine = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          all_data->level_vector[level].u_fine_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
@@ -235,7 +243,7 @@ void InitAlgebra(void *amg_vdata,
    }
    int level = 0;
    for (int i = 0; i < all_data->grid.n[level]; i++){
-      all_data->vector.f[level][i] = 1.0;//RandDouble(-1.0, 1.0);
+      all_data->vector.f[level][i] = RandDouble(-1.0, 1.0);
    }
 
    level = all_data->grid.num_levels-1;         
@@ -318,6 +326,7 @@ void PartitionLevels(AllData *all_data)
    all_data->thread.level_threads.resize(num_levels, vector<int>(0));
    all_data->thread.barrier_flags = (int **)malloc(num_levels * sizeof(int *));
    all_data->thread.barrier_root = (int *)malloc(num_levels * sizeof(int));
+   all_data->thread.global_barrier_flags = (int *)calloc(num_threads, sizeof(int));
    all_data->thread.loc_sum = (double *)malloc(num_threads * sizeof(double));
 
    all_data->output.smooth_wtime = (double *)malloc(num_threads * sizeof(double));
@@ -331,9 +340,7 @@ void PartitionLevels(AllData *all_data)
          all_data->thread.barrier_flags[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
       }
       int finest_level;
-      if ((all_data->input.solver == MULTADD ||
-          all_data->input.solver == ASYNC_MULTADD) &&
-	  all_data->input.res_compute_type == GLOBAL){
+      if (all_data->input.res_compute_type == GLOBAL){
          finest_level = 1;
       }
       else{
@@ -436,29 +443,13 @@ void PartitionLevels(AllData *all_data)
                   balanced_threads = num_threads;
                }
                else {
-                  balanced_threads = max((int)ceil(all_data->grid.frac_level_work[level] *
-                                                        (double)all_data->input.num_threads), 1);
-                  while (balanced_threads >= num_threads){
-                     balanced_threads--;
-                  }
-                  while (1){
-                     int candidate = balanced_threads-1;
-                     double diff_current =
-                        fabs(all_data->grid.frac_level_work[level] -
-                             (double)balanced_threads/(double)all_data->input.num_threads);
-                     double diff_candidate =
-                        fabs(all_data->grid.frac_level_work[level] -
-                             (double)candidate/(double)all_data->input.num_threads);
-                     if (diff_current <= diff_candidate ||
-                         balanced_threads == 1){
-                        break;
-                     }
-                     balanced_threads--;
-                  }
-                 // balanced_threads = max((int)floor(all_data->grid.frac_level_work[level] *
+                 // balanced_threads = max((int)ceil(all_data->grid.frac_level_work[level] *
                  //                                       (double)all_data->input.num_threads), 1);
+                 // while (balanced_threads >= num_threads){
+                 //    balanced_threads--;
+                 // }
                  // while (1){
-                 //    int candidate = balanced_threads+1;
+                 //    int candidate = balanced_threads-1;
                  //    double diff_current =
                  //       fabs(all_data->grid.frac_level_work[level] -
                  //            (double)balanced_threads/(double)all_data->input.num_threads);
@@ -466,11 +457,27 @@ void PartitionLevels(AllData *all_data)
                  //       fabs(all_data->grid.frac_level_work[level] -
                  //            (double)candidate/(double)all_data->input.num_threads);
                  //    if (diff_current <= diff_candidate ||
-                 //        (double)candidate/(double)all_data->input.num_threads > all_data->grid.frac_level_work[level]){
+                 //        balanced_threads == 1){
                  //       break;
                  //    }
-                 //    balanced_threads++;
+                 //    balanced_threads--;
                  // }
+                  balanced_threads = max((int)floor(all_data->grid.frac_level_work[level] *
+                                                        (double)all_data->input.num_threads), 1);
+                  while (1){
+                     int candidate = balanced_threads+1;
+                     double diff_current =
+                        fabs(all_data->grid.frac_level_work[level] -
+                             (double)balanced_threads/(double)all_data->input.num_threads);
+                     double diff_candidate =
+                        fabs(all_data->grid.frac_level_work[level] -
+                             (double)candidate/(double)all_data->input.num_threads);
+                     if (diff_current <= diff_candidate ||
+                         (double)candidate/(double)all_data->input.num_threads > all_data->grid.frac_level_work[level]){
+                        break;
+                     }
+                     balanced_threads++;
+                  }
                }
                for (int t = tid; t < tid + balanced_threads; t++){
                  // printf("%d ", t);
@@ -684,8 +691,11 @@ void ComputeWork(AllData *all_data)
       else {
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
-            all_data->grid.level_work[level] +=
-	       all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+	    if (all_data->input.num_post_smooth_sweeps > 0 &&
+                all_data->input.num_pre_smooth_sweeps > 0){
+               all_data->grid.level_work[level] +=
+	          all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+            }
          }
          else if (all_data->input.solver == AFACX ||
                   all_data->input.solver == ASYNC_AFACX){
@@ -730,6 +740,10 @@ void SmoothTransfer(AllData *all_data,
                     hypre_CSRMatrix *R,
                     int level)
 {
+   if (all_data->input.num_post_smooth_sweeps == 0 &&
+       all_data->input.num_pre_smooth_sweeps == 0){
+      return;
+   }
    hypre_CSRMatrix *RT = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
    CSR_Transpose(R, RT);
 
@@ -756,28 +770,39 @@ void SmoothTransfer(AllData *all_data,
 
    vector<double> diag(num_rows);
 
-   if (all_data->input.smooth_interp_type == JACOBI ||
-       all_data->input.smooth_interp_type == HYBRID_JACOBI_GAUSS_SEIDEL){
-      for (int i = 0; i < num_rows; i++){
-         diag[i] = A_data[A_i[i]];
-      }
-      for (int i = 0; i < num_rows; i++){
-         G_data[A_i[i]] = GT_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
-         for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
-            G_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[i];
-            GT_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[A_j[jj]];
+  // if (level > 0){
+      if (all_data->input.smooth_interp_type == JACOBI ||
+          all_data->input.smooth_interp_type == HYBRID_JACOBI_GAUSS_SEIDEL){
+         for (int i = 0; i < num_rows; i++){
+            diag[i] = A_data[A_i[i]];
+         }
+         for (int i = 0; i < num_rows; i++){
+            G_data[A_i[i]] = GT_data[A_i[i]] = 1.0 - all_data->input.smooth_weight;
+            for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
+               G_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[i];
+               GT_data[jj] = -all_data->input.smooth_weight * A_data[jj] / diag[A_j[jj]];
+            }
          }
       }
-   }
-   else{
-      for (int i = 0; i < num_rows; i++){
-         G_data[A_i[i]] = GT_data[A_i[i]] = 1.0 - A_data[A_i[i]] / all_data->matrix.L1_row_norm[level][i];
-         for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
-            G_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][i];
-            GT_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][A_j[jj]];
+      else{
+         for (int i = 0; i < num_rows; i++){
+            G_data[A_i[i]] = GT_data[A_i[i]] = 1.0 - A_data[A_i[i]] / all_data->matrix.L1_row_norm[level][i];
+            for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
+               G_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][i];
+               GT_data[jj] = -A_data[jj] / all_data->matrix.L1_row_norm[level][A_j[jj]];
+            }
          }
       }
-   }
+  // }
+  // else{
+  //    for (int i = 0; i < num_rows; i++){
+  //       G_data[A_i[i]] = GT_data[A_i[i]] = 1.0;
+  //       for (int jj = A_i[i]+1; jj < A_i[i+1]; jj++){
+  //          G_data[jj] = 0.0;
+  //          GT_data[jj] = 0.0;
+  //       }
+  //    }
+  // }
 
    hypre_CSRMatrixI(G) = A_i;
    hypre_CSRMatrixJ(G) = A_j;
@@ -785,8 +810,12 @@ void SmoothTransfer(AllData *all_data,
    hypre_CSRMatrixI(GT) = A_i;
    hypre_CSRMatrixJ(GT) = A_j;
    hypre_CSRMatrixData(GT) = GT_data;
-   EigenMatMat(all_data, G, P, all_data->matrix.P[level]);
-   EigenMatMat(all_data, RT, GT, all_data->matrix.R[level]);
+   if (all_data->input.num_post_smooth_sweeps > 0){
+      EigenMatMat(all_data, G, P, all_data->matrix.P[level]);
+   }
+   if (all_data->input.num_pre_smooth_sweeps > 0){
+      EigenMatMat(all_data, RT, GT, all_data->matrix.R[level]);
+   }
 }
 
 void EigenMatMat(AllData *all_data,

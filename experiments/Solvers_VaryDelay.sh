@@ -22,43 +22,7 @@ ${interp_type} \
 
 ./VaryDelay.sh \
 async_multadd \
-full \
-${smoother} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${n} \
-${problem} \
-${interp_type} \
-"global" \
-
-./VaryDelay.sh \
-async_multadd \
 semi \
-${smoother} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${n} \
-${problem} \
-${interp_type} \
-"local" \
-
-./VaryDelay.sh \
-async_multadd \
-semi \
-${smoother} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${n} \
-${problem} \
-${interp_type} \
-"global" \
-
-./VaryDelay.sh \
-async_afacx \
-full \
 ${smoother} \
 ${num_smooth_sweeps} \
 ${coarsen_type} \
@@ -78,18 +42,6 @@ ${agg_nl} \
 ${n} \
 ${problem} \
 ${interp_type} \
-"global" \
-
-./VaryDelay.sh \
-async_afacx \
-semi \
-${smoother} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${n} \
-${problem} \
-${interp_type} \
 "local" \
 
 ./VaryDelay.sh \
@@ -102,4 +54,4 @@ ${agg_nl} \
 ${n} \
 ${problem} \
 ${interp_type} \
-"global" \
+"local" \

@@ -23,7 +23,8 @@ void SMEM_Solve(AllData *all_data)
    double start = omp_get_wtime();
    if (all_data->input.async_flag == 1){
       if (all_data->input.num_threads == 1){
-         SEQ_Add_Vcycle_Sim(all_data);
+         SEQ_Add_Vcycle_SimRand(all_data);
+	 all_data->output.solve_wtime = omp_get_wtime() - start;
       }
       else {
          SMEM_Async_Add_AMG(all_data);
@@ -164,8 +165,11 @@ void SMEM_Smooth(AllData *all_data,
          else if (all_data->input.smoother == L1_JACOBI){
 	    if (all_data->input.solver == MULTADD ||
                 all_data->input.solver == ASYNC_MULTADD){
-               if (all_data->input.res_compute_type == LOCAL ||
-                   all_data->grid.global_smooth_flags[tid] == 0){
+               if ((all_data->input.res_compute_type == LOCAL ||
+                    all_data->grid.global_smooth_flags[tid] == 0)
+		    &&
+                   (all_data->input.num_post_smooth_sweeps > 0 &&
+                    all_data->input.num_pre_smooth_sweeps > 0)){
                   SMEM_Sync_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
                }
                else{
@@ -180,9 +184,12 @@ void SMEM_Smooth(AllData *all_data,
          else {
 	    if (all_data->input.solver == MULTADD ||
                 all_data->input.solver == ASYNC_MULTADD){
-	       if (all_data->input.res_compute_type == LOCAL ||
-                   all_data->grid.global_smooth_flags[tid] == 0 ||
-		   all_data->input.solver == MULTADD){
+	       if ((all_data->input.res_compute_type == LOCAL ||
+                    all_data->grid.global_smooth_flags[tid] == 0 ||
+		    all_data->input.solver == MULTADD)
+		    &&
+                   (all_data->input.num_post_smooth_sweeps > 0 &&
+                    all_data->input.num_pre_smooth_sweeps > 0)){
                   SMEM_Sync_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level, ns, ne);
                }
                else{
@@ -220,8 +227,11 @@ void SMEM_Smooth(AllData *all_data,
          SEQ_GaussSeidel(all_data, A, f, u, num_sweeps);
       }
       else if (all_data->input.smoother == L1_JACOBI){
-         if (all_data->input.solver == MULTADD ||
-             all_data->input.solver == ASYNC_MULTADD){
+         if ((all_data->input.solver == MULTADD ||
+              all_data->input.solver == ASYNC_MULTADD)
+	      &&
+             (all_data->input.num_post_smooth_sweeps > 0 &&
+              all_data->input.num_pre_smooth_sweeps > 0)){
             SEQ_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level);
          }
          else{
@@ -229,8 +239,11 @@ void SMEM_Smooth(AllData *all_data,
          }
       }
       else {
-         if (all_data->input.solver == MULTADD ||
-             all_data->input.solver == ASYNC_MULTADD){
+         if ((all_data->input.solver == MULTADD ||
+              all_data->input.solver == ASYNC_MULTADD)
+	      &&
+	     (all_data->input.num_post_smooth_sweeps > 0 &&
+              all_data->input.num_pre_smooth_sweeps > 0)){
             SEQ_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level);
          }
          else {

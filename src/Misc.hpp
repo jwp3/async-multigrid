@@ -32,6 +32,9 @@ int SMEM_LevelBarrier(AllData *all_data,
                       int **barrier_flags,
                       int level);
 
+void SMEM_Barrier(AllData *all_data,
+                  int *barrier_flags);
+
 int SMEM_SRCLevelBarrier(AllData *all_data,
 			 int *flag,
                          int level);

@@ -19,6 +19,7 @@
 #include <functional>
 #include <omp.h>
 #include <mkl.h>
+#include <numeric>
 
 #include "_hypre_utilities.h"
 #include "_hypre_parcsr_mv.h"
@@ -63,6 +64,9 @@
 #define LAPLACE_3D7PT 4
 #define MFEM_MAXWELL 5
 
+#define READ_SOL 0
+#define READ_RES 1
+
 using namespace std;
 using namespace mfem;
 
@@ -91,8 +95,8 @@ typedef struct{
    double r0_norm2;
    double hypre_e_norm2;
    double mfem_e_norm2;
-   int sim_time_instance;
-   int sim_cycle_time_instance;
+   int sim_time_instant;
+   int sim_cycle_time_instant;
 }OutputData;
 
 typedef struct{
@@ -123,9 +127,11 @@ typedef struct{
    int mfem_solve_print_flag;
    int sim_grid_wait;
    int sim_read_delay;
+   double sim_update_prob;
    int print_grid_wait_flag;
    int print_level_stats_flag;
    int smooth_interp_type;
+   int read_type;
 }InputData;
 
 typedef struct{
@@ -175,6 +181,7 @@ typedef struct{
 }PardisoData;
 
 typedef struct{
+   int amr_refs;
    int ref_levels;
    int order;
    char mesh_file[1000];
@@ -193,6 +200,7 @@ typedef struct{
    vector<vector<int>> level_threads;
    omp_lock_t lock;
    int *barrier_root;
+   int *global_barrier_flags;
    int **barrier_flags;
    double *loc_sum;
    int *A_ns_global;

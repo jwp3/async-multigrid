@@ -1,4 +1,4 @@
-function p = prolong(n)
+function p = prolong_2D(n)
 % return 2D prolongation operator for a fine grid of n by n
 % using bilinear interpolation
 

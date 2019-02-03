@@ -271,7 +271,8 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
             }
          }
       }
-      #pragma omp barrier
+      SMEM_Barrier(all_data, all_data->thread.global_barrier_flags);
+      //#pragma omp barrier
    }
 }
 
@@ -327,7 +328,8 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidelT(AllData *all_data,
             }
          }
       }
-      #pragma omp barrier
+      SMEM_Barrier(all_data, all_data->thread.global_barrier_flags);
+     // #pragma omp barrier
    }
 }
 

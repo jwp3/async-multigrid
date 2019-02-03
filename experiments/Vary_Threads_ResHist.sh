@@ -2,10 +2,10 @@
 
 problem="7pt"
 num_smooth_sweeps=1
-n=20
+n=30
 
-smoother="L1j"
-t_list=(1 2 4 8 16 32)
+smoother="j"
+t_list=(2 4 8 16 32)
 
 for t in ${t_list[@]}
 do
@@ -15,7 +15,7 @@ done
 
 
 smoother="async_gs"
-t_list=(1 2 4 8 16 32)
+t_list=(2 4 8 16 32)
 
 for t in ${t_list[@]}
 do

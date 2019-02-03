@@ -127,7 +127,36 @@ void MFEM_Elasticity(AllData *all_data,
 
    SparseMatrix A;
    Vector B, X;
-   a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+
+   int count_refs = all_data->mfem.amr_refs;
+   while(1){
+      std::vector<int> rand_inds;
+
+      a->Assemble();
+      b->Assemble();
+
+      a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+      if (count_refs == 0) break;
+      Vector *E = new Vector(mesh->GetNE());
+      for (int i = 0; i < mesh->GetNE(); i++){
+         rand_inds.push_back(i);
+         (*E)[i] = 0.0;
+      }
+      std::random_shuffle(rand_inds.begin(), rand_inds.end());
+      for (int i = 0; i < mesh->GetNE(); i++){
+         if (count_refs == 0) break;
+         (*E)[rand_inds.back()] = 2.0;
+         count_refs--;
+         rand_inds.pop_back();
+      }
+      mesh->RefineByError(*E, 1.0);
+
+      fespace->Update();
+      x.Update();
+
+      a->Update();
+      b->Update();
+   }
 
    if (all_data->input.mfem_test_error_flag == 1){
       for (int i = 0; i < A.Height(); i++){

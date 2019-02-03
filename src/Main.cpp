@@ -59,12 +59,14 @@ int main (int argc, char *argv[])
    HYPRE_Int interp_type = 6;
    int hypre_print_level = 0;
    int hypre_solve_flag = 0;
+   double strong_threshold = .25;
 
    AllData all_data;
    /* mfem parameters */
    all_data.mfem.ref_levels = 4;
    all_data.mfem.order = 1;
    strcpy(all_data.mfem.mesh_file, "./mfem/data/ball-nurbs.mesh");
+   all_data.mfem.amr_refs = 0;
 
    all_data.input.test_problem = LAPLACE_2D5PT;
    all_data.input.tol = 1e-9;
@@ -90,11 +92,13 @@ int main (int argc, char *argv[])
    all_data.input.hypre_test_error_flag = 0;
    all_data.input.mfem_test_error_flag = 0;
    all_data.input.mfem_solve_print_flag = 0;
+   all_data.input.sim_update_prob = .5;
    all_data.input.sim_grid_wait = 0;
    all_data.input.sim_read_delay = 0;
    all_data.input.print_grid_wait_flag = 0;
    all_data.input.print_level_stats_flag = 0;
    all_data.input.print_reshist_flag = 0;
+   all_data.input.read_type = READ_SOL;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
@@ -210,6 +214,11 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.input.smooth_weight = atof(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-th") == 0)
+      {
+         arg_index++;
+         strong_threshold = atof(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
          arg_index++;
@@ -238,6 +247,16 @@ int main (int argc, char *argv[])
          all_data.input.num_fine_smooth_sweeps = atoi(argv[arg_index]);
          all_data.input.num_coarse_smooth_sweeps = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-num_pre_smooth_sweeps") == 0)
+      {
+         arg_index++;
+         all_data.input.num_pre_smooth_sweeps = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-num_post_smooth_sweeps") == 0)
+      {
+         arg_index++;
+         all_data.input.num_post_smooth_sweeps = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-mxl") == 0)
       {
          arg_index++;
@@ -262,6 +281,11 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          all_data.mfem.ref_levels = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-mfem_amr_refs") == 0)
+      {
+         arg_index++;
+         all_data.mfem.amr_refs = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-mfem_order") == 0)
       {
@@ -339,6 +363,21 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.input.sim_read_delay = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-sim_update_prob") == 0)
+      {
+         arg_index++;
+         all_data.input.sim_update_prob = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-read_type") == 0)
+      {
+         arg_index++;
+         if (strcmp(argv[arg_index], "sol") == 0){
+            all_data.input.read_type = READ_SOL;
+         }
+         else if (strcmp(argv[arg_index], "res") == 0){
+            all_data.input.read_type = READ_RES;
+         }
+      }
       else if (strcmp(argv[arg_index], "-no_output") == 0)
       {
          all_data.input.print_output_flag = 0;
@@ -390,6 +429,7 @@ int main (int argc, char *argv[])
       all_data.input.thread_part_type = ALL_LEVELS;
    }
    if (all_data.input.solver == MULT ||
+       all_data.input.solver == MULTADD ||
        all_data.input.solver == AFACX ||
        all_data.input.solver == ASYNC_AFACX){
       all_data.input.res_compute_type = LOCAL; 
@@ -481,6 +521,7 @@ int main (int argc, char *argv[])
       else{
          relax_type = 0;
       }
+      HYPRE_ParCSRHybridSetStrongThreshold(solver, strong_threshold);
       HYPRE_BoomerAMGSetRelaxType(solver, 0);
       HYPRE_BoomerAMGSetRelaxWt(solver, all_data.input.smooth_weight);
       HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &b);

@@ -296,7 +296,8 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
                all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
             }
 	    all_data->grid.global_smooth_flags[tid] = 0;
-	    #pragma omp barrier
+	    //#pragma omp barrier
+	    SMEM_Barrier(all_data, all_data->thread.global_barrier_flags);
 	 }
       }
 
@@ -456,25 +457,25 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
          fine_grid = 0;
          ns = all_data->thread.A_ns[fine_grid][tid];
          ne = all_data->thread.A_ne[fine_grid][tid];
-        // if (all_data->input.async_type == SEMI_ASYNC){
-        //    if (tid == all_data->thread.barrier_root[thread_level]){
-        //       omp_set_lock(&(all_data->thread.lock));
-        //       all_data->grid.global_num_correct++;
-        //    }
-        //    SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-        //    for (int i = ns; i < ne; i++){
-        //       all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
-        //    }
-        //    if (tid == all_data->thread.barrier_root[thread_level]){
-        //       omp_unset_lock(&(all_data->thread.lock));
-        //    }
-        // }
-        // else {
+         if (all_data->input.async_type == SEMI_ASYNC){
+            if (tid == all_data->thread.barrier_root[thread_level]){
+               omp_set_lock(&(all_data->thread.lock));
+               all_data->grid.global_num_correct++;
+            }
+            SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            for (int i = ns; i < ne; i++){
+               all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
+            }
+            if (tid == all_data->thread.barrier_root[thread_level]){
+               omp_unset_lock(&(all_data->thread.lock));
+            }
+         }
+         else {
             for (int i = ns; i < ne; i++){
                #pragma omp atomic
                all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
             }
-        // }
+         }
          if (tid == all_data->thread.barrier_root[thread_level]){
             all_data->grid.local_num_correct[thread_level]++;
          }

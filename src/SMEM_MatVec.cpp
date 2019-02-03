@@ -13,7 +13,7 @@ void SMEM_Sync_Parfor_MatVec(AllData *all_data,
    HYPRE_Real *A_data = hypre_CSRMatrixData(A);
    HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
   
-   #pragma omp for schedule (static,1)
+   #pragma omp for
    for (int i = 0; i < num_rows; i++){
       Axi = 0.0;
       for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
@@ -36,7 +36,7 @@ void SMEM_Sync_Parfor_Residual(AllData *all_data,
    SMEM_Sync_Parfor_MatVec(all_data, A, x, y);
    int tid = omp_get_thread_num();
 
-   #pragma omp for schedule (static,1)
+   #pragma omp for
    for (int i = 0; i < n; i++)
    {
       r[i] = b[i] - y[i];

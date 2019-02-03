@@ -20,19 +20,7 @@ ${coarsen_type} \
 ${agg_nl} \
 ${mfem_mesh_file} \
 ${interp_type} \
-"global" \
-
-./VaryProbSize_Mfem.sh \
-async_multadd \
-full \
-${problem} \
-${smoother} \
-${num_threads} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${mfem_mesh_file} \
-${interp_type} \
+"local" \
 "local" \
 
 ./VaryProbSize_Mfem.sh \
@@ -46,10 +34,11 @@ ${coarsen_type} \
 ${agg_nl} \
 ${mfem_mesh_file} \
 ${interp_type} \
-"global" \
+"local" \
+"local" \
 
 ./VaryProbSize_Mfem.sh \
-async_multadd \
+multadd \
 semi \
 ${problem} \
 ${smoother} \
@@ -59,6 +48,21 @@ ${coarsen_type} \
 ${agg_nl} \
 ${mfem_mesh_file} \
 ${interp_type} \
+"local" \
+"local" \
+
+./VaryProbSize_Mfem.sh \
+multadd \
+full \
+${problem} \
+${smoother} \
+${num_threads} \
+${num_smooth_sweeps} \
+${coarsen_type} \
+${agg_nl} \
+${mfem_mesh_file} \
+${interp_type} \
+"local" \
 "local" \
 
 ./VaryProbSize_Mfem.sh \
@@ -73,16 +77,4 @@ ${agg_nl} \
 ${mfem_mesh_file} \
 ${interp_type} \
 "local" \
-
-./VaryProbSize_Mfem.sh \
-multadd \
-full \
-${problem} \
-${smoother} \
-${num_threads} \
-${num_smooth_sweeps} \
-${coarsen_type} \
-${agg_nl} \
-${mfem_mesh_file} \
-${interp_type} \
 "local" \

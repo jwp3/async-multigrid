@@ -338,6 +338,39 @@ int CheckConverge(AllData *all_data,
    return 0;
 }
 
+void SMEM_Barrier(AllData *all_data,
+                 int *barrier_flags)
+{
+   int root = 0;
+   int tid = omp_get_thread_num();
+   int num_threads = omp_get_num_threads();
+
+   barrier_flags[tid] = 1;
+   #pragma omp flush (barrier_flags)
+   while (1){
+      if (tid == root){
+         int s = 0;
+        // #pragma omp flush (barrier_flags)
+         for (int t = 0; t < num_threads; t++){
+            s += barrier_flags[t];
+         }
+         if (s == num_threads){
+            for (int t = 0; t < num_threads; t++){
+               barrier_flags[t] = num_threads;
+            }
+           // #pragma omp flush (barrier_flags)
+            return;
+         }
+      }
+      else{
+        // #pragma omp flush (barrier_flags)
+         if (barrier_flags[tid] == num_threads){
+            return;
+         }
+      }
+   }
+}
+
 int SMEM_LevelBarrier(AllData *all_data,
                       int **barrier_flags,
                       int level)
@@ -477,8 +510,8 @@ void InitVectors(AllData *all_data)
 void InitSolve(AllData *all_data)
 {
    InitVectors(all_data);
-   all_data->output.sim_time_instance = 0;
-   all_data->output.sim_cycle_time_instance = 0;
+   all_data->output.sim_time_instant = 0;
+   all_data->output.sim_cycle_time_instant = 0;
    all_data->grid.global_num_correct = 0;
    all_data->grid.global_cycle_num_correct = 0;
    for (int level = 0; level < all_data->grid.num_levels; level++){

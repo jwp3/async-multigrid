@@ -243,10 +243,10 @@ void MFEM_Laplacian(AllData *all_data,
    // 6. Set up the linear form b(.) which corresponds to the right-hand side of
    //    the FEM linear system, which in this case is (1,phi_i) where phi_i are
    //    the basis functions in the finite element fespace.
-   LinearForm *b = new LinearForm(fespace);
    ConstantCoefficient one(1.0);
+   LinearForm *b = new LinearForm(fespace);
+   BilinearFormIntegrator *integ = new DiffusionIntegrator(one);
    b->AddDomainIntegrator(new DomainLFIntegrator(one));
-   b->Assemble();
 
    // 7. Define the solution vector x as a finite element grid function
    //    corresponding to fespace. Initialize x with initial guess of zero,
@@ -265,11 +265,39 @@ void MFEM_Laplacian(AllData *all_data,
    //    conditions, applying conforming constraints for non-conforming AMR,
    //    static condensation, etc.
    if (static_cond) { a->EnableStaticCondensation(); }
-   a->Assemble();
 
    SparseMatrix A;
    Vector X, B;
-   a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+
+   int count_refs = all_data->mfem.amr_refs;
+   while(1){
+      std::vector<int> rand_inds;
+      
+      a->Assemble();
+      b->Assemble();
+
+      a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+      if (count_refs == 0) break;
+      Vector *E = new Vector(mesh->GetNE()); 
+      for (int i = 0; i < mesh->GetNE(); i++){
+         rand_inds.push_back(i);
+	 (*E)[i] = 0.0;
+      }
+      std::random_shuffle(rand_inds.begin(), rand_inds.end());
+      for (int i = 0; i < mesh->GetNE(); i++){
+         if (count_refs == 0) break;
+         (*E)[rand_inds.back()] = 2.0;
+         count_refs--;
+         rand_inds.pop_back();
+      }
+      mesh->RefineByError(*E, 1.0);
+      
+      fespace->Update();
+      x.Update();
+
+      a->Update();
+      b->Update();
+   }
 
    if (all_data->input.mfem_test_error_flag == 1){
       for (int i = 0; i < A.Height(); i++){
