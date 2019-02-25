@@ -510,8 +510,8 @@ void InitVectors(AllData *all_data)
 void InitSolve(AllData *all_data)
 {
    InitVectors(all_data);
-   all_data->output.sim_time_instant = 0;
-   all_data->output.sim_cycle_time_instant = 0;
+   all_data->output.sim_time_instance = 0;
+   all_data->output.sim_cycle_time_instance = 0;
    all_data->grid.global_num_correct = 0;
    all_data->grid.global_cycle_num_correct = 0;
    for (int level = 0; level < all_data->grid.num_levels; level++){

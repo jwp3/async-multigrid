@@ -120,7 +120,8 @@ void SMEM_Residual(AllData *all_data,
    SMEM_MatVec(all_data, A, x, y, ns, ne);
 
    for (int i = ns; i < ne; i++){
-      r[i] = b[i] - y[i];
+      double ri = b[i] - y[i];
+      r[i] = ri;
    }
 }
 

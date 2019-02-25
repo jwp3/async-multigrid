@@ -462,6 +462,7 @@ void PartitionLevels(AllData *all_data)
                  //    }
                  //    balanced_threads--;
                  // }
+
                   balanced_threads = max((int)floor(all_data->grid.frac_level_work[level] *
                                                         (double)all_data->input.num_threads), 1);
                   while (1){
@@ -648,13 +649,24 @@ void ComputeWork(AllData *all_data)
    int coarsest_level;
    int fine_grid, coarse_grid;
    all_data->grid.level_work = (int *)calloc(all_data->grid.num_levels, sizeof(int));
-   for (int level = 0; level < all_data->grid.num_levels; level++){
+
+   int finest_level;
+   if (all_data->input.res_compute_type == GLOBAL){
+      finest_level = 1;
+   }
+   else{
+      finest_level = 0;
+   }
+
+   for (int level = finest_level; level < all_data->grid.num_levels; level++){
       if (all_data->input.res_compute_type == GLOBAL){
-         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0])/
-             			       all_data->grid.num_levels;
+         all_data->grid.level_work[level] = 
+	    2*hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]) / all_data->grid.num_levels + 
+	       hypre_CSRMatrixNumRows(all_data->matrix.A[0]);
       }
       else{
-         all_data->grid.level_work[level] = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]);
+         all_data->grid.level_work[level] = 
+	    hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]) + hypre_CSRMatrixNumRows(all_data->matrix.A[0]);
       }
 
       if (all_data->input.solver == MULTADD ||
@@ -665,6 +677,7 @@ void ComputeWork(AllData *all_data)
                all_data->input.solver == ASYNC_AFACX){
          coarsest_level = level+1;
       }
+
       for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
          fine_grid = inner_level;
          coarse_grid = inner_level + 1;
@@ -678,7 +691,7 @@ void ComputeWork(AllData *all_data)
                   all_data->input.solver == ASYNC_AFACX){
             if (level < all_data->grid.num_levels-1){
                all_data->grid.level_work[level] +=
-                  hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
+                  fine_grid * hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
             }
          }
       }
@@ -686,7 +699,8 @@ void ComputeWork(AllData *all_data)
       fine_grid = level;
       coarse_grid = level + 1;
       if (level == all_data->grid.num_levels-1){
-         all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+         all_data->grid.level_work[level] += 
+	    hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
       }
       else {
          if (all_data->input.solver == MULTADD ||
@@ -694,8 +708,14 @@ void ComputeWork(AllData *all_data)
 	    if (all_data->input.num_post_smooth_sweeps > 0 &&
                 all_data->input.num_pre_smooth_sweeps > 0){
                all_data->grid.level_work[level] +=
-	          all_data->input.num_fine_smooth_sweeps * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+	          all_data->input.num_fine_smooth_sweeps * 
+		     (hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
+			hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]));
             }
+	    else {
+	       all_data->grid.level_work[level] += 
+		  hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]);
+	    }
          }
          else if (all_data->input.solver == AFACX ||
                   all_data->input.solver == ASYNC_AFACX){

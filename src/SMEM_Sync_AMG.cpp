@@ -292,12 +292,12 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
                         ns, ne);
             all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
             for (int i = ns; i < ne; i++){
-               #pragma omp atomic
+              // #pragma omp atomic
                all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
             }
 	    all_data->grid.global_smooth_flags[tid] = 0;
-	    //#pragma omp barrier
-	    SMEM_Barrier(all_data, all_data->thread.global_barrier_flags);
+	    #pragma omp barrier
+	   // SMEM_Barrier(all_data, all_data->thread.global_barrier_flags);
 	 }
       }
 
@@ -472,7 +472,7 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
          }
          else {
             for (int i = ns; i < ne; i++){
-               #pragma omp atomic
+              // #pragma omp atomic
                all_data->vector.u[fine_grid][i] += all_data->level_vector[thread_level].e[fine_grid][i];
             }
          }

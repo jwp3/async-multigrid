@@ -617,6 +617,7 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
                                int ns, int ne)
 {
    int k = 0;
+   int tid = omp_get_thread_num();
    if (all_data->grid.zero_flags[level] == 1){
       for (int i = ns; i < ne; i++){
          r[i] = f[i];
@@ -627,28 +628,33 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
    }
    while(1){
       for (int i = ns; i < ne; i++){
-         if (A->data[A->i[i]] != 0.0){
-            r[i] *= all_data->input.smooth_weight / A->data[A->i[i]];
-         }
+         r[i] *= all_data->input.smooth_weight / A->data[A->i[i]];
       }
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
-      SMEM_MatVec(all_data, A, r, y, ns, ne);
+      int ms, me;
+      if (level == 0 && all_data->input.res_compute_type == GLOBAL){
+         ms = all_data->thread.A_ns_global[tid];
+	 me = all_data->thread.A_ne_global[tid];
+      }
+      else {
+         ms = ns; me = ne;
+      }
+
+      SMEM_MatVec(all_data, A, r, y, ms, me);
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
-      for (int i = ns; i < ne; i++){
-         if (A->data[A->i[i]] != 0.0){
-            r[i] = (2.0 * A->data[A->i[i]] * r[i] / all_data->input.smooth_weight) - y[i];
-            r[i] *= all_data->input.smooth_weight / A->data[A->i[i]];
-         }
+      for (int i = ms; i < me; i++){
+         r[i] = (2.0 * A->data[A->i[i]] * r[i] / all_data->input.smooth_weight) - y[i];
+         r[i] *= all_data->input.smooth_weight / A->data[A->i[i]];
       }
       if (all_data->grid.zero_flags[level] == 1){
-         for (int i = ns; i < ne; i++){
+         for (int i = ms; i < me; i++){
             u[i] = r[i];
          }
       }
       else{
-         for (int i = ns; i < ne; i++){
+         for (int i = ms; i < me; i++){
             u[i] += r[i];
          }
       }
@@ -657,7 +663,7 @@ void SMEM_Sync_SymmetricJacobi(AllData *all_data,
       if (k == num_sweeps){
          break;
       }
-      SMEM_Residual(all_data, A, f, u, y, r, ns, ne);
+      SMEM_Residual(all_data, A, f, u, y, r, ms, me);
    }
 }
 
@@ -672,6 +678,7 @@ void SMEM_Sync_SymmetricL1Jacobi(AllData *all_data,
                                  int ns, int ne)
 {
    int k = 0;
+   int tid = omp_get_thread_num();
    if (all_data->grid.zero_flags[level] == 1){
       for (int i = ns; i < ne; i++){
          r[i] = f[i];
@@ -686,20 +693,28 @@ void SMEM_Sync_SymmetricL1Jacobi(AllData *all_data,
       }
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
-      SMEM_MatVec(all_data, A, r, y, ns, ne);
+      int ms, me;
+      if (level == 0 && all_data->input.res_compute_type == GLOBAL){
+         ms = all_data->thread.A_ns_global[tid];
+         me = all_data->thread.A_ne_global[tid];
+      }
+      else {
+         ms = ns; me = ne;
+      }
+      SMEM_MatVec(all_data, A, r, y, ms, me);
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 
-      for (int i = ns; i < ne; i++){
+      for (int i = ms; i < me; i++){
          r[i] = (2.0 * all_data->matrix.L1_row_norm[level][i] * r[i]) - y[i];
          r[i] /= all_data->matrix.L1_row_norm[level][i];
       }
       if (all_data->grid.zero_flags[level] == 1){
-         for (int i = ns; i < ne; i++){
+         for (int i = ns; i < me; i++){
             u[i] = r[i];
          }
       }
       else{
-         for (int i = ns; i < ne; i++){
+         for (int i = ns; i < me; i++){
             u[i] += r[i];
          }
       }

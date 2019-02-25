@@ -247,6 +247,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
    vector<int> grid_time_count(all_data->grid.num_levels);
    vector<int> correct_flags(all_data->grid.num_levels);
 
+   srand(0);
    for (int level = 0; level < all_data->grid.num_levels; level++){
       read[level] = (double *)calloc(all_data->grid.n[fine_grid], sizeof(double));
       fine_grid = 0;
@@ -267,6 +268,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
       num_cycles = all_data->input.num_cycles;
    }
 
+   srand(time(NULL));
    for (int k = 0; k < num_cycles; k++){
       while(1){
          for (int level = 0; level < all_data->grid.num_levels; level++){
@@ -462,7 +464,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                all_data->grid.last_read_correct[level] = all_data->grid.global_num_correct;
             }
          }
-         all_data->output.sim_time_instant++;
+         all_data->output.sim_time_instance++;
 
          for (int level = 0; level < all_data->grid.num_levels; level++){
             if (grid_time_count[level] < grid_wait_list[level]){
@@ -501,7 +503,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
             }
          }
       }
-      all_data->output.sim_cycle_time_instant = all_data->output.sim_time_instant;
+      all_data->output.sim_cycle_time_instance = all_data->output.sim_time_instance;
 
       SEQ_Residual(all_data,
                    all_data->matrix.A[fine_grid],
@@ -513,7 +515,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
          Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
       if (all_data->input.print_reshist_flag == 1){
          printf("%d\t%d\t%e\n",
-                k+1, all_data->output.sim_cycle_time_instant, all_data->output.r_norm2/all_data->output.r0_norm2);
+                k+1, all_data->output.sim_cycle_time_instance, all_data->output.r_norm2/all_data->output.r0_norm2);
       }
    }
 }
@@ -534,9 +536,7 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
    double **read = (double **)calloc(all_data->grid.num_levels, sizeof(double *));
    vector<int> grid_wait_list(all_data->grid.num_levels);
    vector<int> correct_flags(all_data->grid.num_levels);
-   vector<int> conv_flags(all_data->grid.num_levels);
    vector<int> level_perm(all_data->grid.num_levels);
-   vector<double> level_sim_update_prob(all_data->grid.num_levels);
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
       read[level] = (double *)calloc(all_data->grid.n[fine_grid], sizeof(double));
@@ -548,28 +548,15 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
             read_hist[i] = all_data->vector.r[fine_grid][i];
          }
       }
-      level_sim_update_prob[level] = RandDouble(all_data->input.sim_update_prob, 1.0);
    }
 
-  // for (int k = 0; k < all_data->input.num_cycles; k++){
-   int k = 0;
-   while(1){
+   for (int k = 0; k < all_data->input.num_cycles; k++){
       for (int level = 0; level < all_data->grid.num_levels; level++){
          all_data->grid.zero_flags[level] = 1;
 	 double rand_num = RandDouble(0.0, 1.0);
 	 correct_flags[level] = 0;
-	 if (rand_num <= level_sim_update_prob[level]){
-	    if (all_data->input.converge_test_type == LOCAL){
-	       if (conv_flags[level] == 0){
-	          correct_flags[level] = 1;
-	       }
-	       else{
-		  correct_flags[level] = 0;
-	       }
-	    }
-	    else{
-	       correct_flags[level] = 1;
-	    }
+	 if (rand_num < .5){
+	    correct_flags[level] = 1;
 	 }
          if (correct_flags[level] == 1){
             if (all_data->input.async_type == FULL_ASYNC){ 
@@ -745,9 +732,7 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
             }
 
             double grid_wait =
-               (double)(all_data->output.sim_time_instant - all_data->grid.last_read_correct[level]);
-	    if (grid_wait < 0)
-	       printf("%d, %d\n", all_data->grid.global_num_correct, all_data->grid.last_read_correct[level]);
+               (double)(all_data->grid.global_num_correct - all_data->grid.last_read_correct[level]);
             all_data->grid.mean_grid_wait[level] += grid_wait;
             all_data->grid.min_grid_wait[level] =
                fmin(grid_wait, all_data->grid.min_grid_wait[level]);
@@ -759,9 +744,6 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
             }
 
             all_data->grid.local_num_correct[level]++;
-	    if (all_data->grid.local_num_correct[level] == all_data->input.num_cycles){
-	       conv_flags[level] = 1;
-	    }
             all_data->grid.local_cycle_num_correct[level]++;
             all_data->grid.global_num_correct++;
          }
@@ -787,19 +769,14 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
       }
       read_hist.insert(read_hist.end(), temp.begin(), temp.end());
 
-      all_data->output.sim_time_instant++;
-      all_data->output.sim_cycle_time_instant = all_data->output.sim_time_instant;
+      all_data->output.sim_time_instance++;
+      all_data->output.sim_cycle_time_instance = all_data->output.sim_time_instance;
 
       all_data->output.r_norm2 =
          Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
       if (all_data->input.print_reshist_flag == 1){
          printf("%d\t%d\t%e\n",
-                k+1, all_data->output.sim_cycle_time_instant, all_data->output.r_norm2/all_data->output.r0_norm2);
+                k+1, all_data->output.sim_cycle_time_instance, all_data->output.r_norm2/all_data->output.r0_norm2);
       }
-
-      if (accumulate(conv_flags.begin(), conv_flags.end(), 0) == all_data->grid.num_levels){
-         break;
-      }
-      k++;
    }
 }

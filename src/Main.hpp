@@ -19,7 +19,6 @@
 #include <functional>
 #include <omp.h>
 #include <mkl.h>
-#include <numeric>
 
 #include "_hypre_utilities.h"
 #include "_hypre_parcsr_mv.h"
@@ -95,8 +94,8 @@ typedef struct{
    double r0_norm2;
    double hypre_e_norm2;
    double mfem_e_norm2;
-   int sim_time_instant;
-   int sim_cycle_time_instant;
+   int sim_time_instance;
+   int sim_cycle_time_instance;
 }OutputData;
 
 typedef struct{
@@ -127,7 +126,6 @@ typedef struct{
    int mfem_solve_print_flag;
    int sim_grid_wait;
    int sim_read_delay;
-   double sim_update_prob;
    int print_grid_wait_flag;
    int print_level_stats_flag;
    int smooth_interp_type;
