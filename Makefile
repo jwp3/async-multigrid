@@ -15,11 +15,13 @@ SMEM_CPP_FILES = $(SRC_DIR)Laplacian.cpp \
            	 $(SRC_DIR)SMEM_Solve.cpp \
 
 DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
+		 $(SRC_DIR)DMEM_Misc.cpp \
 		 $(SRC_DIR)DMEM_Laplacian.cpp \
 		 $(SRC_DIR)DMEM_Setup.cpp \
 		 $(SRC_DIR)DMEM_Comm.cpp \
 		 $(SRC_DIR)DMEM_MatVec.cpp \
-		 $(SRC_DIR)DMEM_Async_AMG.cpp \
+		 $(SRC_DIR)DMEM_Add.cpp \
+		 $(SRC_DIR)DMEM_Mult.cpp \
 
 CPP_COMPILE = g++ -fopenmp -O3
 ICPC_COMPILE = icpc -qopenmp -std=c++11 -O3 -Wall
@@ -31,7 +33,7 @@ NERSC_INCLUDE = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/
 GOTHAM_INCLUDE = -I/home/jwp3local/async-multigrid/src/hypre_include -I/home/jwp3local/async-multigrid/mfem
 
 INCLUDE=$(GOTHAM_INCLUDE)
-COMPILE=$(MPIICPC_COMPILE)
+COMPILE=$(MPICXX_COMPILE)
 LIBS = libHYPRE.a libmfem.a
 VARS = -DEIGEN_DONT_VECTORIZE=1
 

@@ -1,5 +1,5 @@
-#ifndef DMEM_ASYNC_AMG_HPP
-#define DMEM_ASYNC_AMG_HPP
+#ifndef DMEM_ADD_HPP
+#define DMEM_ADD_HPP
 
 #include "Main.hpp"
 #include "DMEM_Main.hpp"

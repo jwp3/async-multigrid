@@ -2,8 +2,9 @@
 #include "Misc.hpp"
 #include "DMEM_Main.hpp"
 #include "DMEM_Setup.hpp"
-#include "DMEM_Async_AMG.hpp"
-
+#include "DMEM_Misc.hpp"
+#include "DMEM_Add.hpp"
+#include "DMEM_Mult.hpp"
 
 int main (int argc, char *argv[])
 {
@@ -32,7 +33,7 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.max_levels = 20;
    dmem_all_data.hypre.solver_id = 0;
    dmem_all_data.hypre.agg_num_levels = 0;
-   dmem_all_data.hypre.coarsen_type = 10;
+   dmem_all_data.hypre.coarsen_type = 8; /* for proc-independent coarsening, can also use 0, 7, or 9 with "-agg_nl 0" */
    dmem_all_data.hypre.interp_type = 6;
    dmem_all_data.hypre.print_level = 0;
    dmem_all_data.hypre.solve_flag = 0;
@@ -48,16 +49,14 @@ int main (int argc, char *argv[])
    strcpy(dmem_all_data.mfem.mesh_file, "./mfem/data/ball-nurbs.mesh");
    dmem_all_data.mfem.amr_refs = 0;
 
-   dmem_all_data.input.test_problem = LAPLACE_2D5PT;
+   dmem_all_data.input.test_problem = LAPLACE_3D27PT;
    dmem_all_data.input.tol = 1e-9;
    dmem_all_data.input.async_flag = 0;
    dmem_all_data.input.async_type = FULL_ASYNC;
-   dmem_all_data.input.check_resnorm_flag = 0;
    dmem_all_data.input.global_conv_flag = 0;
    dmem_all_data.input.thread_part_type = ALL_LEVELS;
    dmem_all_data.input.converge_test_type = LOCAL;
    dmem_all_data.input.res_compute_type = LOCAL;
-   dmem_all_data.input.thread_part_distr_type = BALANCED_THREADS;
    dmem_all_data.input.num_pre_smooth_sweeps = 1;
    dmem_all_data.input.num_post_smooth_sweeps = 1;
    dmem_all_data.input.num_fine_smooth_sweeps = 1;
@@ -65,24 +64,19 @@ int main (int argc, char *argv[])
    dmem_all_data.input.format_output_flag = 0;
    dmem_all_data.input.num_threads = 1;
    dmem_all_data.input.print_output_flag = 1;
-   dmem_all_data.input.smooth_weight = 1;
+   dmem_all_data.input.smooth_weight = 1.0;
    dmem_all_data.input.smoother = JACOBI;
    dmem_all_data.input.smooth_interp_type = JACOBI;
    dmem_all_data.input.solver = MULT;
    dmem_all_data.input.hypre_test_error_flag = 0;
    dmem_all_data.input.mfem_test_error_flag = 0;
    dmem_all_data.input.mfem_solve_print_flag = 0;
-   dmem_all_data.input.sim_grid_wait = 0;
-   dmem_all_data.input.sim_read_delay = 0;
-   dmem_all_data.input.print_grid_wait_flag = 0;
    dmem_all_data.input.print_level_stats_flag = 0;
    dmem_all_data.input.print_reshist_flag = 0;
    dmem_all_data.input.read_type = READ_SOL;
-
-   int num_cycles = 20;
-   int start_cycle = num_cycles;
-   int c = 1;
-   int warmup = 1;
+   dmem_all_data.input.num_cycles = 20;
+   dmem_all_data.input.increment_cycle = 1;
+   dmem_all_data.input.start_cycle = 1;
 
    /* Parse command line */
    int arg_index = 0;
@@ -204,17 +198,17 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
          arg_index++;
-         num_cycles = start_cycle = atoi(argv[arg_index]);
+         dmem_all_data.input.num_cycles = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-start_cycle") == 0)
       {
          arg_index++;
-         start_cycle = atoi(argv[arg_index]);
+         dmem_all_data.input.start_cycle = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-incr_cycle") == 0)
       {
          arg_index++;
-         c = atoi(argv[arg_index]);
+         dmem_all_data.input.increment_cycle = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-tol") == 0)
       {
@@ -338,14 +332,18 @@ int main (int argc, char *argv[])
    }
    
    srand(0);
-   mkl_set_num_threads(1);
+  // mkl_set_num_threads(1);
  
    start = omp_get_wtime(); 
    DMEM_Setup(&dmem_all_data);
-   DMEM_ResetData(&dmem_all_data);
-   dmem_all_data.output.prob_setup_wtime = omp_get_wtime() - start;
+  // DMEM_ResetData(&dmem_all_data);
+   dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
-   DMEM_Async_AMG(&dmem_all_data);
+  // DMEM_Async_AMG(&dmem_all_data);
+   DMEM_Mult(&dmem_all_data);   
+
+   DMEM_PrintOutput(&dmem_all_data);
 
    MPI_Finalize();
+   return 0;
 }

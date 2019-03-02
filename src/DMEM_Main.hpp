@@ -19,6 +19,59 @@ using namespace std;
 using namespace mfem;
 
 typedef struct{
+   int *smooth_relax;
+   int *smooth_sweeps;
+   int *cycles;
+   double *smooth_wtime;
+   double *residual_wtime;
+   double *restrict_wtime;
+   double *prolong_wtime;
+   double *correct_time;
+   double setup_wtime;
+   double hypre_setup_wtime;
+   double problem_setup_wtime;
+   double solve_wtime;
+   double hypre_solve_wtime;
+   double r_norm2;
+   double r0_norm2;
+   double hypre_e_norm2;
+   double mfem_e_norm2;
+}DMEM_OutputData;
+
+typedef struct{
+   int num_pre_smooth_sweeps;
+   int num_post_smooth_sweeps;
+   int num_fine_smooth_sweeps;
+   int num_coarse_smooth_sweeps;
+   int num_cycles;
+   int start_cycle;
+   int increment_cycle;
+   int num_threads;
+   double tol;
+   int format_output_flag;
+   int print_reshist_flag;
+   int print_output_flag;
+   int global_conv_flag;
+   double smooth_weight;
+   int smoother;
+   int solver;
+   int async_flag;
+   int async_type;
+   int thread_part_type;
+   int thread_part_distr_type;
+   int converge_test_type;
+   int res_compute_type;
+   int test_problem;
+   int hypre_test_error_flag;
+   int mfem_test_error_flag;
+   int mfem_solve_print_flag;
+   int print_level_stats_flag;
+   int smooth_interp_type;
+   int read_type;
+}DMEM_InputData;
+
+
+typedef struct{
    int amr_refs;
    int ref_levels;
    int order;
@@ -27,8 +80,8 @@ typedef struct{
 }DMEM_MfemData;
 
 typedef struct{
-   HYPRE_Solver solver_local;
    HYPRE_Solver solver;
+   HYPRE_Solver solver_gridk;
    HYPRE_Int print_level;
    HYPRE_Int interp_type;
    HYPRE_Int coarsen_type;
@@ -43,14 +96,15 @@ typedef struct{
    hypre_ParVector *x;
    hypre_ParVector *b;
    hypre_ParVector *r;
+   hypre_ParVector *e;
 }DMEM_VectorData;
 
 typedef struct{
    int nx;
    int ny;
    int nz;
-   HYPRE_ParCSRMatrix A;
-   HYPRE_ParCSRMatrix A_local;
+   HYPRE_ParCSRMatrix A_fine;
+   HYPRE_ParCSRMatrix A_gridk;
 }DMEM_MatrixData;
 
 typedef struct{
@@ -108,10 +162,10 @@ typedef struct{
    DMEM_AllCommData comm;
    DMEM_HypreData hypre;
    DMEM_MatrixData matrix;
-   DMEM_VectorData vector;
-   DMEM_VectorData *level_vector;
-   InputData input;
-   OutputData output;
+   DMEM_VectorData vector_fine;
+   DMEM_VectorData vector_gridk;
+   DMEM_InputData input;
+   DMEM_OutputData output;
    DMEM_GridData grid;
    DMEM_MfemData mfem;
 }DMEM_AllData;

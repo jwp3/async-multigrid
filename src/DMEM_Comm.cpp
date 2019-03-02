@@ -9,7 +9,7 @@ void FineSendRecv(DMEM_AllData *dmem_all_data,
                   HYPRE_Real *v)
 {
    int flag;
-   hypre_ParCSRMatrix *A = dmem_all_data->matrix.A;
+   hypre_ParCSRMatrix *A = dmem_all_data->matrix.A_fine;
    hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(A);
    for (HYPRE_Int i = 0; i < comm_data->procs.size(); i++){
       HYPRE_Int ip = comm_data->procs[i];
