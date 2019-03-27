@@ -17,11 +17,14 @@ SMEM_CPP_FILES = $(SRC_DIR)Laplacian.cpp \
 DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 		 $(SRC_DIR)DMEM_Misc.cpp \
 		 $(SRC_DIR)DMEM_Laplacian.cpp \
+		 $(SRC_DIR)DMEM_ParMfem.cpp \
 		 $(SRC_DIR)DMEM_Setup.cpp \
 		 $(SRC_DIR)DMEM_Comm.cpp \
 		 $(SRC_DIR)DMEM_MatVec.cpp \
 		 $(SRC_DIR)DMEM_Add.cpp \
 		 $(SRC_DIR)DMEM_Mult.cpp \
+		 $(SRC_DIR)DMEM_SyncAdd.cpp \
+		 $(SRC_DIR)DMEM_Test.cpp \
 
 CPP_COMPILE = g++ -fopenmp -O3
 ICPC_COMPILE = icpc -qopenmp -std=c++11 -O3 -Wall
@@ -30,11 +33,11 @@ NERSC_COMPILE = CC -qopenmp -std=c++11 -O3 -mkl
 MPICXX_COMPILE =  mpicxx -fopenmp -g -std=c++0x -O3 #-Wall
 
 NERSC_INCLUDE = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
-GOTHAM_INCLUDE = -I/home/jwp3local/async-multigrid/src/hypre_include -I/home/jwp3local/async-multigrid/mfem
+GOTHAM_INCLUDE = -I/home/jwp3local/async-multigrid/mfem/mfem-3.4 -I/home/jwp3local/async-multigrid/mfem/hypre-2.11.2/src/hypre/include
 
 INCLUDE=$(GOTHAM_INCLUDE)
 COMPILE=$(MPICXX_COMPILE)
-LIBS = libHYPRE.a libmfem.a
+LIBS = ./mfem/mfem-3.4/libmfem.a ./mfem/hypre-2.11.2/src/lib/libHYPRE.a mfem/metis-5.1.0/libmetis.a
 VARS = -DEIGEN_DONT_VECTORIZE=1
 
 all: clean DMEM_Main

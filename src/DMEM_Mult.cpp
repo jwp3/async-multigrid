@@ -28,10 +28,12 @@ void DMEM_Mult(DMEM_AllData *dmem_all_data)
                                          1.0,
                                          F_array[0],
                                          dmem_all_data->vector_fine.r);
-      HYPRE_Real res_norm = sqrt(hypre_ParVectorInnerProd(dmem_all_data->vector_fine.r, dmem_all_data->vector_fine.r));
-      if (my_id == 0) printf("%e\n", res_norm);
+      hypre_ParVector *r = dmem_all_data->vector_fine.r;
+      HYPRE_Real res_norm = sqrt(hypre_ParVectorInnerProd(r, r));
+      if (my_id == 0) printf("%e\n", res_norm/dmem_all_data->output.r0_norm2);
    }
    MPI_Barrier(MPI_COMM_WORLD);
+   hypre_ParVectorCopy(U_array[0], dmem_all_data->vector_fine.x);
 }
 
 void MultCycle(DMEM_AllData *dmem_all_data,

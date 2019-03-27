@@ -12,12 +12,12 @@ void DMEM_Laplacian_3D_27pt(DMEM_AllData *dmem_all_data,
 
    HYPRE_ParCSRMatrix  A;
 
-   HYPRE_Int num_procs, myid;
+   HYPRE_Int num_procs, my_id;
    HYPRE_Int p, q, r;
    HYPRE_Real *values;
 
    hypre_MPI_Comm_size(comm, &num_procs);
-   hypre_MPI_Comm_rank(comm, &myid);
+   hypre_MPI_Comm_rank(comm, &my_id);
 
    P  = 1;
    Q  = num_procs;
@@ -32,7 +32,7 @@ void DMEM_Laplacian_3D_27pt(DMEM_AllData *dmem_all_data,
        Q > ny ||
        R > nz)
    {
-      if (myid == 0)
+      if (my_id == 0)
          hypre_printf("Error: Invalid number of processors or processor topology \n");
       exit(1);
    }
@@ -41,16 +41,16 @@ void DMEM_Laplacian_3D_27pt(DMEM_AllData *dmem_all_data,
     * Set up the grid structure
     *-----------------------------------------------------------*/
 
-   /* compute p,q,r from P,Q,R and myid */
-   p = myid % P;
-   q = ((myid - p)/P) % Q;
-   r = (myid - p - P*q)/(P*Q);
+   /* compute p,q,r from P,Q,R and my_id */
+   p = my_id % P;
+   q = ((my_id - p)/P) % Q;
+   r = (my_id - p - P*q)/(P*Q);
 
    /*-----------------------------------------------------------
     * Generate the matrix
     *-----------------------------------------------------------*/
 
-   values = hypre_CTAlloc(HYPRE_Real,  2, HYPRE_MEMORY_HOST);
+   values = hypre_CTAlloc(HYPRE_Real,  2);
 
    values[0] = 26.0;
    if (nx == 1 || ny == 1 || nz == 1)
@@ -61,7 +61,7 @@ void DMEM_Laplacian_3D_27pt(DMEM_AllData *dmem_all_data,
 
    A = (HYPRE_ParCSRMatrix) GenerateLaplacian27pt(comm, nx, ny, nz, P, Q, R, p, q, r, values);
 
-   hypre_TFree(values, HYPRE_MEMORY_HOST);
+   hypre_TFree(values);
 
    *A_ptr = A;
 }

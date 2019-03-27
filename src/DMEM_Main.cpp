@@ -5,10 +5,11 @@
 #include "DMEM_Misc.hpp"
 #include "DMEM_Add.hpp"
 #include "DMEM_Mult.hpp"
+#include "DMEM_SyncAdd.hpp"
 
 int main (int argc, char *argv[])
 {
-   int myid, num_procs;
+   int my_id, num_procs;
    DMEM_AllData dmem_all_data;
 
    double start;
@@ -26,15 +27,15 @@ int main (int argc, char *argv[])
 
    /* Initialize MPI */
    MPI_Init(&argc, &argv);
-   MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
    /* Hypre parameters */
    dmem_all_data.hypre.max_levels = 20;
    dmem_all_data.hypre.solver_id = 0;
-   dmem_all_data.hypre.agg_num_levels = 0;
-   dmem_all_data.hypre.coarsen_type = 8; /* for proc-independent coarsening, can also use 0, 7, or 9 with "-agg_nl 0" */
-   dmem_all_data.hypre.interp_type = 6;
+   dmem_all_data.hypre.agg_num_levels = 1;
+   dmem_all_data.hypre.coarsen_type = 7; /* for proc-independent coarsening, use 7 or 9 */
+   dmem_all_data.hypre.interp_type = 0;
    dmem_all_data.hypre.print_level = 0;
    dmem_all_data.hypre.solve_flag = 0;
    dmem_all_data.hypre.strong_threshold = .25;
@@ -44,9 +45,10 @@ int main (int argc, char *argv[])
    dmem_all_data.matrix.ny = n;
    dmem_all_data.matrix.nz = n;
    /* mfem parameters */
-   dmem_all_data.mfem.ref_levels = 4;
+   dmem_all_data.mfem.ref_levels = 1;
+   dmem_all_data.mfem.par_ref_levels = 1;
    dmem_all_data.mfem.order = 1;
-   strcpy(dmem_all_data.mfem.mesh_file, "./mfem/data/ball-nurbs.mesh");
+   strcpy(dmem_all_data.mfem.mesh_file, "./mfem/mfem-3.4/data/ball-nurbs.mesh");
    dmem_all_data.mfem.amr_refs = 0;
 
    dmem_all_data.input.test_problem = LAPLACE_3D27PT;
@@ -67,7 +69,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.smooth_weight = 1.0;
    dmem_all_data.input.smoother = JACOBI;
    dmem_all_data.input.smooth_interp_type = JACOBI;
-   dmem_all_data.input.solver = MULT;
+   dmem_all_data.input.solver = ASYNC_MULTADD;
    dmem_all_data.input.hypre_test_error_flag = 0;
    dmem_all_data.input.mfem_test_error_flag = 0;
    dmem_all_data.input.mfem_solve_print_flag = 0;
@@ -168,11 +170,11 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "async_multadd") == 0){
             dmem_all_data.input.solver = ASYNC_MULTADD;
-            dmem_all_data.input.async_flag = 1;
+           // dmem_all_data.input.async_flag = 1;
          }
          else if (strcmp(argv[arg_index], "async_afacx") == 0){
             dmem_all_data.input.solver = ASYNC_AFACX;
-            dmem_all_data.input.async_flag = 1;
+           // dmem_all_data.input.async_flag = 1;
          }
       }
       else if (strcmp(argv[arg_index], "-smooth_interp") == 0)
@@ -258,6 +260,11 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.mfem.ref_levels = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-mfem_par_ref_levels") == 0)
+      {
+         arg_index++;
+         dmem_all_data.mfem.par_ref_levels = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-mfem_amr_refs") == 0)
       {
          arg_index++;
@@ -330,20 +337,79 @@ int main (int argc, char *argv[])
       }
       arg_index++;
    }
+
+   dmem_all_data.grid.my_grid = 0;
    
    srand(0);
   // mkl_set_num_threads(1);
  
    start = omp_get_wtime(); 
    DMEM_Setup(&dmem_all_data);
-  // DMEM_ResetData(&dmem_all_data);
+   DMEM_ResetData(&dmem_all_data);
    dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
-  // DMEM_Async_AMG(&dmem_all_data);
-   DMEM_Mult(&dmem_all_data);   
+   if (dmem_all_data.input.solver == ASYNC_MULTADD){
+      DMEM_Add(&dmem_all_data);
+   }
+   else if (dmem_all_data.input.solver == MULTADD){
+      DMEM_SyncAdd(&dmem_all_data);
+   }
+   else if (dmem_all_data.input.solver == MULT){
+      DMEM_Mult(&dmem_all_data);
+   }
 
-   DMEM_PrintOutput(&dmem_all_data);
+  // DMEM_PrintOutput(&dmem_all_data);
 
+  // HYPRE_BoomerAMGSolve(dmem_all_data.hypre.solver,
+  //                      dmem_all_data.matrix.A_fine,
+  //                      dmem_all_data.vector_fine.f,
+  //                      dmem_all_data.vector_fine.u);
+
+  // if (dmem_all_data.input.solver == ASYNC_MULTADD){
+  //    HYPRE_Real *e_local_data;
+  //    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)dmem_all_data.hypre.solver_gridk;
+  //    hypre_ParVector *Vtemp = hypre_ParAMGDataVtemp(amg_data);
+  //    hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
+  //    hypre_ParVector **U_array = hypre_ParAMGDataUArray(amg_data);
+  //    hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
+  //    HYPRE_Real *u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[0]));
+  //    HYPRE_Real *f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[0]));
+  //    HYPRE_Real *x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data.vector_gridk.x));
+  //    HYPRE_Real *r_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data.vector_gridk.r));
+  //    HYPRE_Int num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[0]));
+
+  //    HYPRE_Int my_grid = dmem_all_data.grid.my_grid;
+  //    for (HYPRE_Int p = 0; p < num_procs; p++){
+  //       if (my_id == p){
+  //          for (HYPRE_Int i = 0; i < num_rows; i++){
+  //             printf("%d %e\n", my_grid, u_local_data[i]);
+  //          }
+  //       }
+  //       MPI_Barrier(MPI_COMM_WORLD);
+  //    }
+
+  //    if (my_id == 0) printf("\n");
+  //    MPI_Barrier(MPI_COMM_WORLD);
+
+  //    amg_data = (hypre_ParAMGData *)dmem_all_data.hypre.solver;
+  //    A_array = hypre_ParAMGDataAArray(amg_data);
+  //    r_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data.vector_fine.r));
+  //    x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data.vector_fine.x));
+  //    e_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data.vector_fine.e));
+  //    num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[0]));
+
+  //    my_grid = dmem_all_data.grid.my_grid;
+  //    for (HYPRE_Int p = 0; p < num_procs; p++){
+  //       if (my_id == p){
+  //          for (HYPRE_Int i = 0; i < num_rows; i++){
+  //             printf("%d %e\n", my_grid, e_local_data[i]);
+  //          }
+  //       }
+  //       MPI_Barrier(MPI_COMM_WORLD);
+  //    }
+  // }
+
+   MPI_Barrier(MPI_COMM_WORLD);
    MPI_Finalize();
    return 0;
 }

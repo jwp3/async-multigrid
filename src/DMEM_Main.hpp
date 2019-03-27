@@ -15,6 +15,9 @@
 #define GRIDK_OUTSIDE_SEND 7
 #define GRIDK_OUTSIDE_RECV 8
 
+#define READ 0
+#define ACCUMULATE 1
+
 using namespace std;
 using namespace mfem;
 
@@ -74,6 +77,7 @@ typedef struct{
 typedef struct{
    int amr_refs;
    int ref_levels;
+   int par_ref_levels;
    int order;
    char mesh_file[1000];
    double *u;
@@ -93,6 +97,8 @@ typedef struct{
 }DMEM_HypreData;
 
 typedef struct{
+   hypre_ParVector *u;
+   hypre_ParVector *f;
    hypre_ParVector *x;
    hypre_ParVector *b;
    hypre_ParVector *r;
@@ -109,6 +115,7 @@ typedef struct{
 
 typedef struct{
    vector<int> procs;
+   vector<int> message_count;
    vector<int> start;
    vector<int> end;
    vector<int> len;
@@ -153,8 +160,9 @@ typedef struct{
    int *num_procs_level;
    double *frac_level_work;
    int **procs;
+
    int my_grid;
-   int my_comm;
+   MPI_Comm my_comm;
    int *my_grid_procs_flags;
 }DMEM_GridData;
 

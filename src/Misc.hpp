@@ -20,6 +20,10 @@ int SumInt(int *x, int n);
 
 double SumDbl(double *x, int n);
 
+int MaxInt(int *x, int n);
+
+int MinInt(int *x, int n);
+
 double MaxDouble(double *x, int n);
 
 double MinDouble(double *x, int n);

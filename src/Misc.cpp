@@ -172,6 +172,28 @@ void PrintOutput(AllData all_data)
    }
 }
 
+int MinInt(int *x, int n)
+{
+   int min_val = x[0];
+   for (int i = 1; i < n; i++){
+      if (x[i] < min_val){
+         min_val = x[i];
+      }
+   }
+   return min_val;
+}
+
+int MaxInt(int *x, int n)
+{
+   int max_val = x[0];
+   for (int i = 1; i < n; i++){
+      if (x[i] > max_val){
+         max_val = x[i];
+      }
+   }
+   return max_val;
+}
+
 double MinDouble(double *x, int n)
 {
    double min_val = x[0];
