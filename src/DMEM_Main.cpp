@@ -177,6 +177,10 @@ int main (int argc, char *argv[])
            // dmem_all_data.input.async_flag = 1;
          }
       }
+      else if (strcmp(argv[arg_index], "-async") == 0)
+      {
+         dmem_all_data.input.async_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-smooth_interp") == 0)
       {
          arg_index++;
@@ -358,7 +362,7 @@ int main (int argc, char *argv[])
       DMEM_Mult(&dmem_all_data);
    }
 
-  // DMEM_PrintOutput(&dmem_all_data);
+   DMEM_PrintOutput(&dmem_all_data);
 
   // HYPRE_BoomerAMGSolve(dmem_all_data.hypre.solver,
   //                      dmem_all_data.matrix.A_fine,
@@ -382,7 +386,7 @@ int main (int argc, char *argv[])
   //    for (HYPRE_Int p = 0; p < num_procs; p++){
   //       if (my_id == p){
   //          for (HYPRE_Int i = 0; i < num_rows; i++){
-  //             printf("%d %e\n", my_grid, u_local_data[i]);
+  //            // printf("%d %e\n", my_grid, u_local_data[i]);
   //          }
   //       }
   //       MPI_Barrier(MPI_COMM_WORLD);
@@ -402,7 +406,7 @@ int main (int argc, char *argv[])
   //    for (HYPRE_Int p = 0; p < num_procs; p++){
   //       if (my_id == p){
   //          for (HYPRE_Int i = 0; i < num_rows; i++){
-  //             printf("%d %e\n", my_grid, e_local_data[i]);
+  //             printf("%d %e %e\n", my_grid, x_local_data[i], r_local_data[i]);
   //          }
   //       }
   //       MPI_Barrier(MPI_COMM_WORLD);

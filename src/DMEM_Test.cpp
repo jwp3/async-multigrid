@@ -147,3 +147,75 @@ void DMEM_TestResidual(DMEM_AllData *dmem_all_data)
   // }
 }
 
+void DMEM_TestIsendrecv(DMEM_AllData *dmem_all_data)
+{
+   HYPRE_Int my_id, num_procs;
+   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
+   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+
+   HYPRE_Int flag;
+   MPI_Status status;
+   MPI_Request request = MPI_REQUEST_NULL;
+   HYPRE_Int message_size = 10000, num_messages = 1000;
+   HYPRE_Real **sendbuf = hypre_CTAlloc(HYPRE_Real *, message_size);
+   HYPRE_Real *recvbuf = hypre_CTAlloc(HYPRE_Real, message_size);
+   MPI_Request *send_requests = (MPI_Request *)calloc(num_messages, sizeof(MPI_Request));
+   vector<double> recv_vec;
+
+   if (my_id == 0){
+      for (int i = 0; i < num_messages; i++){
+         sendbuf[i] = hypre_CTAlloc(HYPRE_Real, message_size);
+         sendbuf[i][0] = i;
+         hypre_MPI_Isend(sendbuf[i],
+                         message_size,
+                         HYPRE_MPI_REAL,
+                         1,
+                         0,
+                         MPI_COMM_WORLD,
+                         &(send_requests[i]));
+      }
+   }
+   MPI_Barrier(MPI_COMM_WORLD);
+   if (my_id == 0){
+      hypre_MPI_Waitall(num_messages,
+                        send_requests,
+                        MPI_STATUSES_IGNORE);
+   }
+   else if (my_id == 1){
+      HYPRE_Int count_recv = 1;
+      hypre_MPI_Irecv(recvbuf,
+                      message_size,
+                      HYPRE_MPI_REAL,
+                      0,
+                      0,
+                      MPI_COMM_WORLD,
+                      &(request));
+      while(1){
+         hypre_MPI_Test(&request, &flag, &status);
+         if (flag){
+            count_recv++;
+            recv_vec.push_back(recvbuf[0]);
+            if (count_recv == num_messages+1) break;
+            hypre_MPI_Irecv(recvbuf,
+                            message_size,
+                            HYPRE_MPI_REAL,
+                            0,
+                            0,
+                            MPI_COMM_WORLD,
+                            &(request));
+         }
+      }
+      for (int i = 1; i < num_messages; i++){
+         if (recv_vec[i-1] > recv_vec[i]) printf("%f\n", recv_vec[i]);
+      }
+     // for (int i = 0; i < num_messages; i++){
+     //    hypre_MPI_Recv(recvbuf,
+     //                   message_size,
+     //                   HYPRE_MPI_REAL,
+     //                   0,
+     //                   0,
+     //                   MPI_COMM_WORLD,
+     //                   MPI_STATUS_IGNORE);
+     // }
+   }
+}

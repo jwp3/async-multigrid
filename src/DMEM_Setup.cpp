@@ -136,6 +136,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
       int ip = dmem_all_data->grid.procs[my_grid][i];
       dmem_all_data->grid.my_grid_procs_flags[ip] = 1;
    }
+   MPI_Barrier(MPI_COMM_WORLD);
 
 /**************************************
  * gridk res
@@ -143,6 +144,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk res inside send */
    dmem_all_data->comm.gridk_r_inside_send.type = GRIDK_INSIDE_SEND;
+   dmem_all_data->comm.gridk_r_inside_send.tag = GRIDK_R_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 1){
          int p_gridk_start = all_gridk_parts[2*p];
@@ -194,6 +196,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk res outside send */
    dmem_all_data->comm.gridk_r_outside_send.type = GRIDK_OUTSIDE_SEND;
+   dmem_all_data->comm.gridk_r_outside_send.tag = GRIDK_R_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 0){
          int p_gridk_start = all_gridk_parts[2*p];
@@ -245,6 +248,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk res inside recv */
    dmem_all_data->comm.gridk_r_inside_recv.type = GRIDK_INSIDE_RECV;
+   dmem_all_data->comm.gridk_r_inside_recv.tag = GRIDK_R_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 1){
          int flag = 0;
@@ -297,6 +301,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk res outside recv */
    dmem_all_data->comm.gridk_r_outside_recv.type = GRIDK_OUTSIDE_RECV;
+   dmem_all_data->comm.gridk_r_outside_recv.tag = GRIDK_R_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 0){
          int flag = 0;
@@ -352,6 +357,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk correct inside send */
    dmem_all_data->comm.gridk_e_inside_send.type = GRIDK_INSIDE_SEND;
+   dmem_all_data->comm.gridk_e_inside_send.tag = GRIDK_E_TAG;
 
    dmem_all_data->comm.gridk_e_inside_send.procs = dmem_all_data->comm.gridk_r_inside_recv.procs;
    dmem_all_data->comm.gridk_e_inside_send.data =
@@ -368,6 +374,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk correct outside send */
    dmem_all_data->comm.gridk_e_outside_send.type = GRIDK_OUTSIDE_SEND;
+   dmem_all_data->comm.gridk_e_outside_send.tag = GRIDK_E_TAG;
    
    dmem_all_data->comm.gridk_e_outside_send.procs = dmem_all_data->comm.gridk_r_outside_recv.procs;
    dmem_all_data->comm.gridk_e_outside_send.data =
@@ -384,6 +391,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk correct inside recv */
    dmem_all_data->comm.gridk_e_inside_recv.type = GRIDK_INSIDE_RECV;
+   dmem_all_data->comm.gridk_e_inside_recv.tag = GRIDK_E_TAG;
 
    dmem_all_data->comm.gridk_e_inside_recv.procs = dmem_all_data->comm.gridk_r_inside_send.procs;
    dmem_all_data->comm.gridk_e_inside_recv.data =
@@ -400,6 +408,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* gridk correct outside recv */
    dmem_all_data->comm.gridk_e_outside_recv.type = GRIDK_OUTSIDE_RECV;
+   dmem_all_data->comm.gridk_e_outside_recv.tag = GRIDK_E_TAG;
 
    dmem_all_data->comm.gridk_e_outside_recv.procs = dmem_all_data->comm.gridk_r_outside_send.procs;
    dmem_all_data->comm.gridk_e_outside_recv.data =
@@ -417,20 +426,20 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 /************************************
 * FINE
 ************************************/
-   hypre_ParCSRCommPkg *comm_pkg =
-      hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_fine);
+   hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_fine);
    HYPRE_Int num_sends = hypre_ParCSRCommPkgNumSends(comm_pkg);
    HYPRE_Int num_recvs = hypre_ParCSRCommPkgNumRecvs(comm_pkg);
-   dmem_all_data->comm.fine_send_data =
-      (HYPRE_Real *)calloc(hypre_ParCSRCommPkgSendMapStart(comm_pkg,  num_sends), sizeof(HYPRE_Real));
+   dmem_all_data->comm.fine_send_data = hypre_CTAlloc(HYPRE_Real, hypre_ParCSRCommPkgSendMapStart(comm_pkg, num_sends));
    hypre_CSRMatrix *offd = hypre_ParCSRMatrixOffd(dmem_all_data->matrix.A_fine);
    HYPRE_Int num_cols_offd = hypre_CSRMatrixNumCols(offd);
-   dmem_all_data->comm.fine_recv_data =
-      (HYPRE_Real *)calloc(num_cols_offd, sizeof(HYPRE_Real));
+   dmem_all_data->comm.fine_recv_data = hypre_CTAlloc(HYPRE_Real, num_cols_offd);
+   dmem_all_data->vector_fine.x_ghost = hypre_SeqVectorCreate(num_cols_offd);
+   hypre_SeqVectorInitialize(dmem_all_data->vector_fine.x_ghost);
    int j;
 
 /* fine inside send */
    dmem_all_data->comm.fine_inside_send.type = FINE_INSIDE_SEND;
+   dmem_all_data->comm.fine_inside_send.tag = FINE_TAG;
    for (int i = 0; i < num_sends; i++){
       int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
@@ -455,6 +464,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* fine outside send */
    dmem_all_data->comm.fine_outside_send.type = FINE_OUTSIDE_SEND;
+   dmem_all_data->comm.fine_outside_send.tag = FINE_TAG;
    for (int i = 0; i < num_sends; i++){
       int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 0){
@@ -479,8 +489,9 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* fine inside recv */
    dmem_all_data->comm.fine_inside_recv.type = FINE_INSIDE_RECV;
+   dmem_all_data->comm.fine_inside_recv.tag = FINE_TAG;
    for (int i = 0; i < num_recvs; i++){
-      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
          dmem_all_data->comm.fine_inside_recv.procs.push_back(ip);
       }
@@ -490,7 +501,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
    AllocCommVars(&(dmem_all_data->comm.fine_inside_recv));
    j = 0;
    for (int i = 0; i < num_recvs; i++){
-      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
          dmem_all_data->comm.fine_inside_recv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
          dmem_all_data->comm.fine_inside_recv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
@@ -503,8 +514,9 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
 
 /* fine outside recv */
    dmem_all_data->comm.fine_outside_recv.type = FINE_OUTSIDE_RECV;
+   dmem_all_data->comm.fine_outside_recv.tag = FINE_TAG;
    for (int i = 0; i < num_recvs; i++){
-      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 0){
          dmem_all_data->comm.fine_outside_recv.procs.push_back(ip);
       }
@@ -514,7 +526,7 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
    AllocCommVars(&(dmem_all_data->comm.fine_outside_recv));
    j = 0;
    for (int i = 0; i < num_recvs; i++){
-      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 0){
          dmem_all_data->comm.fine_outside_recv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
          dmem_all_data->comm.fine_outside_recv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
@@ -529,30 +541,24 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.gridk_e_inside_send.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.gridk_e_inside_send.procs[i]);
-  //         // printf(" (%d,%d,%d)",
-  //         //        dmem_all_data->comm.gridk_r_inside_send.start[i],
-  //         //        dmem_all_data->comm.gridk_r_inside_send.end[i],
-  //         //        hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(dmem_all_data->matrix.A_fine)));
+  //       for (int i = 0; i < dmem_all_data->comm.fine_inside_send.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.fine_inside_send.procs[i]);
   //       }
   //       printf("\n");
   //    }
+  //    sleep(1);
   //    MPI_Barrier(MPI_COMM_WORLD);
   // }
   // if (my_id == 0) printf("inside recv:\n");
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.gridk_e_inside_recv.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.gridk_e_inside_recv.procs[i]);
-  //         // printf(" (%d,%d,%d)", 
-  //         //        dmem_all_data->comm.gridk_r_inside_recv.start[i],
-  //         //        dmem_all_data->comm.gridk_r_inside_recv.end[i],
-  //         //        hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(dmem_all_data->matrix.A_gridk)));
+  //       for (int i = 0; i < dmem_all_data->comm.fine_inside_recv.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.fine_inside_recv.procs[i]);
   //       }
   //       printf("\n");
   //    }
+  //    sleep(1);
   //    MPI_Barrier(MPI_COMM_WORLD);
   // }
 
@@ -560,22 +566,24 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.gridk_e_outside_send.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.gridk_e_outside_send.procs[i]);
+  //       for (int i = 0; i < dmem_all_data->comm.fine_outside_send.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.fine_outside_send.procs[i]);
   //       }
   //       printf("\n");
   //    }
+  //    sleep(1);
   //    MPI_Barrier(MPI_COMM_WORLD);
   // }
   // if (my_id == 0) printf("outside recv:\n");
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.gridk_e_outside_recv.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.gridk_e_outside_recv.procs[i]);
+  //       for (int i = 0; i < dmem_all_data->comm.fine_outside_recv.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.fine_outside_recv.procs[i]);
   //       }
   //       printf("\n");
   //    }
+  //    sleep(1);
   //    MPI_Barrier(MPI_COMM_WORLD);
   // }
 }
@@ -988,6 +996,7 @@ void GridkResetCommData(DMEM_CommData *comm_data)
 {
    for (int i = 0; i < comm_data->procs.size(); i++){
       comm_data->requests[i] = MPI_REQUEST_NULL;
+      comm_data->message_count[i] = 0;
       for (int j = 0; j < comm_data->len[i]; j++){
          comm_data->data[i][j] = 0;
       }
@@ -1023,6 +1032,7 @@ void ResetVector(DMEM_AllData *dmem_all_data,
      // b_local_data[i] = r_local_data[i] = RandDouble(-1.0,1.0);
       b_local_data[i] = f_local_data[i] = r_local_data[i] = 1.0;
    }
+
 }
 
 void DMEM_ResetData(DMEM_AllData *dmem_all_data)
@@ -1040,16 +1050,20 @@ void DMEM_ResetData(DMEM_AllData *dmem_all_data)
 
       for (int i = 0; i < dmem_all_data->comm.fine_inside_send.procs.size(); i++){
          dmem_all_data->comm.fine_inside_send.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.fine_inside_send.message_count[i] = 0;
       }
       for (int i = 0; i < dmem_all_data->comm.fine_inside_recv.procs.size(); i++){
-         dmem_all_data->comm.fine_outside_send.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.fine_inside_recv.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.fine_inside_recv.message_count[i] = 0;
       }
 
       for (int i = 0; i < dmem_all_data->comm.fine_outside_send.procs.size(); i++){
          dmem_all_data->comm.fine_outside_send.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.fine_outside_send.message_count[i] = 0;
       }
       for (int i = 0; i < dmem_all_data->comm.fine_outside_recv.procs.size(); i++){
          dmem_all_data->comm.fine_outside_recv.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.fine_outside_recv.message_count[i] = 0;
       }
 
       hypre_ParCSRMatrix *A = dmem_all_data->matrix.A_fine;
@@ -1061,11 +1075,11 @@ void DMEM_ResetData(DMEM_AllData *dmem_all_data)
          dmem_all_data->comm.fine_send_data[i] = 0;
       }
       HYPRE_Int num_cols_offd = hypre_CSRMatrixNumCols(offd);
+      HYPRE_Real *x_ghost_data = hypre_VectorData(dmem_all_data->vector_fine.x_ghost);
       for (int i = 0; i < num_cols_offd; i++){
          dmem_all_data->comm.fine_recv_data[i] = 0;
+         x_ghost_data[i] = 0;
       }
-
-      ResetVector(dmem_all_data, &(dmem_all_data->vector_gridk));
    }
 
    ResetVector(dmem_all_data, &(dmem_all_data->vector_fine));

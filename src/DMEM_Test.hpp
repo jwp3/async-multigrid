@@ -6,5 +6,6 @@
 
 void DMEM_TestCorrect(DMEM_AllData *dmem_all_data);
 void DMEM_TestResidual(DMEM_AllData *dmem_all_data);
+void DMEM_TestIsendrecv(DMEM_AllData *dmem_all_data);
 
 #endif

@@ -15,8 +15,16 @@
 #define GRIDK_OUTSIDE_SEND 7
 #define GRIDK_OUTSIDE_RECV 8
 
-#define READ 0
-#define ACCUMULATE 1
+
+
+#define READ 1
+#define ACCUMULATE 2
+
+
+
+#define FINE_TAG 1
+#define GRIDK_E_TAG 2
+#define GRIDK_R_TAG 3
 
 using namespace std;
 using namespace mfem;
@@ -103,6 +111,7 @@ typedef struct{
    hypre_ParVector *b;
    hypre_ParVector *r;
    hypre_ParVector *e;
+   hypre_Vector *x_ghost;
 }DMEM_VectorData;
 
 typedef struct{
@@ -124,6 +133,7 @@ typedef struct{
    int *new_info_flags;
    int type;
    int vector_type;
+   int tag;
    int *hypre_map;
 }DMEM_CommData;
 
