@@ -3,28 +3,24 @@
 
 #include "Main.hpp"
 
-#define FINE_INSIDE_SEND 1
-#define FINE_INSIDE_RECV 2
+#define FINE_INTRA_INSIDE_SEND 1
+#define FINE_INTRA_OUTSIDE_SEND 2
 
-#define FINE_OUTSIDE_SEND 3
-#define FINE_OUTSIDE_RECV 4
+#define FINE_INTRA_INSIDE_RECV 3
+#define FINE_INTRA_OUTSIDE_RECV 4
 
 #define GRIDK_INSIDE_SEND 5
-#define GRIDK_INSIDE_RECV 6
+#define GRIDK_OUTSIDE_SEND 6
 
-#define GRIDK_OUTSIDE_SEND 7
+#define GRIDK_INSIDE_RECV 7
 #define GRIDK_OUTSIDE_RECV 8
-
-
 
 #define READ 1
 #define ACCUMULATE 2
 
-
-
-#define FINE_TAG 1
-#define GRIDK_E_TAG 2
-#define GRIDK_R_TAG 3
+#define FINE_INTRA_TAG 1
+#define GRIDK_CORRECT_TAG 2
+#define GRIDK_RESIDUAL_TAG 3
 
 using namespace std;
 using namespace mfem;
@@ -138,24 +134,58 @@ typedef struct{
 }DMEM_CommData;
 
 typedef struct{
-   DMEM_CommData gridk_e_inside_send;
-   DMEM_CommData gridk_e_inside_recv;
+  // DMEM_CommData gridk_e_inside_send;
+  // DMEM_CommData gridk_e_inside_recv;
 
-   DMEM_CommData gridk_e_outside_send;
-   DMEM_CommData gridk_e_outside_recv;
+  // DMEM_CommData gridk_e_outside_send;
+  // DMEM_CommData gridk_e_outside_recv;
 
-   DMEM_CommData gridk_r_inside_send;
-   DMEM_CommData gridk_r_inside_recv;
+  // DMEM_CommData gridk_r_inside_send;
+  // DMEM_CommData gridk_r_inside_recv;
 
-   DMEM_CommData gridk_r_outside_send;
-   DMEM_CommData gridk_r_outside_recv;
+  // DMEM_CommData gridk_r_outside_send;
+  // DMEM_CommData gridk_r_outside_recv;
 
-   DMEM_CommData fine_inside_send;
-   DMEM_CommData fine_inside_recv;
+  // DMEM_CommData fine_inside_send;
+  // DMEM_CommData fine_inside_recv;
 
-   DMEM_CommData fine_outside_send;
-   DMEM_CommData fine_outside_recv;
+  // DMEM_CommData fine_outside_send;
+  // DMEM_CommData fine_outside_recv;
    
+   DMEM_CommData finestToGridk_Correct_insideSend;
+   DMEM_CommData finestToGridk_Correct_insideRecv;
+
+   DMEM_CommData finestToGridk_Correct_outsideSend;
+   DMEM_CommData finestToGridk_Correct_outsideRecv;
+
+   DMEM_CommData finestToGridk_Residual_insideSend;
+   DMEM_CommData finestToGridk_Residual_insideRecv;
+
+   DMEM_CommData finestToGridk_Residual_outsideSend;
+   DMEM_CommData finestToGridk_Residual_outsideRecv;
+
+   DMEM_CommData finestIntra_insideSend;
+   DMEM_CommData finestIntra_insideRecv;
+
+   DMEM_CommData finestIntra_outsideSend;
+   DMEM_CommData finestIntra_outsideRecv;
+
+
+
+
+
+
+
+
+
+
+   DMEM_CommData gridjToGridk_Correct_insideSend;
+   DMEM_CommData gridjToGridk_Correct_insideRecv;
+ 
+   DMEM_CommData gridjToGridk_Correct_outsideSend;
+   DMEM_CommData gridjToGridk_Correct_outsideRecv;
+  
+
    HYPRE_Real *fine_send_data;
    HYPRE_Real *fine_recv_data;
    int *hypre_send_map;

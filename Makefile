@@ -29,21 +29,24 @@ DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 CPP_COMPILE = g++ -fopenmp -O3
 ICPC_COMPILE = icpc -qopenmp -std=c++11 -O3 -Wall
 MPIICPC_COMPILE = mpiicpc -qopenmp -std=c++11 -O3 -mkl #-g -w3
-NERSC_COMPILE = CC -qopenmp -std=c++11 -O3 -mkl
-MPICXX_COMPILE =  mpicxx -fopenmp -g -std=c++0x -O3 #-Wall
+MPICXX_COMPILE =  mpicxx -mkl -fopenmp -std=c++0x -O3 #-Wall
 
-NERSC_INCLUDE = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
+NERSC_CORI_COMPILE = CC -qopenmp -std=c++11 -O3 -mkl
+LLNL_QUARTZ_COMPILE = $(MPICXX_COMPILE)
+GOTHAM_COMPILE = $(MPIICPC_COMPILE)
+
+NERSC_CORI_INCLUDE = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
 GOTHAM_INCLUDE = -I/home/jwp3local/async-multigrid/mfem/mfem-3.4 -I/home/jwp3local/async-multigrid/mfem/hypre-2.11.2/src/hypre/include
+LLNL_QUARTZ_INCLUDE = -I/g/g13/wolfsonp/Summer2019/AsyncMultigrid/async-multigrid/mfem/mfem-3.4 -I/g/g13/wolfsonp/Summer2019/AsyncMultigrid/async-multigrid/mfem/hypre/src/hypre/include
 
-INCLUDE=$(GOTHAM_INCLUDE)
-COMPILE=$(MPICXX_COMPILE)
-LIBS = ./mfem/mfem-3.4/libmfem.a ./mfem/hypre-2.11.2/src/lib/libHYPRE.a mfem/metis-5.1.0/libmetis.a
-VARS = -DEIGEN_DONT_VECTORIZE=1
+INCLUDE=$(LLNL_QUARTZ_INCLUDE)
+COMPILE=$(LLNL_QUARTZ_COMPILE)
+LIBS = ./mfem/mfem-3.4/libmfem.a ./mfem/hypre/src/lib/libHYPRE.a ./mfem/metis-5.1.0/libmetis.a
 
 all: clean DMEM_Main
 
 SMEM_Main: $(SRC_DIR)SMEM_Main.cpp
-	$(COMPILE) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(VARS) $(LIBS) $(INCLUDE) -o SMEM_Main
+	$(COMPILE) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) -DEIGEN_DONT_VECTORIZE=1 $(LIBS) $(INCLUDE) -o SMEM_Main
 	cp SMEM_Main experiments/SMEM_Main
 
 DMEM_Main: $(SRC_DIR)DMEM_Main.cpp

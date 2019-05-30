@@ -69,7 +69,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.smooth_weight = 1.0;
    dmem_all_data.input.smoother = JACOBI;
    dmem_all_data.input.smooth_interp_type = JACOBI;
-   dmem_all_data.input.solver = ASYNC_MULTADD;
+   dmem_all_data.input.solver = MULT;
    dmem_all_data.input.hypre_test_error_flag = 0;
    dmem_all_data.input.mfem_test_error_flag = 0;
    dmem_all_data.input.mfem_solve_print_flag = 0;
@@ -84,33 +84,27 @@ int main (int argc, char *argv[])
    int arg_index = 0;
    int print_usage = 0;
 
-   while (arg_index < argc)
-   {
-      if (strcmp(argv[arg_index], "-n") == 0)
-      {
+   while (arg_index < argc){
+      if (strcmp(argv[arg_index], "-n") == 0){
          arg_index++;
 	 n = atoi(argv[arg_index]);
 	 dmem_all_data.matrix.nx = n;
          dmem_all_data.matrix.ny = n;
          dmem_all_data.matrix.nz = n;
       }
-      else if (strcmp(argv[arg_index], "-nx") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-nx") == 0){
          arg_index++;
          dmem_all_data.matrix.nx = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-ny") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-ny") == 0){
          arg_index++;
          dmem_all_data.matrix.ny = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-nz") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-nz") == 0){
          arg_index++;
          dmem_all_data.matrix.nz = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-problem") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-problem") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "5pt") == 0){
             dmem_all_data.input.test_problem = LAPLACE_2D5PT;
@@ -131,8 +125,7 @@ int main (int argc, char *argv[])
             dmem_all_data.input.test_problem = MFEM_MAXWELL;
          }
       }
-      else if (strcmp(argv[arg_index], "-smoother") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-smoother") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "j") == 0){
             dmem_all_data.input.smoother = JACOBI;
@@ -155,8 +148,7 @@ int main (int argc, char *argv[])
             dmem_all_data.input.smooth_interp_type = L1_JACOBI;
          }
       }
-      else if (strcmp(argv[arg_index], "-solver") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-solver") == 0){
          arg_index++;
          dmem_all_data.input.solver = atoi(argv[arg_index]);
          if (strcmp(argv[arg_index], "mult") == 0){
@@ -177,12 +169,10 @@ int main (int argc, char *argv[])
            // dmem_all_data.input.async_flag = 1;
          }
       }
-      else if (strcmp(argv[arg_index], "-async") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-async") == 0){
          dmem_all_data.input.async_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-smooth_interp") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-smooth_interp") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "j") == 0){
             dmem_all_data.input.smooth_interp_type = JACOBI;
@@ -191,101 +181,82 @@ int main (int argc, char *argv[])
             dmem_all_data.input.smooth_interp_type = L1_JACOBI;
          }
       }
-      else if (strcmp(argv[arg_index], "-smooth_weight") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-smooth_weight") == 0){
          arg_index++;
          dmem_all_data.input.smooth_weight = atof(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-th") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-th") == 0){
          arg_index++;
          dmem_all_data.hypre.strong_threshold = atof(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-num_cycles") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-num_cycles") == 0){
          arg_index++;
          dmem_all_data.input.num_cycles = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-start_cycle") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-start_cycle") == 0){
          arg_index++;
          dmem_all_data.input.start_cycle = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-incr_cycle") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-incr_cycle") == 0){
          arg_index++;
          dmem_all_data.input.increment_cycle = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-tol") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-tol") == 0){
          arg_index++;
          dmem_all_data.input.tol = atof(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-num_smooth_sweeps") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-num_smooth_sweeps") == 0){
          arg_index++;
          dmem_all_data.input.num_pre_smooth_sweeps = atoi(argv[arg_index]);
          dmem_all_data.input.num_post_smooth_sweeps = atoi(argv[arg_index]);
          dmem_all_data.input.num_fine_smooth_sweeps = atoi(argv[arg_index]);
          dmem_all_data.input.num_coarse_smooth_sweeps = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-num_pre_smooth_sweeps") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-num_pre_smooth_sweeps") == 0){
          arg_index++;
          dmem_all_data.input.num_pre_smooth_sweeps = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-num_post_smooth_sweeps") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-num_post_smooth_sweeps") == 0){
          arg_index++;
          dmem_all_data.input.num_post_smooth_sweeps = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-mxl") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-mxl") == 0){
          arg_index++;
          dmem_all_data.hypre.max_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-agg_nl") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-agg_nl") == 0){
          arg_index++;
          dmem_all_data.hypre.agg_num_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-coarsen_type") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-coarsen_type") == 0){
          arg_index++;
          dmem_all_data.hypre.coarsen_type = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-interp_type") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-interp_type") == 0){
          arg_index++;
          dmem_all_data.hypre.interp_type = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-mfem_ref_levels") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-mfem_ref_levels") == 0){
          arg_index++;
          dmem_all_data.mfem.ref_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-mfem_par_ref_levels") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-mfem_par_ref_levels") == 0){
          arg_index++;
          dmem_all_data.mfem.par_ref_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-mfem_amr_refs") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-mfem_amr_refs") == 0){
          arg_index++;
          dmem_all_data.mfem.amr_refs = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-mfem_order") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-mfem_order") == 0){
          arg_index++;
          dmem_all_data.mfem.order = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-mfem_mesh_file") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-mfem_mesh_file") == 0){
          arg_index++;
          strcpy(dmem_all_data.mfem.mesh_file, argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-converge_test_type") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-converge_test_type") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "local") == 0){
             dmem_all_data.input.converge_test_type = LOCAL;
@@ -296,13 +267,11 @@ int main (int argc, char *argv[])
             dmem_all_data.input.global_conv_flag = 1;
          }
       }
-      else if (strcmp(argv[arg_index], "-num_runs") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-num_runs") == 0){
          arg_index++;
          num_runs = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-read_type") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-read_type") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "sol") == 0){
             dmem_all_data.input.read_type = READ_SOL;
@@ -311,32 +280,25 @@ int main (int argc, char *argv[])
             dmem_all_data.input.read_type = READ_RES;
          }
       }
-      else if (strcmp(argv[arg_index], "-no_output") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-no_output") == 0){
          dmem_all_data.input.print_output_flag = 0;
       }
-      else if (strcmp(argv[arg_index], "-format_output") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-format_output") == 0){
          dmem_all_data.input.format_output_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-print_reshist") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-print_reshist") == 0){
          dmem_all_data.input.print_reshist_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-print_hypre") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-print_hypre") == 0){
          dmem_all_data.hypre.print_level = 3;
       }
-      else if (strcmp(argv[arg_index], "-print_level_stats") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-print_level_stats") == 0){
          dmem_all_data.input.print_level_stats_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-hypre_test_error") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-hypre_test_error") == 0){
          dmem_all_data.input.hypre_test_error_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-mfem_test_error") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-mfem_test_error") == 0){
          dmem_all_data.input.mfem_test_error_flag = 1;
       }
       arg_index++;

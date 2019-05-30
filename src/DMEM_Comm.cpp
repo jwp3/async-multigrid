@@ -4,10 +4,10 @@
 
 using namespace std;
 
-void FineSendRecv(DMEM_AllData *dmem_all_data,
-                  DMEM_CommData *comm_data,
-                  HYPRE_Real *v,
-                  HYPRE_Int op)
+void FineIntraSendRecv(DMEM_AllData *dmem_all_data,
+                       DMEM_CommData *comm_data,
+                       HYPRE_Real *v,
+                       HYPRE_Int op)
 {
    int my_id;
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
@@ -23,7 +23,7 @@ void FineSendRecv(DMEM_AllData *dmem_all_data,
       HYPRE_Int vec_len = comm_data->len[i];
       switch(comm_data->type){
          /* fine inside send */
-         case FINE_INSIDE_SEND:
+         case FINE_INTRA_INSIDE_SEND:
             for (HYPRE_Int j = vec_start; j < vec_end; j++){
                dmem_all_data->comm.fine_send_data[j] = 
                   v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, j)];
@@ -38,7 +38,7 @@ void FineSendRecv(DMEM_AllData *dmem_all_data,
             comm_data->message_count[i]++;
             break;
          /* fine inside recv */
-         case FINE_INSIDE_RECV:
+         case FINE_INTRA_INSIDE_RECV:
             hypre_MPI_Irecv(&(dmem_all_data->comm.fine_recv_data[vec_start]),
                             vec_len,
                             HYPRE_MPI_REAL,
@@ -49,7 +49,7 @@ void FineSendRecv(DMEM_AllData *dmem_all_data,
             comm_data->message_count[i]++;
             break;
          /* fine outside send */
-         case FINE_OUTSIDE_SEND:
+         case FINE_INTRA_OUTSIDE_SEND:
             if (comm_data->message_count[i] < dmem_all_data->input.num_cycles){
                hypre_MPI_Test(&(comm_data->requests[i]), &flag, MPI_STATUS_IGNORE);
                if (flag){
@@ -69,7 +69,7 @@ void FineSendRecv(DMEM_AllData *dmem_all_data,
             }
             break;
          /* fine outside recv */
-         case FINE_OUTSIDE_RECV:
+         case FINE_INTRA_OUTSIDE_RECV:
             if (dmem_all_data->input.async_flag == 1 &&
                 comm_data->message_count[i] < dmem_all_data->input.num_cycles){
                do {
@@ -226,7 +226,6 @@ void GridkSendRecv(DMEM_AllData *dmem_all_data,
    }
 }
 
-
 void CompleteRecv(DMEM_AllData *dmem_all_data,
                   DMEM_CommData *comm_data,
                   HYPRE_Real *v,
@@ -236,8 +235,8 @@ void CompleteRecv(DMEM_AllData *dmem_all_data,
                      comm_data->requests,
                      hypre_MPI_STATUSES_IGNORE);
 
-   if (comm_data->type == FINE_INSIDE_RECV ||
-       comm_data->type == FINE_OUTSIDE_RECV){
+   if (comm_data->type == FINE_INTRA_INSIDE_RECV ||
+       comm_data->type == FINE_INTRA_OUTSIDE_RECV){
       for (HYPRE_Int i = 0; i < comm_data->procs.size(); i++){
          HYPRE_Int ip = comm_data->procs[i];
          HYPRE_Int vec_start = comm_data->start[i];

@@ -21,7 +21,8 @@ void PartitionGrids(DMEM_AllData *dmem_all_data);
 void ConstructMatrix(DMEM_AllData *dmem_all_data,
                      HYPRE_ParCSRMatrix *A,
                      MPI_Comm comm);
-void CreateCommData(DMEM_AllData *dmem_all_data);
+void CreateCommData_GlobalRes(DMEM_AllData *dmem_all_data);
+void CreateCommData_LocalRes(DMEM_AllData *dmem_all_data);
 void SetVectorComms(DMEM_AllData *dmem_all_data,
                     DMEM_VectorData *vector,
                     MPI_Comm comm);
@@ -91,7 +92,12 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
         // usleep(1000000);
         // MPI_Barrier(MPI_COMM_WORLD);
      // }
-      CreateCommData(dmem_all_data);
+      if (dmem_all_data->input.res_compute_type == GLOBAL){
+         CreateCommData_GlobalRes(dmem_all_data);
+      }
+      else {
+         CreateCommData_LocalRes(dmem_all_data);
+      }
      // sprintf(buffer, "A_async_%d.txt", my_grid);
      // DMEM_PrintParCSRMatrix(dmem_all_data->matrix.A_gridk, buffer);
    }
@@ -110,7 +116,481 @@ void AllocCommVars(DMEM_CommData *comm_data)
    comm_data->new_info_flags = (int *)calloc(comm_data->procs.size(), sizeof(int));
 }
 
-void CreateCommData(DMEM_AllData *dmem_all_data)
+void CreateCommData_LocalRes(DMEM_AllData *dmem_all_data)
+{
+   int num_procs, my_id;
+   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);   
+
+   int my_grid = dmem_all_data->grid.my_grid;
+
+   int gridk_start = hypre_ParCSRMatrixFirstRowIndex(dmem_all_data->matrix.A_gridk);
+   int gridk_end = hypre_ParCSRMatrixLastRowIndex(dmem_all_data->matrix.A_gridk);
+   int my_gridk_part[2] = {gridk_start, gridk_end};
+   int all_gridk_parts[2*num_procs];
+   MPI_Allgather(my_gridk_part, 2, MPI_INT, all_gridk_parts, 2, MPI_INT, MPI_COMM_WORLD);
+
+   int fine_start = hypre_ParCSRMatrixFirstRowIndex(dmem_all_data->matrix.A_fine);
+   int fine_end = hypre_ParCSRMatrixLastRowIndex(dmem_all_data->matrix.A_fine);
+   int my_fine_part[2] = {fine_start, fine_end};
+   int all_fine_parts[2*num_procs];
+   MPI_Allgather(my_fine_part, 2, MPI_INT, all_fine_parts, 2, MPI_INT, MPI_COMM_WORLD);
+
+   dmem_all_data->grid.my_grid_procs_flags = (int *)calloc(num_procs, sizeof(int));
+   my_grid = dmem_all_data->grid.my_grid;
+   for (int i = 0; i < dmem_all_data->grid.num_procs_level[my_grid]; i++){
+      int ip = dmem_all_data->grid.procs[my_grid][i];
+      dmem_all_data->grid.my_grid_procs_flags[ip] = 1;
+   }
+   MPI_Barrier(MPI_COMM_WORLD);
+
+/********************
+ * FINE TO GRIDK
+ ********************/
+
+/* fine to gridk res inside send */
+   dmem_all_data->comm.finestToGridk_Residual_insideSend.type = GRIDK_INSIDE_SEND;
+   dmem_all_data->comm.finestToGridk_Residual_insideSend.tag = GRIDK_RESIDUAL_TAG;
+   for (int p = 0; p < num_procs; p++){
+      int p_gridk_start = all_gridk_parts[2*p];
+      int p_gridk_end = all_gridk_parts[2*p+1];
+      int flag = 0;
+      if (p_gridk_start >= fine_start && p_gridk_start <= fine_end){
+         flag = 1;
+      }
+      else if (p_gridk_end <= fine_end && p_gridk_end >= fine_start){
+         flag = 1;
+      }
+      else if (p_gridk_end >= fine_end && p_gridk_start <= fine_start){
+         flag = 1;
+      }
+      if (flag == 1){
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.procs.push_back(p);
+      }
+   }
+
+   dmem_all_data->comm.finestToGridk_Residual_insideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Residual_insideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Residual_insideSend));
+
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Residual_insideSend.procs.size(); i++){
+      int p = dmem_all_data->comm.finestToGridk_Residual_insideSend.procs[i];
+      int p_gridk_start = all_gridk_parts[2*p];
+      int p_gridk_end = all_gridk_parts[2*p+1];
+      if (p_gridk_start >= fine_start && p_gridk_start <= fine_end){
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] = p_gridk_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] = fine_end;
+      }
+      else if (p_gridk_end <= fine_end && p_gridk_end >= fine_start){
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] = fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] = p_gridk_end;
+      }
+      else if (p_gridk_end >= fine_end && p_gridk_start <= fine_start){
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] = fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] = fine_end;
+      }
+
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.len[i] =
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] - dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] + 1;
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] -= fine_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] -= fine_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Residual_insideSend.len[i], sizeof(HYPRE_Real));
+   }
+
+/* fine to gridk res inside recv */
+   dmem_all_data->comm.finestToGridk_Residual_insideRecv.type = GRIDK_INSIDE_RECV;
+   dmem_all_data->comm.finestToGridk_Residual_insideRecv.tag = GRIDK_RESIDUAL_TAG;
+   for (int p = 0; p < num_procs; p++){
+      int flag = 0;
+      int p_fine_start = all_fine_parts[2*p];
+      int p_fine_end = all_fine_parts[2*p+1];
+      if (gridk_start >= p_fine_start && gridk_start <= p_fine_end){
+         flag = 1;
+      }
+      else if (gridk_end <= p_fine_end && gridk_end >= p_fine_start){
+         flag = 1;
+      }
+      else if (gridk_start <= p_fine_start && gridk_end >= p_fine_end){
+         flag = 1;
+      }
+      if (flag == 1){
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs.push_back(p);
+      }
+   }
+
+   dmem_all_data->comm.finestToGridk_Residual_insideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Residual_insideRecv));
+
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs.size(); i++){
+      int p = dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs[i];
+      int p_fine_start = all_fine_parts[2*p];
+      int p_fine_end = all_fine_parts[2*p+1];
+      if (gridk_start >= p_fine_start && gridk_start <= p_fine_end){
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] = gridk_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] = p_fine_end;
+      }
+      else if (gridk_end <= p_fine_end && gridk_end >= p_fine_start){
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] = p_fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] = gridk_end;
+      }
+      else if (gridk_start <= p_fine_start && gridk_end >= p_fine_end){
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] = p_fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] = p_fine_end;
+      }
+
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.len[i] =
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] - dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] + 1;
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] -= gridk_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] -= gridk_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Residual_insideRecv.len[i], sizeof(HYPRE_Real));
+   }
+
+/* fine to gridk correct inside send */
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.type = GRIDK_INSIDE_SEND;
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.tag = GRIDK_CORRECT_TAG;
+
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.procs = dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs;
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Correct_insideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Correct_insideSend));
+ 
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Correct_insideSend.procs.size(); i++){
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.start[i] = dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.end[i] = dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.len[i] = dmem_all_data->comm.finestToGridk_Residual_insideRecv.len[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Correct_insideSend.len[i], sizeof(HYPRE_Real));
+   }
+
+/* fine to gridk correct inside recv */
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.type = GRIDK_INSIDE_RECV;
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.tag = GRIDK_CORRECT_TAG;
+
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.procs = dmem_all_data->comm.finestToGridk_Residual_insideSend.procs;
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Correct_insideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Correct_insideRecv));
+
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Correct_insideRecv.procs.size(); i++){
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.start[i] = dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.end[i] = dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.len[i] = dmem_all_data->comm.finestToGridk_Residual_insideSend.len[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Correct_insideRecv.len[i], sizeof(HYPRE_Real));
+   }
+
+/************************************
+ * FINE INTRA
+ ************************************/
+   hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_fine);
+   HYPRE_Int num_sends = hypre_ParCSRCommPkgNumSends(comm_pkg);
+   HYPRE_Int num_recvs = hypre_ParCSRCommPkgNumRecvs(comm_pkg);
+   dmem_all_data->comm.fine_send_data = hypre_CTAlloc(HYPRE_Real, hypre_ParCSRCommPkgSendMapStart(comm_pkg, num_sends), HYPRE_MEMORY_HOST);
+   hypre_CSRMatrix *offd = hypre_ParCSRMatrixOffd(dmem_all_data->matrix.A_fine);
+   HYPRE_Int num_cols_offd = hypre_CSRMatrixNumCols(offd);
+   dmem_all_data->comm.fine_recv_data = hypre_CTAlloc(HYPRE_Real, num_cols_offd, HYPRE_MEMORY_HOST);
+   dmem_all_data->vector_fine.x_ghost = hypre_SeqVectorCreate(num_cols_offd);
+   hypre_SeqVectorInitialize(dmem_all_data->vector_fine.x_ghost);
+   int j;
+
+/* fine inside send */
+   dmem_all_data->comm.finestIntra_insideSend.type = FINE_INTRA_INSIDE_SEND;
+   dmem_all_data->comm.finestIntra_insideSend.tag = FINE_INTRA_TAG;
+   for (int i = 0; i < num_sends; i++){
+      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
+         dmem_all_data->comm.finestIntra_insideSend.procs.push_back(ip);
+      }
+   }
+   dmem_all_data->comm.finestIntra_insideSend.hypre_map =
+      (int *)malloc(dmem_all_data->comm.finestIntra_insideSend.procs.size() * sizeof(int));
+   AllocCommVars(&(dmem_all_data->comm.finestIntra_insideSend));
+   j = 0;
+   for (int i = 0; i < num_sends; i++){
+      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
+         dmem_all_data->comm.finestIntra_insideSend.start[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i);
+         dmem_all_data->comm.finestIntra_insideSend.end[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i+1);
+         dmem_all_data->comm.finestIntra_insideSend.len[j] =
+            dmem_all_data->comm.finestIntra_insideSend.end[j] - dmem_all_data->comm.finestIntra_insideSend.start[j];
+         dmem_all_data->comm.finestIntra_insideSend.hypre_map[j] = i; 
+         j++;
+      }
+   }
+
+/* fine inside recv */
+   dmem_all_data->comm.finestIntra_insideRecv.type = FINE_INTRA_INSIDE_RECV;
+   dmem_all_data->comm.finestIntra_insideRecv.tag = FINE_INTRA_TAG;
+   for (int i = 0; i < num_recvs; i++){
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
+      if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
+         dmem_all_data->comm.finestIntra_insideRecv.procs.push_back(ip);
+      }
+   }
+   dmem_all_data->comm.finestIntra_insideRecv.hypre_map =
+      (int *)malloc(dmem_all_data->comm.finestIntra_insideRecv.procs.size() * sizeof(int));
+   AllocCommVars(&(dmem_all_data->comm.finestIntra_insideRecv));
+   j = 0;
+   for (int i = 0; i < num_recvs; i++){
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
+      if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
+         dmem_all_data->comm.finestIntra_insideRecv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
+         dmem_all_data->comm.finestIntra_insideRecv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
+         dmem_all_data->comm.finestIntra_insideRecv.len[j] =
+            dmem_all_data->comm.finestIntra_insideRecv.end[j] - dmem_all_data->comm.finestIntra_insideRecv.start[j];
+         dmem_all_data->comm.finestIntra_insideRecv.hypre_map[j] = i;
+         j++;
+      }
+   }
+
+/*********************
+ * GRIDJ to GRIDK
+ *********************/   
+/* gridj to gridk correct inside send */
+   dmem_all_data->comm.gridjToGridk_Correct_insideSend.type = GRIDK_INSIDE_SEND;
+   dmem_all_data->comm.gridjToGridk_Correct_insideSend.tag = GRIDK_RESIDUAL_TAG;
+   for (int p = 0; p < num_procs; p++){
+      if (dmem_all_data->grid.my_grid_procs_flags[p] == 1){
+         int p_gridk_start = all_gridk_parts[2*p];
+         int p_gridk_end = all_gridk_parts[2*p+1];
+         int flag = 0;
+         if (p_gridk_end >= gridk_end && p_gridk_start <= gridk_start){
+            flag = 1;
+         }
+         else if (p_gridk_end <= gridk_end && p_gridk_start >= gridk_start){
+            flag = 1;
+         }
+         else if (p_gridk_start >= gridk_start && p_gridk_start <= gridk_end){
+            flag = 1;
+         }
+         else if (p_gridk_end <= gridk_end && p_gridk_end >= gridk_start){
+            flag = 1;
+         }
+
+         if (flag == 1){
+            dmem_all_data->comm.gridjToGridk_Correct_insideSend.procs.push_back(p);
+         }
+      }
+   }
+
+   dmem_all_data->comm.gridjToGridk_Correct_insideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.gridjToGridk_Correct_insideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.gridjToGridk_Correct_insideSend));
+
+   for (int i = 0; i < dmem_all_data->comm.gridjToGridk_Correct_insideSend.procs.size(); i++){
+      int p = dmem_all_data->comm.gridjToGridk_Correct_insideSend.procs[i];
+      int p_gridk_start = all_gridk_parts[2*p];
+      int p_gridk_end = all_gridk_parts[2*p+1];
+      if (p_gridk_end >= gridk_end && p_gridk_start <= gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.end[i] = gridk_end;
+      }
+      else if (p_gridk_end <= gridk_end && p_gridk_start >= gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.end[i] = p_gridk_end;
+      }
+      else if (p_gridk_start >= gridk_start && p_gridk_start <= gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.end[i] = gridk_end;
+      }
+      else if (p_gridk_end <= gridk_end && p_gridk_end >= gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.end[i] = p_gridk_end;
+      }
+
+      dmem_all_data->comm.gridjToGridk_Correct_insideSend.len[i] =
+         dmem_all_data->comm.gridjToGridk_Correct_insideSend.end[i] - dmem_all_data->comm.gridjToGridk_Correct_insideSend.start[i] + 1;
+      dmem_all_data->comm.gridjToGridk_Correct_insideSend.start[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_insideSend.end[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_insideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.gridjToGridk_Correct_insideSend.len[i], sizeof(HYPRE_Real));
+   }
+
+/* gridj to gridk correct outside send */
+   dmem_all_data->comm.gridjToGridk_Correct_outsideSend.type = GRIDK_OUTSIDE_SEND;
+   dmem_all_data->comm.gridjToGridk_Correct_outsideSend.tag = GRIDK_RESIDUAL_TAG;
+   for (int p = 0; p < num_procs; p++){
+      if (dmem_all_data->grid.my_grid_procs_flags[p] == 0){
+         int p_gridk_start = all_gridk_parts[2*p];
+         int p_gridk_end = all_gridk_parts[2*p+1];
+         int flag = 0;
+         if (p_gridk_end >= gridk_end && p_gridk_start <= gridk_start){
+            flag = 1;
+         }
+         else if (p_gridk_end <= gridk_end && p_gridk_start >= gridk_start){
+            flag = 1;
+         }
+         else if (p_gridk_start >= gridk_start && p_gridk_start <= gridk_end){
+            flag = 1;
+         }
+         else if (p_gridk_end <= gridk_end && p_gridk_end >= gridk_start){
+            flag = 1;
+         }
+
+         if (flag == 1){
+            dmem_all_data->comm.gridjToGridk_Correct_outsideSend.procs.push_back(p);
+         }
+      }
+   }
+
+   dmem_all_data->comm.gridjToGridk_Correct_outsideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.gridjToGridk_Correct_outsideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.gridjToGridk_Correct_outsideSend));
+
+   for (int i = 0; i < dmem_all_data->comm.gridjToGridk_Correct_outsideSend.procs.size(); i++){
+      int p = dmem_all_data->comm.gridjToGridk_Correct_outsideSend.procs[i];
+      int p_gridk_start = all_gridk_parts[2*p];
+      int p_gridk_end = all_gridk_parts[2*p+1];
+      if (p_gridk_end >= gridk_end && p_gridk_start <= gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.end[i] = gridk_end;
+      }
+      else if (p_gridk_end <= gridk_end && p_gridk_start >= gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.end[i] = p_gridk_end;
+      }
+      else if (p_gridk_start >= gridk_start && p_gridk_start <= gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.end[i] = gridk_end;
+      }
+      else if (p_gridk_end <= gridk_end && p_gridk_end >= gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.end[i] = p_gridk_end;
+      }
+
+      dmem_all_data->comm.gridjToGridk_Correct_outsideSend.len[i] =
+         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.end[i] - dmem_all_data->comm.gridjToGridk_Correct_outsideSend.start[i] + 1;
+      dmem_all_data->comm.gridjToGridk_Correct_outsideSend.start[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_outsideSend.end[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_outsideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.gridjToGridk_Correct_outsideSend.len[i], sizeof(HYPRE_Real));
+   }
+
+/* gridj to gridk correct inside recv */
+   dmem_all_data->comm.gridjToGridk_Correct_insideRecv.type = GRIDK_INSIDE_RECV;
+   dmem_all_data->comm.gridjToGridk_Correct_insideRecv.tag = GRIDK_RESIDUAL_TAG;
+   for (int p = 0; p < num_procs; p++){
+      if (dmem_all_data->grid.my_grid_procs_flags[p] == 1){
+         int flag = 0;
+         int p_gridk_start = all_gridk_parts[2*p];
+         int p_gridk_end = all_gridk_parts[2*p+1];
+         if (gridk_start <= p_gridk_start && gridk_end >= p_gridk_end){
+            flag = 1;
+         }
+         else if (gridk_start >= p_gridk_start && gridk_end <= p_gridk_end){
+            flag = 1;
+         }
+         else if (gridk_start >= p_gridk_start && gridk_start <= p_gridk_end){
+            flag = 1;
+         }
+         else if (gridk_end <= p_gridk_end && gridk_end >= p_gridk_start){
+            flag = 1;
+         }
+   
+         if (flag == 1){
+            dmem_all_data->comm.gridjToGridk_Correct_insideRecv.procs.push_back(p);
+         }
+      }
+   }
+
+   dmem_all_data->comm.gridjToGridk_Correct_insideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.gridjToGridk_Correct_insideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.gridjToGridk_Correct_insideRecv));
+
+   for (int i = 0; i < dmem_all_data->comm.gridjToGridk_Correct_insideRecv.procs.size(); i++){
+      int p = dmem_all_data->comm.gridjToGridk_Correct_insideRecv.procs[i];
+      int p_gridk_start = all_gridk_parts[2*p];
+      int p_gridk_end = all_gridk_parts[2*p+1];
+      if (gridk_start <= p_gridk_start && gridk_end >= p_gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.end[i] = p_gridk_end;
+      }
+      else if (gridk_start >= p_gridk_start && gridk_end <= p_gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.end[i] = gridk_end;
+      }
+      else if (gridk_start >= p_gridk_start && gridk_start <= p_gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.end[i] = p_gridk_end;
+      }
+      else if (gridk_end <= p_gridk_end && gridk_end >= p_gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.end[i] = gridk_end;
+      }
+
+      dmem_all_data->comm.gridjToGridk_Correct_insideRecv.len[i] =
+         dmem_all_data->comm.gridjToGridk_Correct_insideRecv.end[i] - dmem_all_data->comm.gridjToGridk_Correct_insideRecv.start[i] + 1;
+      dmem_all_data->comm.gridjToGridk_Correct_insideRecv.start[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_insideRecv.end[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_insideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.gridjToGridk_Correct_insideRecv.len[i], sizeof(HYPRE_Real));
+   }
+
+/* gridj to gridk correct outside recv */
+   dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.type = GRIDK_OUTSIDE_RECV;
+   dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.tag = GRIDK_RESIDUAL_TAG;
+   for (int p = 0; p < num_procs; p++){
+      if (dmem_all_data->grid.my_grid_procs_flags[p] == 0){
+         int flag = 0;
+         int p_gridk_start = all_gridk_parts[2*p];
+         int p_gridk_end = all_gridk_parts[2*p+1];
+         if (gridk_start <= p_gridk_start && gridk_end >= p_gridk_end){
+            flag = 1;
+         }
+         else if (gridk_start >= p_gridk_start && gridk_end <= p_gridk_end){
+            flag = 1;
+         }
+         else if (gridk_start >= p_gridk_start && gridk_start <= p_gridk_end){
+            flag = 1;
+         }
+         else if (gridk_end <= p_gridk_end && gridk_end >= p_gridk_start){
+            flag = 1;
+         }
+   
+         if (flag == 1){
+            dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.procs.push_back(p);
+         }
+      }
+   }
+
+   dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv));
+
+   for (int i = 0; i < dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.procs.size(); i++){
+      int p = dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.procs[i];
+      int p_gridk_start = all_gridk_parts[2*p];
+      int p_gridk_end = all_gridk_parts[2*p+1];
+      if (gridk_start <= p_gridk_start && gridk_end >= p_gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.end[i] = p_gridk_end;
+      }
+      else if (gridk_start >= p_gridk_start && gridk_end <= p_gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.end[i] = gridk_end;
+      }
+      else if (gridk_start >= p_gridk_start && gridk_start <= p_gridk_end){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.start[i] = gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.end[i] = p_gridk_end;
+      }
+      else if (gridk_end <= p_gridk_end && gridk_end >= p_gridk_start){
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.start[i] = p_gridk_start;
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.end[i] = gridk_end;
+      }
+
+      dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.len[i] =
+         dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.end[i] - dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.start[i] + 1;
+      dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.start[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.end[i] -= gridk_start;
+      dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.len[i], sizeof(HYPRE_Real));
+   }
+}
+
+void CreateCommData_GlobalRes(DMEM_AllData *dmem_all_data)
 {
    int num_procs, my_id;
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -143,8 +623,8 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
  **************************************/
 
 /* gridk res inside send */
-   dmem_all_data->comm.gridk_r_inside_send.type = GRIDK_INSIDE_SEND;
-   dmem_all_data->comm.gridk_r_inside_send.tag = GRIDK_R_TAG;
+   dmem_all_data->comm.finestToGridk_Residual_insideSend.type = GRIDK_INSIDE_SEND;
+   dmem_all_data->comm.finestToGridk_Residual_insideSend.tag = GRIDK_RESIDUAL_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 1){
          int p_gridk_start = all_gridk_parts[2*p];
@@ -160,43 +640,43 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
             flag = 1;
          }
          if (flag == 1){
-            dmem_all_data->comm.gridk_r_inside_send.procs.push_back(p);
+            dmem_all_data->comm.finestToGridk_Residual_insideSend.procs.push_back(p);
          }
       }
    }
 
-   dmem_all_data->comm.gridk_r_inside_send.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_r_inside_send.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_r_inside_send));
+   dmem_all_data->comm.finestToGridk_Residual_insideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Residual_insideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Residual_insideSend));
  
-   for (int i = 0; i < dmem_all_data->comm.gridk_r_inside_send.procs.size(); i++){
-      int p = dmem_all_data->comm.gridk_r_inside_send.procs[i];
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Residual_insideSend.procs.size(); i++){
+      int p = dmem_all_data->comm.finestToGridk_Residual_insideSend.procs[i];
       int p_gridk_start = all_gridk_parts[2*p];
       int p_gridk_end = all_gridk_parts[2*p+1];
       if (p_gridk_start >= fine_start && p_gridk_start <= fine_end){
-         dmem_all_data->comm.gridk_r_inside_send.start[i] = p_gridk_start;
-         dmem_all_data->comm.gridk_r_inside_send.end[i] = fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] = p_gridk_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] = fine_end;
       }
       else if (p_gridk_end <= fine_end && p_gridk_end >= fine_start){
-         dmem_all_data->comm.gridk_r_inside_send.start[i] = fine_start;
-         dmem_all_data->comm.gridk_r_inside_send.end[i] = p_gridk_end;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] = fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] = p_gridk_end;
       }
       else if (p_gridk_end >= fine_end && p_gridk_start <= fine_start){
-         dmem_all_data->comm.gridk_r_inside_send.start[i] = fine_start;
-         dmem_all_data->comm.gridk_r_inside_send.end[i] = fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] = fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] = fine_end;
       }
 
-      dmem_all_data->comm.gridk_r_inside_send.len[i] =
-         dmem_all_data->comm.gridk_r_inside_send.end[i] - dmem_all_data->comm.gridk_r_inside_send.start[i] + 1;
-      dmem_all_data->comm.gridk_r_inside_send.start[i] -= fine_start;
-      dmem_all_data->comm.gridk_r_inside_send.end[i] -= fine_start;
-      dmem_all_data->comm.gridk_r_inside_send.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_r_inside_send.len[i], sizeof(HYPRE_Real));
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.len[i] =
+         dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] - dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] + 1;
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i] -= fine_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i] -= fine_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Residual_insideSend.len[i], sizeof(HYPRE_Real));
    }
 
 /* gridk res outside send */
-   dmem_all_data->comm.gridk_r_outside_send.type = GRIDK_OUTSIDE_SEND;
-   dmem_all_data->comm.gridk_r_outside_send.tag = GRIDK_R_TAG;
+   dmem_all_data->comm.finestToGridk_Residual_outsideSend.type = GRIDK_OUTSIDE_SEND;
+   dmem_all_data->comm.finestToGridk_Residual_outsideSend.tag = GRIDK_RESIDUAL_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 0){
          int p_gridk_start = all_gridk_parts[2*p];
@@ -212,43 +692,43 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
             flag = 1;
          }
          if (flag == 1){
-            dmem_all_data->comm.gridk_r_outside_send.procs.push_back(p);
+            dmem_all_data->comm.finestToGridk_Residual_outsideSend.procs.push_back(p);
          }
       }
    }
 
-   dmem_all_data->comm.gridk_r_outside_send.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_r_outside_send.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_r_outside_send));
+   dmem_all_data->comm.finestToGridk_Residual_outsideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Residual_outsideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Residual_outsideSend));
 
-   for (int i = 0; i < dmem_all_data->comm.gridk_r_outside_send.procs.size(); i++){
-      int p = dmem_all_data->comm.gridk_r_outside_send.procs[i];
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Residual_outsideSend.procs.size(); i++){
+      int p = dmem_all_data->comm.finestToGridk_Residual_outsideSend.procs[i];
       int p_gridk_start = all_gridk_parts[2*p];
       int p_gridk_end = all_gridk_parts[2*p+1];
       if (p_gridk_start >= fine_start && p_gridk_start <= fine_end){
-         dmem_all_data->comm.gridk_r_outside_send.start[i] = p_gridk_start;
-         dmem_all_data->comm.gridk_r_outside_send.end[i] = fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_outsideSend.start[i] = p_gridk_start;
+         dmem_all_data->comm.finestToGridk_Residual_outsideSend.end[i] = fine_end;
       }
       else if (p_gridk_end <= fine_end && p_gridk_end >= fine_start){
-         dmem_all_data->comm.gridk_r_outside_send.start[i] = fine_start;
-         dmem_all_data->comm.gridk_r_outside_send.end[i] = p_gridk_end;
+         dmem_all_data->comm.finestToGridk_Residual_outsideSend.start[i] = fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_outsideSend.end[i] = p_gridk_end;
       }
       else if (p_gridk_end >= fine_end && p_gridk_start <= fine_start){
-         dmem_all_data->comm.gridk_r_outside_send.start[i] = fine_start;
-         dmem_all_data->comm.gridk_r_outside_send.end[i] = fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_outsideSend.start[i] = fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_outsideSend.end[i] = fine_end;
       }
 
-      dmem_all_data->comm.gridk_r_outside_send.len[i] =
-         dmem_all_data->comm.gridk_r_outside_send.end[i] - dmem_all_data->comm.gridk_r_outside_send.start[i] + 1;
-      dmem_all_data->comm.gridk_r_outside_send.start[i] -= fine_start;
-      dmem_all_data->comm.gridk_r_outside_send.end[i] -= fine_start;
-      dmem_all_data->comm.gridk_r_outside_send.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_r_outside_send.len[i], sizeof(HYPRE_Real));
+      dmem_all_data->comm.finestToGridk_Residual_outsideSend.len[i] =
+         dmem_all_data->comm.finestToGridk_Residual_outsideSend.end[i] - dmem_all_data->comm.finestToGridk_Residual_outsideSend.start[i] + 1;
+      dmem_all_data->comm.finestToGridk_Residual_outsideSend.start[i] -= fine_start;
+      dmem_all_data->comm.finestToGridk_Residual_outsideSend.end[i] -= fine_start;
+      dmem_all_data->comm.finestToGridk_Residual_outsideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Residual_outsideSend.len[i], sizeof(HYPRE_Real));
    }
 
 /* gridk res inside recv */
-   dmem_all_data->comm.gridk_r_inside_recv.type = GRIDK_INSIDE_RECV;
-   dmem_all_data->comm.gridk_r_inside_recv.tag = GRIDK_R_TAG;
+   dmem_all_data->comm.finestToGridk_Residual_insideRecv.type = GRIDK_INSIDE_RECV;
+   dmem_all_data->comm.finestToGridk_Residual_insideRecv.tag = GRIDK_RESIDUAL_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 1){
          int flag = 0;
@@ -264,44 +744,44 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
             flag = 1;
          }
          if (flag == 1){
-            dmem_all_data->comm.gridk_r_inside_recv.procs.push_back(p);
+            dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs.push_back(p);
          }
       }
    }
 
-   dmem_all_data->comm.gridk_r_inside_recv.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_r_inside_recv.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_r_inside_recv));
+   dmem_all_data->comm.finestToGridk_Residual_insideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Residual_insideRecv));
 
-   for (int i = 0; i < dmem_all_data->comm.gridk_r_inside_recv.procs.size(); i++){
-      int p = dmem_all_data->comm.gridk_r_inside_recv.procs[i];
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs.size(); i++){
+      int p = dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs[i];
       int p_fine_start = all_fine_parts[2*p];
       int p_fine_end = all_fine_parts[2*p+1];
       if (gridk_start >= p_fine_start && gridk_start <= p_fine_end){
-         dmem_all_data->comm.gridk_r_inside_recv.start[i] = gridk_start;
-         dmem_all_data->comm.gridk_r_inside_recv.end[i] = p_fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] = gridk_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] = p_fine_end;
       }
       else if (gridk_end <= p_fine_end && gridk_end >= p_fine_start){
-         dmem_all_data->comm.gridk_r_inside_recv.start[i] = p_fine_start;
-         dmem_all_data->comm.gridk_r_inside_recv.end[i] = gridk_end;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] = p_fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] = gridk_end;
       }
       else if (gridk_start <= p_fine_start && gridk_end >= p_fine_end){
-         dmem_all_data->comm.gridk_r_inside_recv.start[i] = p_fine_start;
-         dmem_all_data->comm.gridk_r_inside_recv.end[i] = p_fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] = p_fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] = p_fine_end;
       }
 
-      dmem_all_data->comm.gridk_r_inside_recv.len[i] =
-         dmem_all_data->comm.gridk_r_inside_recv.end[i] - dmem_all_data->comm.gridk_r_inside_recv.start[i] + 1;
-      dmem_all_data->comm.gridk_r_inside_recv.start[i] -= gridk_start;
-      dmem_all_data->comm.gridk_r_inside_recv.end[i] -= gridk_start;
-      dmem_all_data->comm.gridk_r_inside_recv.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_r_inside_recv.len[i], sizeof(HYPRE_Real));
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.len[i] =
+         dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] - dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] + 1;
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i] -= gridk_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i] -= gridk_start;
+      dmem_all_data->comm.finestToGridk_Residual_insideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Residual_insideRecv.len[i], sizeof(HYPRE_Real));
    }
 
 
 /* gridk res outside recv */
-   dmem_all_data->comm.gridk_r_outside_recv.type = GRIDK_OUTSIDE_RECV;
-   dmem_all_data->comm.gridk_r_outside_recv.tag = GRIDK_R_TAG;
+   dmem_all_data->comm.finestToGridk_Residual_outsideRecv.type = GRIDK_OUTSIDE_RECV;
+   dmem_all_data->comm.finestToGridk_Residual_outsideRecv.tag = GRIDK_RESIDUAL_TAG;
    for (int p = 0; p < num_procs; p++){
       if (/*p != my_id && */dmem_all_data->grid.my_grid_procs_flags[p] == 0){
          int flag = 0;
@@ -317,38 +797,38 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
             flag = 1;
          }
          if (flag == 1){
-            dmem_all_data->comm.gridk_r_outside_recv.procs.push_back(p);
+            dmem_all_data->comm.finestToGridk_Residual_outsideRecv.procs.push_back(p);
          }
       }
    }
 
-   dmem_all_data->comm.gridk_r_outside_recv.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_r_outside_recv.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_r_outside_recv));
+   dmem_all_data->comm.finestToGridk_Residual_outsideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Residual_outsideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Residual_outsideRecv));
 
-   for (int i = 0; i < dmem_all_data->comm.gridk_r_outside_recv.procs.size(); i++){
-      int p = dmem_all_data->comm.gridk_r_outside_recv.procs[i];
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Residual_outsideRecv.procs.size(); i++){
+      int p = dmem_all_data->comm.finestToGridk_Residual_outsideRecv.procs[i];
       int p_fine_start = all_fine_parts[2*p];
       int p_fine_end = all_fine_parts[2*p+1];
       if (gridk_start >= p_fine_start && gridk_start <= p_fine_end){
-         dmem_all_data->comm.gridk_r_outside_recv.start[i] = gridk_start;
-         dmem_all_data->comm.gridk_r_outside_recv.end[i] = p_fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_outsideRecv.start[i] = gridk_start;
+         dmem_all_data->comm.finestToGridk_Residual_outsideRecv.end[i] = p_fine_end;
       }
       else if (gridk_end <= p_fine_end && gridk_end >= p_fine_start){
-         dmem_all_data->comm.gridk_r_outside_recv.start[i] = p_fine_start;
-         dmem_all_data->comm.gridk_r_outside_recv.end[i] = gridk_end;
+         dmem_all_data->comm.finestToGridk_Residual_outsideRecv.start[i] = p_fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_outsideRecv.end[i] = gridk_end;
       }
       else if (gridk_start <= p_fine_start && gridk_end >= p_fine_end){
-         dmem_all_data->comm.gridk_r_outside_recv.start[i] = p_fine_start;
-         dmem_all_data->comm.gridk_r_outside_recv.end[i] = p_fine_end;
+         dmem_all_data->comm.finestToGridk_Residual_outsideRecv.start[i] = p_fine_start;
+         dmem_all_data->comm.finestToGridk_Residual_outsideRecv.end[i] = p_fine_end;
       }
 
-      dmem_all_data->comm.gridk_r_outside_recv.len[i] =
-         dmem_all_data->comm.gridk_r_outside_recv.end[i] - dmem_all_data->comm.gridk_r_outside_recv.start[i] + 1;
-      dmem_all_data->comm.gridk_r_outside_recv.start[i] -= gridk_start;
-      dmem_all_data->comm.gridk_r_outside_recv.end[i] -= gridk_start;
-      dmem_all_data->comm.gridk_r_outside_recv.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_r_outside_recv.len[i], sizeof(HYPRE_Real));
+      dmem_all_data->comm.finestToGridk_Residual_outsideRecv.len[i] =
+         dmem_all_data->comm.finestToGridk_Residual_outsideRecv.end[i] - dmem_all_data->comm.finestToGridk_Residual_outsideRecv.start[i] + 1;
+      dmem_all_data->comm.finestToGridk_Residual_outsideRecv.start[i] -= gridk_start;
+      dmem_all_data->comm.finestToGridk_Residual_outsideRecv.end[i] -= gridk_start;
+      dmem_all_data->comm.finestToGridk_Residual_outsideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Residual_outsideRecv.len[i], sizeof(HYPRE_Real));
    }
 
 /**************************************
@@ -356,71 +836,71 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
  **************************************/
 
 /* gridk correct inside send */
-   dmem_all_data->comm.gridk_e_inside_send.type = GRIDK_INSIDE_SEND;
-   dmem_all_data->comm.gridk_e_inside_send.tag = GRIDK_E_TAG;
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.type = GRIDK_INSIDE_SEND;
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.tag = GRIDK_CORRECT_TAG;
 
-   dmem_all_data->comm.gridk_e_inside_send.procs = dmem_all_data->comm.gridk_r_inside_recv.procs;
-   dmem_all_data->comm.gridk_e_inside_send.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_e_inside_send.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_e_inside_send));
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.procs = dmem_all_data->comm.finestToGridk_Residual_insideRecv.procs;
+   dmem_all_data->comm.finestToGridk_Correct_insideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Correct_insideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Correct_insideSend));
  
-   for (int i = 0; i < dmem_all_data->comm.gridk_e_inside_send.procs.size(); i++){
-      dmem_all_data->comm.gridk_e_inside_send.start[i] = dmem_all_data->comm.gridk_r_inside_recv.start[i];
-      dmem_all_data->comm.gridk_e_inside_send.end[i] = dmem_all_data->comm.gridk_r_inside_recv.end[i];
-      dmem_all_data->comm.gridk_e_inside_send.len[i] = dmem_all_data->comm.gridk_r_inside_recv.len[i];
-      dmem_all_data->comm.gridk_e_inside_send.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_e_inside_send.len[i], sizeof(HYPRE_Real));
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Correct_insideSend.procs.size(); i++){
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.start[i] = dmem_all_data->comm.finestToGridk_Residual_insideRecv.start[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.end[i] = dmem_all_data->comm.finestToGridk_Residual_insideRecv.end[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.len[i] = dmem_all_data->comm.finestToGridk_Residual_insideRecv.len[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Correct_insideSend.len[i], sizeof(HYPRE_Real));
    }
 
 /* gridk correct outside send */
-   dmem_all_data->comm.gridk_e_outside_send.type = GRIDK_OUTSIDE_SEND;
-   dmem_all_data->comm.gridk_e_outside_send.tag = GRIDK_E_TAG;
+   dmem_all_data->comm.finestToGridk_Correct_outsideSend.type = GRIDK_OUTSIDE_SEND;
+   dmem_all_data->comm.finestToGridk_Correct_outsideSend.tag = GRIDK_CORRECT_TAG;
    
-   dmem_all_data->comm.gridk_e_outside_send.procs = dmem_all_data->comm.gridk_r_outside_recv.procs;
-   dmem_all_data->comm.gridk_e_outside_send.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_e_outside_send.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_e_outside_send));
+   dmem_all_data->comm.finestToGridk_Correct_outsideSend.procs = dmem_all_data->comm.finestToGridk_Residual_outsideRecv.procs;
+   dmem_all_data->comm.finestToGridk_Correct_outsideSend.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Correct_outsideSend.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Correct_outsideSend));
 
-   for (int i = 0; i < dmem_all_data->comm.gridk_e_outside_send.procs.size(); i++){
-      dmem_all_data->comm.gridk_e_outside_send.start[i] = dmem_all_data->comm.gridk_r_outside_recv.start[i];
-      dmem_all_data->comm.gridk_e_outside_send.end[i] = dmem_all_data->comm.gridk_r_outside_recv.end[i];
-      dmem_all_data->comm.gridk_e_outside_send.len[i] = dmem_all_data->comm.gridk_r_outside_recv.len[i];
-      dmem_all_data->comm.gridk_e_outside_send.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_e_outside_send.len[i], sizeof(HYPRE_Real));
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Correct_outsideSend.procs.size(); i++){
+      dmem_all_data->comm.finestToGridk_Correct_outsideSend.start[i] = dmem_all_data->comm.finestToGridk_Residual_outsideRecv.start[i];
+      dmem_all_data->comm.finestToGridk_Correct_outsideSend.end[i] = dmem_all_data->comm.finestToGridk_Residual_outsideRecv.end[i];
+      dmem_all_data->comm.finestToGridk_Correct_outsideSend.len[i] = dmem_all_data->comm.finestToGridk_Residual_outsideRecv.len[i];
+      dmem_all_data->comm.finestToGridk_Correct_outsideSend.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Correct_outsideSend.len[i], sizeof(HYPRE_Real));
    }
 
 /* gridk correct inside recv */
-   dmem_all_data->comm.gridk_e_inside_recv.type = GRIDK_INSIDE_RECV;
-   dmem_all_data->comm.gridk_e_inside_recv.tag = GRIDK_E_TAG;
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.type = GRIDK_INSIDE_RECV;
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.tag = GRIDK_CORRECT_TAG;
 
-   dmem_all_data->comm.gridk_e_inside_recv.procs = dmem_all_data->comm.gridk_r_inside_send.procs;
-   dmem_all_data->comm.gridk_e_inside_recv.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_e_inside_recv.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_e_inside_recv));
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.procs = dmem_all_data->comm.finestToGridk_Residual_insideSend.procs;
+   dmem_all_data->comm.finestToGridk_Correct_insideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Correct_insideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Correct_insideRecv));
 
-   for (int i = 0; i < dmem_all_data->comm.gridk_e_inside_recv.procs.size(); i++){
-      dmem_all_data->comm.gridk_e_inside_recv.start[i] = dmem_all_data->comm.gridk_r_inside_send.start[i];
-      dmem_all_data->comm.gridk_e_inside_recv.end[i] = dmem_all_data->comm.gridk_r_inside_send.end[i];
-      dmem_all_data->comm.gridk_e_inside_recv.len[i] = dmem_all_data->comm.gridk_r_inside_send.len[i];
-      dmem_all_data->comm.gridk_e_inside_recv.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_e_inside_recv.len[i], sizeof(HYPRE_Real));
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Correct_insideRecv.procs.size(); i++){
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.start[i] = dmem_all_data->comm.finestToGridk_Residual_insideSend.start[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.end[i] = dmem_all_data->comm.finestToGridk_Residual_insideSend.end[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.len[i] = dmem_all_data->comm.finestToGridk_Residual_insideSend.len[i];
+      dmem_all_data->comm.finestToGridk_Correct_insideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Correct_insideRecv.len[i], sizeof(HYPRE_Real));
    }
 
 /* gridk correct outside recv */
-   dmem_all_data->comm.gridk_e_outside_recv.type = GRIDK_OUTSIDE_RECV;
-   dmem_all_data->comm.gridk_e_outside_recv.tag = GRIDK_E_TAG;
+   dmem_all_data->comm.finestToGridk_Correct_outsideRecv.type = GRIDK_OUTSIDE_RECV;
+   dmem_all_data->comm.finestToGridk_Correct_outsideRecv.tag = GRIDK_CORRECT_TAG;
 
-   dmem_all_data->comm.gridk_e_outside_recv.procs = dmem_all_data->comm.gridk_r_outside_send.procs;
-   dmem_all_data->comm.gridk_e_outside_recv.data =
-      (HYPRE_Real **)malloc(dmem_all_data->comm.gridk_e_outside_recv.procs.size() * sizeof(HYPRE_Real *));
-   AllocCommVars(&(dmem_all_data->comm.gridk_e_outside_recv));
+   dmem_all_data->comm.finestToGridk_Correct_outsideRecv.procs = dmem_all_data->comm.finestToGridk_Residual_outsideSend.procs;
+   dmem_all_data->comm.finestToGridk_Correct_outsideRecv.data =
+      (HYPRE_Real **)malloc(dmem_all_data->comm.finestToGridk_Correct_outsideRecv.procs.size() * sizeof(HYPRE_Real *));
+   AllocCommVars(&(dmem_all_data->comm.finestToGridk_Correct_outsideRecv));
 
-   for (int i = 0; i < dmem_all_data->comm.gridk_e_outside_recv.procs.size(); i++){
-      dmem_all_data->comm.gridk_e_outside_recv.start[i] = dmem_all_data->comm.gridk_r_outside_send.start[i];
-      dmem_all_data->comm.gridk_e_outside_recv.end[i] = dmem_all_data->comm.gridk_r_outside_send.end[i];
-      dmem_all_data->comm.gridk_e_outside_recv.len[i] = dmem_all_data->comm.gridk_r_outside_send.len[i];
-      dmem_all_data->comm.gridk_e_outside_recv.data[i] =
-         (HYPRE_Real *)calloc(dmem_all_data->comm.gridk_e_outside_recv.len[i], sizeof(HYPRE_Real));
+   for (int i = 0; i < dmem_all_data->comm.finestToGridk_Correct_outsideRecv.procs.size(); i++){
+      dmem_all_data->comm.finestToGridk_Correct_outsideRecv.start[i] = dmem_all_data->comm.finestToGridk_Residual_outsideSend.start[i];
+      dmem_all_data->comm.finestToGridk_Correct_outsideRecv.end[i] = dmem_all_data->comm.finestToGridk_Residual_outsideSend.end[i];
+      dmem_all_data->comm.finestToGridk_Correct_outsideRecv.len[i] = dmem_all_data->comm.finestToGridk_Residual_outsideSend.len[i];
+      dmem_all_data->comm.finestToGridk_Correct_outsideRecv.data[i] =
+         (HYPRE_Real *)calloc(dmem_all_data->comm.finestToGridk_Correct_outsideRecv.len[i], sizeof(HYPRE_Real));
    }
 
 /************************************
@@ -429,110 +909,110 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
    hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_fine);
    HYPRE_Int num_sends = hypre_ParCSRCommPkgNumSends(comm_pkg);
    HYPRE_Int num_recvs = hypre_ParCSRCommPkgNumRecvs(comm_pkg);
-   dmem_all_data->comm.fine_send_data = hypre_CTAlloc(HYPRE_Real, hypre_ParCSRCommPkgSendMapStart(comm_pkg, num_sends));
+   dmem_all_data->comm.fine_send_data = hypre_CTAlloc(HYPRE_Real, hypre_ParCSRCommPkgSendMapStart(comm_pkg, num_sends), HYPRE_MEMORY_HOST);
    hypre_CSRMatrix *offd = hypre_ParCSRMatrixOffd(dmem_all_data->matrix.A_fine);
    HYPRE_Int num_cols_offd = hypre_CSRMatrixNumCols(offd);
-   dmem_all_data->comm.fine_recv_data = hypre_CTAlloc(HYPRE_Real, num_cols_offd);
+   dmem_all_data->comm.fine_recv_data = hypre_CTAlloc(HYPRE_Real, num_cols_offd, HYPRE_MEMORY_HOST);
    dmem_all_data->vector_fine.x_ghost = hypre_SeqVectorCreate(num_cols_offd);
    hypre_SeqVectorInitialize(dmem_all_data->vector_fine.x_ghost);
    int j;
 
 /* fine inside send */
-   dmem_all_data->comm.fine_inside_send.type = FINE_INSIDE_SEND;
-   dmem_all_data->comm.fine_inside_send.tag = FINE_TAG;
+   dmem_all_data->comm.finestIntra_insideSend.type = FINE_INTRA_INSIDE_SEND;
+   dmem_all_data->comm.finestIntra_insideSend.tag = FINE_INTRA_TAG;
    for (int i = 0; i < num_sends; i++){
       int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
-         dmem_all_data->comm.fine_inside_send.procs.push_back(ip);
+         dmem_all_data->comm.finestIntra_insideSend.procs.push_back(ip);
       }
    }
-   dmem_all_data->comm.fine_inside_send.hypre_map =
-      (int *)malloc(dmem_all_data->comm.fine_inside_send.procs.size() * sizeof(int));
-   AllocCommVars(&(dmem_all_data->comm.fine_inside_send));
+   dmem_all_data->comm.finestIntra_insideSend.hypre_map =
+      (int *)malloc(dmem_all_data->comm.finestIntra_insideSend.procs.size() * sizeof(int));
+   AllocCommVars(&(dmem_all_data->comm.finestIntra_insideSend));
    j = 0;
    for (int i = 0; i < num_sends; i++){
       int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
-         dmem_all_data->comm.fine_inside_send.start[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i);
-         dmem_all_data->comm.fine_inside_send.end[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i+1);
-         dmem_all_data->comm.fine_inside_send.len[j] =
-            dmem_all_data->comm.fine_inside_send.end[j] - dmem_all_data->comm.fine_inside_send.start[j];
-         dmem_all_data->comm.fine_inside_send.hypre_map[j] = i; 
+         dmem_all_data->comm.finestIntra_insideSend.start[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i);
+         dmem_all_data->comm.finestIntra_insideSend.end[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i+1);
+         dmem_all_data->comm.finestIntra_insideSend.len[j] =
+            dmem_all_data->comm.finestIntra_insideSend.end[j] - dmem_all_data->comm.finestIntra_insideSend.start[j];
+         dmem_all_data->comm.finestIntra_insideSend.hypre_map[j] = i; 
          j++;
       }
    }
 
 /* fine outside send */
-   dmem_all_data->comm.fine_outside_send.type = FINE_OUTSIDE_SEND;
-   dmem_all_data->comm.fine_outside_send.tag = FINE_TAG;
+   dmem_all_data->comm.finestIntra_outsideSend.type = FINE_INTRA_OUTSIDE_SEND;
+   dmem_all_data->comm.finestIntra_outsideSend.tag = FINE_INTRA_TAG;
    for (int i = 0; i < num_sends; i++){
       int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 0){
-         dmem_all_data->comm.fine_outside_send.procs.push_back(ip);
+         dmem_all_data->comm.finestIntra_outsideSend.procs.push_back(ip);
       }
    }
-   dmem_all_data->comm.fine_outside_send.hypre_map =
-      (int *)malloc(dmem_all_data->comm.fine_outside_send.procs.size() * sizeof(int));
-   AllocCommVars(&(dmem_all_data->comm.fine_outside_send));
+   dmem_all_data->comm.finestIntra_outsideSend.hypre_map =
+      (int *)malloc(dmem_all_data->comm.finestIntra_outsideSend.procs.size() * sizeof(int));
+   AllocCommVars(&(dmem_all_data->comm.finestIntra_outsideSend));
    j = 0;
    for (int i = 0; i < num_sends; i++){
       int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 0){
-         dmem_all_data->comm.fine_outside_send.start[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i);
-         dmem_all_data->comm.fine_outside_send.end[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i+1);
-         dmem_all_data->comm.fine_outside_send.len[j] =
-            dmem_all_data->comm.fine_outside_send.end[j] - dmem_all_data->comm.fine_outside_send.start[j];
-         dmem_all_data->comm.fine_outside_send.hypre_map[j] = i;
+         dmem_all_data->comm.finestIntra_outsideSend.start[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i);
+         dmem_all_data->comm.finestIntra_outsideSend.end[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i+1);
+         dmem_all_data->comm.finestIntra_outsideSend.len[j] =
+            dmem_all_data->comm.finestIntra_outsideSend.end[j] - dmem_all_data->comm.finestIntra_outsideSend.start[j];
+         dmem_all_data->comm.finestIntra_outsideSend.hypre_map[j] = i;
          j++;
       }
    }
 
 /* fine inside recv */
-   dmem_all_data->comm.fine_inside_recv.type = FINE_INSIDE_RECV;
-   dmem_all_data->comm.fine_inside_recv.tag = FINE_TAG;
+   dmem_all_data->comm.finestIntra_insideRecv.type = FINE_INTRA_INSIDE_RECV;
+   dmem_all_data->comm.finestIntra_insideRecv.tag = FINE_INTRA_TAG;
    for (int i = 0; i < num_recvs; i++){
       int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
-         dmem_all_data->comm.fine_inside_recv.procs.push_back(ip);
+         dmem_all_data->comm.finestIntra_insideRecv.procs.push_back(ip);
       }
    }
-   dmem_all_data->comm.fine_inside_recv.hypre_map =
-      (int *)malloc(dmem_all_data->comm.fine_inside_recv.procs.size() * sizeof(int));
-   AllocCommVars(&(dmem_all_data->comm.fine_inside_recv));
+   dmem_all_data->comm.finestIntra_insideRecv.hypre_map =
+      (int *)malloc(dmem_all_data->comm.finestIntra_insideRecv.procs.size() * sizeof(int));
+   AllocCommVars(&(dmem_all_data->comm.finestIntra_insideRecv));
    j = 0;
    for (int i = 0; i < num_recvs; i++){
       int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 1){
-         dmem_all_data->comm.fine_inside_recv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
-         dmem_all_data->comm.fine_inside_recv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
-         dmem_all_data->comm.fine_inside_recv.len[j] =
-            dmem_all_data->comm.fine_inside_recv.end[j] - dmem_all_data->comm.fine_inside_recv.start[j];
-         dmem_all_data->comm.fine_inside_recv.hypre_map[j] = i;
+         dmem_all_data->comm.finestIntra_insideRecv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
+         dmem_all_data->comm.finestIntra_insideRecv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
+         dmem_all_data->comm.finestIntra_insideRecv.len[j] =
+            dmem_all_data->comm.finestIntra_insideRecv.end[j] - dmem_all_data->comm.finestIntra_insideRecv.start[j];
+         dmem_all_data->comm.finestIntra_insideRecv.hypre_map[j] = i;
          j++;
       }
    }
 
 /* fine outside recv */
-   dmem_all_data->comm.fine_outside_recv.type = FINE_OUTSIDE_RECV;
-   dmem_all_data->comm.fine_outside_recv.tag = FINE_TAG;
+   dmem_all_data->comm.finestIntra_outsideRecv.type = FINE_INTRA_OUTSIDE_RECV;
+   dmem_all_data->comm.finestIntra_outsideRecv.tag = FINE_INTRA_TAG;
    for (int i = 0; i < num_recvs; i++){
       int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 0){
-         dmem_all_data->comm.fine_outside_recv.procs.push_back(ip);
+         dmem_all_data->comm.finestIntra_outsideRecv.procs.push_back(ip);
       }
    }
-   dmem_all_data->comm.fine_outside_recv.hypre_map =
-      (int *)malloc(dmem_all_data->comm.fine_outside_recv.procs.size() * sizeof(int));
-   AllocCommVars(&(dmem_all_data->comm.fine_outside_recv));
+   dmem_all_data->comm.finestIntra_outsideRecv.hypre_map =
+      (int *)malloc(dmem_all_data->comm.finestIntra_outsideRecv.procs.size() * sizeof(int));
+   AllocCommVars(&(dmem_all_data->comm.finestIntra_outsideRecv));
    j = 0;
    for (int i = 0; i < num_recvs; i++){
       int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
       if (dmem_all_data->grid.my_grid_procs_flags[ip] == 0){
-         dmem_all_data->comm.fine_outside_recv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
-         dmem_all_data->comm.fine_outside_recv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
-         dmem_all_data->comm.fine_outside_recv.len[j] =
-            dmem_all_data->comm.fine_outside_recv.end[j] - dmem_all_data->comm.fine_outside_recv.start[j];
-         dmem_all_data->comm.fine_outside_recv.hypre_map[j] = i;
+         dmem_all_data->comm.finestIntra_outsideRecv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
+         dmem_all_data->comm.finestIntra_outsideRecv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
+         dmem_all_data->comm.finestIntra_outsideRecv.len[j] =
+            dmem_all_data->comm.finestIntra_outsideRecv.end[j] - dmem_all_data->comm.finestIntra_outsideRecv.start[j];
+         dmem_all_data->comm.finestIntra_outsideRecv.hypre_map[j] = i;
          j++;
       }
    }
@@ -541,8 +1021,8 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.fine_inside_send.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.fine_inside_send.procs[i]);
+  //       for (int i = 0; i < dmem_all_data->comm.finestIntra_insideSend.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.finestIntra_insideSend.procs[i]);
   //       }
   //       printf("\n");
   //    }
@@ -553,8 +1033,8 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.fine_inside_recv.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.fine_inside_recv.procs[i]);
+  //       for (int i = 0; i < dmem_all_data->comm.finestIntra_insideRecv.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.finestIntra_insideRecv.procs[i]);
   //       }
   //       printf("\n");
   //    }
@@ -566,8 +1046,8 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.fine_outside_send.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.fine_outside_send.procs[i]);
+  //       for (int i = 0; i < dmem_all_data->comm.finestIntra_outsideSend.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.finestIntra_outsideSend.procs[i]);
   //       }
   //       printf("\n");
   //    }
@@ -578,8 +1058,8 @@ void CreateCommData(DMEM_AllData *dmem_all_data)
   // for (int p = 0; p < num_procs; p++){
   //    if (my_id == p){
   //       printf("\t%d, %d:", p, my_grid);
-  //       for (int i = 0; i < dmem_all_data->comm.fine_outside_recv.procs.size(); i++){
-  //          printf(" %d", dmem_all_data->comm.fine_outside_recv.procs[i]);
+  //       for (int i = 0; i < dmem_all_data->comm.finestIntra_outsideRecv.procs.size(); i++){
+  //          printf(" %d", dmem_all_data->comm.finestIntra_outsideRecv.procs[i]);
   //       }
   //       printf("\n");
   //    }
@@ -606,8 +1086,8 @@ void DistributeMatrix(DMEM_AllData *dmem_all_data,
    HYPRE_Int num_levels = dmem_all_data->grid.num_levels;
    
    HYPRE_Int num_procs_level, rest, **ps, **pe;
-   ps = (HYPRE_Int **)calloc(num_levels, sizeof(HYPRE_Int *));
-   pe = (HYPRE_Int **)calloc(num_levels, sizeof(HYPRE_Int *));
+   ps = (HYPRE_Int **)malloc(num_levels * sizeof(HYPRE_Int *));
+   pe = (HYPRE_Int **)malloc(num_levels * sizeof(HYPRE_Int *));
    //printf("%d, %d, %d\n", num_procs, num_my_procs, rest);
 
    for (HYPRE_Int level = 0; level < num_levels; level++){
@@ -930,7 +1410,7 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
    HYPRE_Int local_num_rows = last_local_row - first_local_row + 1;
    HYPRE_Int local_num_cols = last_local_col - first_local_col + 1;
 
-   values = hypre_CTAlloc(HYPRE_Real, local_num_cols);
+   values = hypre_CTAlloc(HYPRE_Real, local_num_cols, HYPRE_MEMORY_HOST);
 
    /* initialize fine grid approximation to the solution */
    HYPRE_IJVectorCreate(hypre_MPI_COMM_WORLD, first_local_col, last_local_col, &ij_x);
@@ -958,10 +1438,10 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
    HYPRE_IJVectorGetObject(ij_e, &object);
    vector->e = (HYPRE_ParVector)object;
 
-   hypre_TFree(values);
+   hypre_TFree(values, HYPRE_MEMORY_HOST);
 
 
-   values = hypre_CTAlloc(HYPRE_Real, local_num_rows);
+   values = hypre_CTAlloc(HYPRE_Real, local_num_rows, HYPRE_MEMORY_HOST);
 
    /* initialize fine grid right-hand side */
    HYPRE_IJVectorCreate(hypre_MPI_COMM_WORLD, first_local_row, last_local_row, &ij_b);
@@ -989,7 +1469,7 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
    HYPRE_IJVectorGetObject(ij_r, &object);
    vector->r = (HYPRE_ParVector)object;
 
-   hypre_TFree(values);
+   hypre_TFree(values, HYPRE_MEMORY_HOST);
 }
 
 void GridkResetCommData(DMEM_CommData *comm_data)
@@ -1038,32 +1518,40 @@ void ResetVector(DMEM_AllData *dmem_all_data,
 void DMEM_ResetData(DMEM_AllData *dmem_all_data)
 {
    if (dmem_all_data->input.solver == ASYNC_MULTADD){
-      GridkResetCommData(&(dmem_all_data->comm.gridk_r_inside_send));
-      GridkResetCommData(&(dmem_all_data->comm.gridk_r_inside_recv));
-      GridkResetCommData(&(dmem_all_data->comm.gridk_r_outside_send));
-      GridkResetCommData(&(dmem_all_data->comm.gridk_r_outside_recv));
-      GridkResetCommData(&(dmem_all_data->comm.gridk_e_inside_send));
-      GridkResetCommData(&(dmem_all_data->comm.gridk_e_inside_recv));
-      GridkResetCommData(&(dmem_all_data->comm.gridk_e_outside_send));
-      GridkResetCommData(&(dmem_all_data->comm.gridk_e_outside_recv));
-
-
-      for (int i = 0; i < dmem_all_data->comm.fine_inside_send.procs.size(); i++){
-         dmem_all_data->comm.fine_inside_send.requests[i] = MPI_REQUEST_NULL;
-         dmem_all_data->comm.fine_inside_send.message_count[i] = 0;
+      GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Residual_insideSend));
+      GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Residual_insideRecv));
+      GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Correct_insideSend));
+      GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Correct_insideRecv)); 
+      if (dmem_all_data->input.res_compute_type == GLOBAL){ 
+         GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Residual_outsideSend));
+         GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Residual_outsideRecv));
+         GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Correct_outsideSend));
+         GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Correct_outsideRecv));
       }
-      for (int i = 0; i < dmem_all_data->comm.fine_inside_recv.procs.size(); i++){
-         dmem_all_data->comm.fine_inside_recv.requests[i] = MPI_REQUEST_NULL;
-         dmem_all_data->comm.fine_inside_recv.message_count[i] = 0;
+      else {
+         GridkResetCommData(&(dmem_all_data->comm.gridjToGridk_Correct_insideSend));
+         GridkResetCommData(&(dmem_all_data->comm.gridjToGridk_Correct_outsideSend));
+         GridkResetCommData(&(dmem_all_data->comm.gridjToGridk_Correct_insideRecv));
+         GridkResetCommData(&(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv));
       }
 
-      for (int i = 0; i < dmem_all_data->comm.fine_outside_send.procs.size(); i++){
-         dmem_all_data->comm.fine_outside_send.requests[i] = MPI_REQUEST_NULL;
-         dmem_all_data->comm.fine_outside_send.message_count[i] = 0;
+
+      for (int i = 0; i < dmem_all_data->comm.finestIntra_insideSend.procs.size(); i++){
+         dmem_all_data->comm.finestIntra_insideSend.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.finestIntra_insideSend.message_count[i] = 0;
       }
-      for (int i = 0; i < dmem_all_data->comm.fine_outside_recv.procs.size(); i++){
-         dmem_all_data->comm.fine_outside_recv.requests[i] = MPI_REQUEST_NULL;
-         dmem_all_data->comm.fine_outside_recv.message_count[i] = 0;
+      for (int i = 0; i < dmem_all_data->comm.finestIntra_insideRecv.procs.size(); i++){
+         dmem_all_data->comm.finestIntra_insideRecv.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.finestIntra_insideRecv.message_count[i] = 0;
+      }
+
+      for (int i = 0; i < dmem_all_data->comm.finestIntra_outsideSend.procs.size(); i++){
+         dmem_all_data->comm.finestIntra_outsideSend.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.finestIntra_outsideSend.message_count[i] = 0;
+      }
+      for (int i = 0; i < dmem_all_data->comm.finestIntra_outsideRecv.procs.size(); i++){
+         dmem_all_data->comm.finestIntra_outsideRecv.requests[i] = MPI_REQUEST_NULL;
+         dmem_all_data->comm.finestIntra_outsideRecv.message_count[i] = 0;
       }
 
       hypre_ParCSRMatrix *A = dmem_all_data->matrix.A_fine;
