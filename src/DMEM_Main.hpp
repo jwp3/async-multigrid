@@ -19,8 +19,15 @@
 #define ACCUMULATE 2
 
 #define FINE_INTRA_TAG 1
-#define GRIDK_CORRECT_TAG 2
-#define GRIDK_RESIDUAL_TAG 3
+#define FINEST_TO_GRIDK_CORRECT_TAG 2
+#define FINEST_TO_GRIDK_RESIDUAL_TAG 3
+#define GRIDJ_TO_GRIDK_CORRECT_TAG 3
+
+#define LOCAL_RES 1
+#define GLOBAL_RES 2
+
+#define LOCAL_CONVERGE 1
+#define GLOBAL_CONVERGE 2
 
 using namespace std;
 using namespace mfem;
@@ -121,6 +128,7 @@ typedef struct{
 typedef struct{
    vector<int> procs;
    vector<int> message_count;
+   vector<int> done_flags;
    vector<int> start;
    vector<int> end;
    vector<int> len;
@@ -190,6 +198,7 @@ typedef struct{
    HYPRE_Real *fine_recv_data;
    int *hypre_send_map;
    int *hypre_recv_map;
+   int all_done_flag;
 }DMEM_AllCommData;
 
 typedef struct{
@@ -200,11 +209,16 @@ typedef struct{
    int *num_procs_level;
    double *frac_level_work;
    int **procs;
-
    int my_grid;
    MPI_Comm my_comm;
    int *my_grid_procs_flags;
 }DMEM_GridData;
+
+typedef struct{
+   double r_norm2_local;
+   int r_norm2_local_converge_flag;
+   int cycle;
+}DMEM_IterData;
 
 typedef struct{
    DMEM_AllCommData comm;
@@ -216,6 +230,7 @@ typedef struct{
    DMEM_OutputData output;
    DMEM_GridData grid;
    DMEM_MfemData mfem;
+   DMEM_IterData iter;
 }DMEM_AllData;
 
 #endif

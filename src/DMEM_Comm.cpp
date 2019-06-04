@@ -1,5 +1,6 @@
 #include "Main.hpp"
 #include "DMEM_Main.hpp"
+#include "DMEM_Add.hpp"
 #include "Misc.hpp"
 
 using namespace std;
@@ -140,7 +141,7 @@ void GridkSendRecv(DMEM_AllData *dmem_all_data,
                comm_data->data[i][j] = v[vec_start+j];
             }
             hypre_MPI_Isend(comm_data->data[i],
-                            vec_len,
+                            vec_len+1,
                             HYPRE_MPI_REAL,
                             ip,
                             comm_data->tag,
@@ -151,7 +152,7 @@ void GridkSendRecv(DMEM_AllData *dmem_all_data,
          /* gridk inside recv */
          case GRIDK_INSIDE_RECV:
             hypre_MPI_Irecv(comm_data->data[i],
-                            vec_len,
+                            vec_len+1,
                             HYPRE_MPI_REAL,
                             ip,
                             comm_data->tag,
@@ -161,32 +162,61 @@ void GridkSendRecv(DMEM_AllData *dmem_all_data,
             break;
          /* gridk outside send */
          case GRIDK_OUTSIDE_SEND:
-            if (comm_data->message_count[i] < dmem_all_data->input.num_cycles){
-               hypre_MPI_Test(&(comm_data->requests[i]), &flag, MPI_STATUS_IGNORE);
-               if (flag){
-                  for (HYPRE_Int j = 0; j < vec_len; j++){
-                     comm_data->data[i][j] = v[vec_start+j];
+            if (dmem_all_data->input.async_flag == 1){
+               if (comm_data->done_flags[i] < 2){
+                  hypre_MPI_Test(&(comm_data->requests[i]), &flag, MPI_STATUS_IGNORE);
+                  if (flag){
+                     for (HYPRE_Int j = 0; j < vec_len; j++){
+                        comm_data->data[i][j] = v[vec_start+j];
+                     }
+                     if (comm_data->message_count[i] >= dmem_all_data->input.num_cycles-1 ||
+                         dmem_all_data->iter.r_norm2_local_converge_flag == 1){
+                        comm_data->data[i][vec_len] = 1.0;
+                        if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
+                           comm_data->done_flags[i] = 2;
+                        }
+                        else {
+                           comm_data->done_flags[i] = 1;
+                          // DMEM_CheckAllDoneFlag(dmem_all_data);
+                           if (dmem_all_data->comm.all_done_flag == 1){
+                              comm_data->done_flags[i] = 2;
+                              comm_data->data[i][vec_len] = 2.0;
+                           }
+                        }
+                     }
+                     comm_data->message_count[i]++;
+                     hypre_MPI_Isend(comm_data->data[i],
+                                     vec_len+1,
+                                     HYPRE_MPI_REAL,
+                                     ip,
+                                     comm_data->tag,
+                                     MPI_COMM_WORLD,
+                                     &(comm_data->requests[i]));
                   }
-                  hypre_MPI_Isend(comm_data->data[i],
-                                  vec_len,
-                                  HYPRE_MPI_REAL,
-                                  ip,
-                                  comm_data->tag,
-                                  MPI_COMM_WORLD,
-                                  &(comm_data->requests[i]));
-                  comm_data->message_count[i]++;
                }
+            }
+            else {
+               for (HYPRE_Int j = 0; j < vec_len; j++){
+                  comm_data->data[i][j] = v[vec_start+j];
+               }
+               comm_data->message_count[i]++;
+               hypre_MPI_Isend(comm_data->data[i],
+                               vec_len+1,
+                               HYPRE_MPI_REAL,
+                               ip,
+                               comm_data->tag,
+                               MPI_COMM_WORLD,
+                               &(comm_data->requests[i]));
             }
             break;
          /* gridk outside recv */
          case GRIDK_OUTSIDE_RECV:
-            if (dmem_all_data->input.async_flag == 1 &&
-                comm_data->message_count[i] < dmem_all_data->input.num_cycles){
-               do {
-                  flag = 0;
-                  hypre_MPI_Test(&(comm_data->requests[i]), &flag, MPI_STATUS_IGNORE);
-                  if (flag){
-                     if (comm_data->message_count[i] > 0){
+            if (dmem_all_data->input.async_flag == 1){
+               if (comm_data->done_flags[i] < 2){
+                  do {
+                     flag = 0;
+                     hypre_MPI_Test(&(comm_data->requests[i]), &flag, MPI_STATUS_IGNORE);
+                     if (flag){
                         if (op == ACCUMULATE){
                            for (HYPRE_Int j = 0; j < vec_len; j++){
                               v[vec_start+j] += comm_data->data[i][j];
@@ -197,29 +227,42 @@ void GridkSendRecv(DMEM_AllData *dmem_all_data,
                               v[vec_start+j] = comm_data->data[i][j];
                            }
                         }
-                     }
-                     comm_data->message_count[i]++;
-                     if (comm_data->message_count[i] < dmem_all_data->input.num_cycles){
+                        comm_data->message_count[i]++;
+                        if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
+                           if (comm_data->data[i][vec_len] == 1.0){
+                              comm_data->done_flags[i] = 2;
+                              break;
+                           }
+                        }
+                        else {
+                           if (comm_data->data[i][vec_len] == 1.0){
+                              comm_data->done_flags[i] = 1;
+                           }
+                           else if (comm_data->data[i][vec_len] == 2.0){
+                              comm_data->done_flags[i] = 2;
+                              break;
+                           }
+                        }
                         hypre_MPI_Irecv(comm_data->data[i],
-                                        vec_len,
+                                        vec_len+1,
                                         HYPRE_MPI_REAL,
                                         ip,
                                         comm_data->tag,
                                         MPI_COMM_WORLD,
                                         &(comm_data->requests[i]));
                      }
-                  }
-               } while(flag && comm_data->message_count[i] < dmem_all_data->input.num_cycles);
+                  } while(flag);
+               }
             }
             else {
+               comm_data->message_count[i]++;
                hypre_MPI_Irecv(comm_data->data[i],
-                               vec_len,
+                               vec_len+1,
                                HYPRE_MPI_REAL,
                                ip,
                                comm_data->tag,
                                MPI_COMM_WORLD,
                                &(comm_data->requests[i]));
-               comm_data->message_count[i]++;
             }
             break;
       }

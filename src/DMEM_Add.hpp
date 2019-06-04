@@ -18,4 +18,6 @@ void DMEM_ResidualToGridk_LocalRes(DMEM_AllData *dmem_all_data,
 void DMEM_AddCorrect_GlobalRes(DMEM_AllData *dmem_all_data);
 void DMEM_AddResidual_GlobalRes(DMEM_AllData *dmem_all_data);
 
+int DMEM_CheckAllDoneFlag(DMEM_AllData *dmem_all_data);
+
 #endif

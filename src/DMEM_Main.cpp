@@ -57,8 +57,8 @@ int main (int argc, char *argv[])
    dmem_all_data.input.async_type = FULL_ASYNC;
    dmem_all_data.input.global_conv_flag = 0;
    dmem_all_data.input.thread_part_type = ALL_LEVELS;
-   dmem_all_data.input.converge_test_type = LOCAL;
-   dmem_all_data.input.res_compute_type = LOCAL;
+   dmem_all_data.input.converge_test_type = LOCAL_CONVERGE;
+   dmem_all_data.input.res_compute_type = LOCAL_RES;
    dmem_all_data.input.num_pre_smooth_sweeps = 1;
    dmem_all_data.input.num_post_smooth_sweeps = 1;
    dmem_all_data.input.num_fine_smooth_sweeps = 1;
@@ -259,11 +259,11 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-converge_test_type") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "local") == 0){
-            dmem_all_data.input.converge_test_type = LOCAL;
+            dmem_all_data.input.converge_test_type = LOCAL_CONVERGE;
             dmem_all_data.input.global_conv_flag = 0;
          }
          else if (strcmp(argv[arg_index], "global") == 0){
-            dmem_all_data.input.converge_test_type = GLOBAL;
+            dmem_all_data.input.converge_test_type = GLOBAL_CONVERGE;
             dmem_all_data.input.global_conv_flag = 1;
          }
       }
@@ -364,7 +364,7 @@ int main (int argc, char *argv[])
   //    e_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data.vector_fine.e));
   //    num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[0]));
 
-  //    my_grid = dmem_all_data.grid.my_grid;
+  //    int my_grid = dmem_all_data.grid.my_grid;
   //    for (HYPRE_Int p = 0; p < num_procs; p++){
   //       if (my_id == p){
   //          for (HYPRE_Int i = 0; i < num_rows; i++){
