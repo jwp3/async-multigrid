@@ -47,4 +47,6 @@ int CheckConverge(AllData *all_data, int thread_level);
 
 void InitSolve(AllData *all_data);
 
+vector<int> Divisors(int x);
+
 #endif

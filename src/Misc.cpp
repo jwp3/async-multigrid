@@ -1,6 +1,8 @@
 #include "Main.hpp"
 #include "Misc.hpp"
 
+using namespace std;
+
 void PrintOutput(AllData all_data)
 {
    int mean_smooth_sweeps;
@@ -560,4 +562,15 @@ void InitSolve(AllData *all_data)
    if (all_data->input.print_grid_wait_flag == 1){
       all_data->grid.grid_wait_hist.resize(0);
    }
+}
+
+vector<int> Divisors(int x)
+{
+   vector <int> divs;
+   for (int i = 1; i <= x; i++){
+      if (x % i == 0){
+         divs.push_back(i);
+      } 
+   }
+   return divs;
 }

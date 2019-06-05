@@ -34,7 +34,7 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.max_levels = 20;
    dmem_all_data.hypre.solver_id = 0;
    dmem_all_data.hypre.agg_num_levels = 1;
-   dmem_all_data.hypre.coarsen_type = 7; /* for proc-independent coarsening, use 7 or 9 */
+   dmem_all_data.hypre.coarsen_type = 9; /* for proc-independent coarsening, use 7 or 9 */
    dmem_all_data.hypre.interp_type = 0;
    dmem_all_data.hypre.print_level = 0;
    dmem_all_data.hypre.solve_flag = 0;

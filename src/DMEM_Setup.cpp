@@ -16,7 +16,7 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
                       hypre_ParCSRMatrix *A,
                       DMEM_VectorData *vector);
 void ComputeWork(DMEM_AllData *all_data);
-void PartitionProcs(DMEM_AllData *dmem_all_data);
+void AssignProcs(DMEM_AllData *dmem_all_data);
 void PartitionGrids(DMEM_AllData *dmem_all_data);
 void ConstructMatrix(DMEM_AllData *dmem_all_data,
                      HYPRE_ParCSRMatrix *A,
@@ -29,6 +29,7 @@ void SetVectorComms(DMEM_AllData *dmem_all_data,
 void DistributeMatrix(DMEM_AllData *dmem_all_data,
                       hypre_ParCSRMatrix *A,
                       hypre_ParCSRMatrix **B);
+void ComputeWork(AllData *dmem_all_data);
 
 //TODO: clear extra memory
 void DMEM_Setup(DMEM_AllData *dmem_all_data)
@@ -67,8 +68,9 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
    dmem_all_data->grid.num_levels = hypre_ParAMGDataNumLevels(amg_data);
 
    if (dmem_all_data->input.solver == ASYNC_MULTADD){
+      ComputeWork(dmem_all_data);
       /* gridk */
-      PartitionProcs(dmem_all_data);
+      AssignProcs(dmem_all_data);
       DistributeMatrix(dmem_all_data,
                        dmem_all_data->matrix.A_fine,
                        &(dmem_all_data->matrix.A_gridk));
@@ -117,6 +119,7 @@ void AllocCommVars(DMEM_CommData *comm_data)
    comm_data->new_info_flags = (int *)calloc(comm_data->procs.size(), sizeof(int));
 }
 
+// TODO: consolidate redundant code in both CreateCommData functions
 void CreateCommData_LocalRes(DMEM_AllData *dmem_all_data)
 {
    int num_procs, my_id;
@@ -1522,6 +1525,14 @@ void ResetVector(DMEM_AllData *dmem_all_data,
 
 void DMEM_ResetData(DMEM_AllData *dmem_all_data)
 {
+   dmem_all_data->output.solve_wtime = 0.0;
+   dmem_all_data->output.residual_wtime = 0.0;
+   dmem_all_data->output.restrict_wtime = 0.0;
+   dmem_all_data->output.prolong_wtime = 0.0;
+   dmem_all_data->output.smooth_wtime = 0.0;
+   dmem_all_data->output.correct_wtime = 0.0;
+   dmem_all_data->output.comm_wtime = 0.0;
+
    if (dmem_all_data->input.solver == ASYNC_MULTADD){
       GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Residual_insideSend));
       GridkResetCommData(&(dmem_all_data->comm.finestToGridk_Residual_insideRecv));
@@ -1566,7 +1577,7 @@ void DMEM_ResetData(DMEM_AllData *dmem_all_data)
    ResetVector(dmem_all_data, &(dmem_all_data->vector_fine));
 }
 
-void PartitionProcs(DMEM_AllData *dmem_all_data)
+void AssignProcs(DMEM_AllData *dmem_all_data)
 {
    int num_levels = dmem_all_data->grid.num_levels;
    int num_procs, my_id;
@@ -1574,31 +1585,82 @@ void PartitionProcs(DMEM_AllData *dmem_all_data)
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
 
    dmem_all_data->grid.procs = (int **)calloc(num_levels, sizeof(int *));
-   dmem_all_data->grid.num_procs_level = 
-      (int *)calloc(num_levels, sizeof(int));
+   dmem_all_data->grid.num_procs_level = (int *)calloc(num_levels, sizeof(int));
 
-   int procs_per_level = num_procs/num_levels;
-   int extra = num_procs - procs_per_level*(num_levels - 1);
-   for (int level = 0; level < num_levels-1; level++){
-      dmem_all_data->grid.num_procs_level[level] = procs_per_level;
+  // dmem_all_data->grid.my_grid = -1;
+  // int procs_per_level = num_procs/num_levels;
+  // int extra = num_procs - procs_per_level*(num_levels - 1);
+  // for (int level = 0; level < num_levels-1; level++){
+  //    dmem_all_data->grid.num_procs_level[level] = procs_per_level;
+  // }
+  // dmem_all_data->grid.num_procs_level[num_levels-1] = extra;
+  // int count_id = 0;
+  // for (int level = 0; level < num_levels; level++){
+  //    dmem_all_data->grid.procs[level] = 
+  //       (int *)calloc(dmem_all_data->grid.num_procs_level[level], sizeof(int));
+  //    for (int i = 0; i < dmem_all_data->grid.num_procs_level[level]; i++){
+  //       dmem_all_data->grid.procs[level][i] = count_id;
+  //       if (my_id == count_id){
+  //          dmem_all_data->grid.my_grid = level;
+  //       }
+  //       count_id++;
+  //    }
+  // }
+
+
+   int proc_id = 0;
+   int finest_level;
+   if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
+      finest_level = 1;
    }
-   dmem_all_data->grid.num_procs_level[num_levels-1] = extra;
-
-
-   
-   dmem_all_data->grid.my_grid = -1;
-   int count_id = 0;
-   for (int level = 0; level < num_levels; level++){
-      dmem_all_data->grid.procs[level] = 
-         (int *)calloc(dmem_all_data->grid.num_procs_level[level], sizeof(int));
-      for (int i = 0; i < dmem_all_data->grid.num_procs_level[level]; i++){
-         dmem_all_data->grid.procs[level][i] = count_id;
-	 if (my_id == count_id){
-	    dmem_all_data->grid.my_grid = level;
-	 }
-	 count_id++;
+   else{
+      finest_level = 0;
+   }
+   for (int level = finest_level; level < num_levels; level++){
+      int balanced_procs;
+      if (level == num_levels-1 || num_procs == 1){
+         balanced_procs = num_procs;
       }
+      else {
+         balanced_procs = max((int)floor(dmem_all_data->grid.frac_level_work[level] * num_procs), 1);
+         while (1){
+            int candidate = balanced_procs+1;
+            double diff_current = fabs(dmem_all_data->grid.frac_level_work[level] - (double)balanced_procs/(double)num_procs);
+            double diff_candidate = fabs(dmem_all_data->grid.frac_level_work[level] - (double)candidate/(double)num_procs);
+            if ((diff_current <= diff_candidate) || ((double)candidate/(double)num_procs > dmem_all_data->grid.frac_level_work[level])){
+               break;
+            }
+            balanced_procs++;
+         }
+      }
+      dmem_all_data->grid.num_procs_level[level] = balanced_procs;
+      dmem_all_data->grid.procs[level] = (int *)calloc(dmem_all_data->grid.num_procs_level[level], sizeof(int));
+      for (int p = proc_id, i = 0; p < proc_id + balanced_procs; p++, i++){
+         if (my_id == p){
+            dmem_all_data->grid.my_grid = level;
+         }
+         dmem_all_data->grid.procs[level][i] = p;
+      }
+      num_procs -= balanced_procs;
+      proc_id += balanced_procs;
    }
+
+   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+  // for (int p = 0; p < num_procs; p++){
+  //    if (my_id == p){
+  //       printf("id %d, grid %d\n", my_id, dmem_all_data->grid.my_grid);
+  //    }
+  //    MPI_Barrier(MPI_COMM_WORLD);
+  // }
+  // if (my_id == 0){
+  //    for (int level = 0; level < num_levels; level++){
+  //       printf("level %d, num %d, work %f\n", level, dmem_all_data->grid.num_procs_level[level], dmem_all_data->grid.frac_level_work[level]);
+  //       for (int i = 0; i < dmem_all_data->grid.num_procs_level[level]; i++){
+  //          printf("\t%d\n", dmem_all_data->grid.procs[level][i]);
+  //       }
+  //    }
+  // }
+  // MPI_Barrier(MPI_COMM_WORLD);
    MPI_Comm_split(MPI_COMM_WORLD,
                   dmem_all_data->grid.my_grid,
                   my_id,
@@ -1608,6 +1670,105 @@ void PartitionProcs(DMEM_AllData *dmem_all_data)
 
 void ComputeWork(DMEM_AllData *dmem_all_data)
 {
+   int coarsest_level;
+   int fine_grid, coarse_grid;
+
+   hypre_ParAMGData *amg_data = (hypre_ParAMGData *)dmem_all_data->hypre.solver;
+   hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
+   hypre_ParCSRMatrix **P_array = hypre_ParAMGDataAArray(amg_data);
+   hypre_ParCSRMatrix **R_array = hypre_ParAMGDataAArray(amg_data);
+
+   dmem_all_data->grid.level_work = (int *)calloc(dmem_all_data->grid.num_levels, sizeof(int));
+
+   int finest_level;
+   if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
+      finest_level = 1;
+   }
+   else{
+      finest_level = 0;
+   }
+
+   for (int level = finest_level; level < dmem_all_data->grid.num_levels; level++){
+      if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
+         dmem_all_data->grid.level_work[level] = 2*hypre_ParCSRMatrixNumNonzeros(A_array[0]) / dmem_all_data->grid.num_levels + hypre_ParCSRMatrixNumRows(A_array[0]);
+      }
+      else{
+         dmem_all_data->grid.level_work[level] = hypre_ParCSRMatrixNumNonzeros(A_array[0]) + hypre_ParCSRMatrixNumRows(A_array[0]);
+      }
+
+      if (dmem_all_data->input.solver == MULTADD ||
+          dmem_all_data->input.solver == ASYNC_MULTADD){
+         coarsest_level = level;
+      }
+      else if (dmem_all_data->input.solver == AFACX ||
+               dmem_all_data->input.solver == ASYNC_AFACX){
+         coarsest_level = level+1;
+      }
+
+      for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
+         fine_grid = inner_level;
+         coarse_grid = inner_level + 1;
+         if (dmem_all_data->input.solver == MULTADD ||
+             dmem_all_data->input.solver == ASYNC_MULTADD){
+            dmem_all_data->grid.level_work[level] += hypre_ParCSRMatrixNumNonzeros(R_array[fine_grid]);
+
+         }
+         else if (dmem_all_data->input.solver == AFACX ||
+                  dmem_all_data->input.solver == ASYNC_AFACX){
+            if (level < dmem_all_data->grid.num_levels-1){
+               dmem_all_data->grid.level_work[level] += fine_grid * hypre_ParCSRMatrixNumNonzeros(R_array[fine_grid]);
+            }
+         }
+      }
+
+      fine_grid = level;
+      coarse_grid = level + 1;
+      if (level == dmem_all_data->grid.num_levels-1){
+         dmem_all_data->grid.level_work[level] += hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]);
+      }
+      else {
+         if (dmem_all_data->input.solver == MULTADD ||
+             dmem_all_data->input.solver == ASYNC_MULTADD){
+            if (dmem_all_data->input.num_post_smooth_sweeps > 0 &&
+                dmem_all_data->input.num_pre_smooth_sweeps > 0){
+               dmem_all_data->grid.level_work[level] += hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) + hypre_ParCSRMatrixNumRows(A_array[fine_grid]);
+            }
+            else {
+               dmem_all_data->grid.level_work[level] += hypre_ParCSRMatrixNumRows(A_array[fine_grid]);
+            }
+         }
+         else if (dmem_all_data->input.solver == AFACX ||
+                  dmem_all_data->input.solver == ASYNC_AFACX){
+            dmem_all_data->grid.level_work[level] +=
+               (dmem_all_data->input.num_coarse_smooth_sweeps-1) * hypre_ParCSRMatrixNumNonzeros(A_array[coarse_grid]) +
+               hypre_ParCSRMatrixNumNonzeros(P_array[fine_grid]) +
+               hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) +
+               (dmem_all_data->input.num_fine_smooth_sweeps-1) * hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]);
+         }
+      }
+
+      coarsest_level = level;
+      for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
+         fine_grid = inner_level;
+         coarse_grid = inner_level + 1;
+         if (dmem_all_data->input.solver == MULTADD ||
+             dmem_all_data->input.solver == ASYNC_MULTADD){
+            dmem_all_data->grid.level_work[level] += hypre_ParCSRMatrixNumNonzeros(P_array[fine_grid]);
+         }
+         else if (dmem_all_data->input.solver == AFACX ||
+                  dmem_all_data->input.solver == ASYNC_AFACX){
+            dmem_all_data->grid.level_work[level] += hypre_ParCSRMatrixNumNonzeros(P_array[fine_grid]);
+         }
+      }
+   }
+   dmem_all_data->grid.tot_work = 0;
+   dmem_all_data->grid.frac_level_work = (double *)calloc(dmem_all_data->grid.num_levels, sizeof(double));
+   for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+      dmem_all_data->grid.tot_work += dmem_all_data->grid.level_work[level];
+   }
+   for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+      dmem_all_data->grid.frac_level_work[level] = (double)dmem_all_data->grid.level_work[level] / (double)dmem_all_data->grid.tot_work;
+   }
 }
 
 void ConstructMatrix(DMEM_AllData *dmem_all_data,

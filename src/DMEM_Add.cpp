@@ -33,7 +33,7 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
    dmem_all_data->comm.all_done_flag = 0;
 
    dmem_all_data->iter.cycle = 1;
-   if (dmem_all_data->input.res_compute_type == LOCAL_RES){
+   if (dmem_all_data->input.converge_test_type == GLOBAL_CONVERGE){
          dmem_all_data->input.num_cycles -= 1;
    }
 
@@ -47,14 +47,15 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
    hypre_ParCSRMatrix **A_array_fine = hypre_ParAMGDataAArray(amg_data_fine);
    HYPRE_Int num_rows_gridk = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array_gridk[0]));
    HYPRE_Int num_rows_fine = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array_fine[0]));
-   
+  
+   double begin = MPI_Wtime();
    if (dmem_all_data->input.res_compute_type == LOCAL_RES){
       DMEM_ResidualToGridk_LocalRes(dmem_all_data, dmem_all_data->vector_fine.b, F_array_gridk[0]);
    }
-
    if (dmem_all_data->input.async_flag == 1){
       AsyncStart(dmem_all_data);
    }
+   dmem_all_data->output.start_wtime += MPI_Wtime() - begin;
 
    while (1){
       AddCycle(dmem_all_data);
@@ -64,8 +65,9 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
       }
       else {
          DMEM_AddCorrect_LocalRes(dmem_all_data);
-         DMEM_AddResidual_LocalRes(dmem_all_data);
 
+         double residual_begin = MPI_Wtime();
+         DMEM_AddResidual_LocalRes(dmem_all_data);
          if (dmem_all_data->iter.cycle > 0 && dmem_all_data->input.async_flag == 1){
             if (dmem_all_data->iter.r_norm2_local_converge_flag == 0){
                hypre_Vector *f = hypre_ParVectorLocalVector(F_array_gridk[0]);
@@ -75,15 +77,13 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
                }
             }
          }
+         dmem_all_data->output.residual_wtime += MPI_Wtime() - residual_begin;
       }
      
       if (dmem_all_data->input.async_flag == 1){
          if (DMEM_CheckAsyncConverge(dmem_all_data) == 1){
             break;
          }
-        // if (dmem_all_data->iter.cycle == num_cycles){
-        //    break;
-        // }
       }
       else {
         // r = dmem_all_data->vector_fine.r;
@@ -100,9 +100,12 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
   // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv));
 
   // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv));
+   
+   double end_begin = MPI_Wtime();
    if (dmem_all_data->input.async_flag == 1){
       AsyncEnd(dmem_all_data);
    }
+   dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
   // printf("%d %d\n", my_id, dmem_all_data->iter.cycle);
   // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv)); 
   // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_insideRecv)); 
@@ -132,8 +135,9 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
          HYPRE_Real res_norm = sqrt(hypre_ParVectorInnerProd(r, r));
       }
    }
-
-   if (dmem_all_data->input.res_compute_type == LOCAL_RES){
+   dmem_all_data->output.solve_wtime = MPI_Wtime() - begin;
+ 
+   if (dmem_all_data->input.converge_test_type == GLOBAL_CONVERGE){
          dmem_all_data->input.num_cycles += 1;
    }
 
@@ -155,6 +159,7 @@ void AddCycle(DMEM_AllData *dmem_all_data)
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    HYPRE_Int num_rows;
+   double begin;
 
    hypre_ParAMGData *amg_data = 
       (hypre_ParAMGData *)dmem_all_data->hypre.solver_gridk;
@@ -187,20 +192,25 @@ void AddCycle(DMEM_AllData *dmem_all_data)
 //      }
 //   }
 //   return;
-
+   
    for (HYPRE_Int level = 0; level < my_grid; level++){
       HYPRE_Int fine_grid = level;
       HYPRE_Int coarse_grid = level + 1;
+      begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvecT(1.0,
                                 R_array[fine_grid],
                                 F_array[fine_grid],
                                 0.0,
                                 F_array[coarse_grid]);
-      if (dmem_all_data->input.async_flag == 1){
-         AllOutsideRecv(dmem_all_data);
-      }
+      dmem_all_data->output.restrict_wtime += MPI_Wtime() - begin;
+     // begin = MPI_Wtime();
+     // if (dmem_all_data->input.async_flag == 1){
+     //    AllOutsideRecv(dmem_all_data);
+     // }
+     // dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
    }
 
+   begin = MPI_Wtime();
    HYPRE_Real *A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[my_grid]));
    HYPRE_Int *A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[my_grid]));
    num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[my_grid]));
@@ -238,21 +248,28 @@ void AddCycle(DMEM_AllData *dmem_all_data)
             dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
       }
    }
-   
-   if (dmem_all_data->input.async_flag == 1){
-      AllOutsideRecv(dmem_all_data);
-   }
+   dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
+  
+  // begin = MPI_Wtime(); 
+  // if (dmem_all_data->input.async_flag == 1){
+  //    AllOutsideRecv(dmem_all_data);
+  // }
+  // dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
    for (HYPRE_Int level = my_grid; level > 0; level--){
       HYPRE_Int fine_grid = level - 1;
       HYPRE_Int coarse_grid = level;
+      begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvec(1.0,
                                P_array[fine_grid], 
                                U_array[coarse_grid],
                                0.0,
                                U_array[fine_grid]);
-      if (dmem_all_data->input.async_flag == 1){
-         AllOutsideRecv(dmem_all_data);
-      }
+      dmem_all_data->output.prolong_wtime += MPI_Wtime() - begin;
+     // begin = MPI_Wtime();
+     // if (dmem_all_data->input.async_flag == 1){
+     //    AllOutsideRecv(dmem_all_data);
+     // }
+     // dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
    }
 
   // if (my_grid == 0) hypre_ParVectorSetConstantValues(U_array[0], 0.0);
@@ -275,6 +292,7 @@ void DMEM_AddCorrect_LocalRes(DMEM_AllData *dmem_all_data)
    HYPRE_Int my_id, num_procs;
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
+   double begin;
 
    hypre_ParAMGData *amg_data;
    hypre_ParCSRMatrix **A_array;
@@ -297,6 +315,7 @@ void DMEM_AddCorrect_LocalRes(DMEM_AllData *dmem_all_data)
    e_local_data = hypre_VectorData(hypre_ParVectorLocalVector(e));
    x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(x));
 
+   begin = MPI_Wtime();
    hypre_MPI_Waitall(dmem_all_data->comm.gridjToGridk_Correct_insideSend.procs.size(),
                      dmem_all_data->comm.gridjToGridk_Correct_insideSend.requests,
                      MPI_STATUSES_IGNORE);
@@ -334,12 +353,15 @@ void DMEM_AddCorrect_LocalRes(DMEM_AllData *dmem_all_data)
                    e_local_data,
                    ACCUMULATE);
    }
+   dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
 
    num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[0]));
+   begin = MPI_Wtime();
    for (HYPRE_Int i = 0; i < num_rows; i++){
       x_local_data[i] += e_local_data[i];
      // printf("%e\n", x_local_data[i]);
    }
+   dmem_all_data->output.correct_wtime += MPI_Wtime() - begin;
 }
 
 void DMEM_AddResidual_LocalRes(DMEM_AllData *dmem_all_data)
@@ -348,18 +370,21 @@ void DMEM_AddResidual_LocalRes(DMEM_AllData *dmem_all_data)
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    int my_grid = dmem_all_data->grid.my_grid;
+   double begin;
 
    hypre_ParAMGData *amg_data_gridk =
       (hypre_ParAMGData*)dmem_all_data->hypre.solver_gridk;
    hypre_ParVector **F_array_gridk = hypre_ParAMGDataFArray(amg_data_gridk);
    hypre_ParCSRMatrix **A_array_gridk = hypre_ParAMGDataAArray(amg_data_gridk);
 
+  // begin = MPI_Wtime();
    hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
                                       A_array_gridk[0],
                                       dmem_all_data->vector_gridk.x,
                                       1.0,
                                       dmem_all_data->vector_gridk.b,
                                       F_array_gridk[0]);
+  // dmem_all_data->output.residual_wtime += MPI_Wtime() - begin;
 }
 
 //TODO: communicate locally within grid

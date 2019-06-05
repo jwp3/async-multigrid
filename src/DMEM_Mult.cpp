@@ -19,7 +19,8 @@ void DMEM_Mult(DMEM_AllData *dmem_all_data)
    hypre_ParVector **U_array = hypre_ParAMGDataUArray(amg_data);
    hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
    HYPRE_Int num_levels = hypre_ParAMGDataNumLevels(amg_data);
-
+   
+   double start = MPI_Wtime();
    for (HYPRE_Int cycle = start_cycle; cycle <= num_cycles; cycle += increment_cycle){
       MultCycle(dmem_all_data, cycle);
       hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
@@ -30,8 +31,10 @@ void DMEM_Mult(DMEM_AllData *dmem_all_data)
                                          dmem_all_data->vector_fine.r);
       hypre_ParVector *r = dmem_all_data->vector_fine.r;
       HYPRE_Real res_norm = sqrt(hypre_ParVectorInnerProd(r, r));
-      if (my_id == 0) printf("%e\n", res_norm/dmem_all_data->output.r0_norm2);
+     // if (my_id == 0) printf("%e\n", res_norm/dmem_all_data->output.r0_norm2);
+      if (res_norm/dmem_all_data->output.r0_norm2 < dmem_all_data->input.tol) break;
    }
+   dmem_all_data->output.solve_wtime = MPI_Wtime() - start;
    MPI_Barrier(MPI_COMM_WORLD);
    hypre_ParVectorCopy(U_array[0], dmem_all_data->vector_fine.x);
 }
