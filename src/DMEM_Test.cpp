@@ -151,19 +151,19 @@ void DMEM_TestResidual_GlobalRes(DMEM_AllData *dmem_all_data)
    hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
    HYPRE_Real *f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[0]));
 
-   GridkSendRecv(dmem_all_data,
+   SendRecv(dmem_all_data,
                  &(dmem_all_data->comm.finestToGridk_Residual_insideSend),
                  r_local_data,
                  READ);
-   GridkSendRecv(dmem_all_data,
+   SendRecv(dmem_all_data,
                  &(dmem_all_data->comm.finestToGridk_Residual_outsideSend),
                  r_local_data,
                  READ);
-   GridkSendRecv(dmem_all_data,
+   SendRecv(dmem_all_data,
                  &(dmem_all_data->comm.finestToGridk_Residual_insideRecv),
                  NULL,
                  READ);
-   GridkSendRecv(dmem_all_data,
+   SendRecv(dmem_all_data,
                  &(dmem_all_data->comm.finestToGridk_Residual_outsideRecv),
                  f_local_data,
                  READ);

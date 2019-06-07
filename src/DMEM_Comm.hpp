@@ -4,15 +4,10 @@
 #include "Main.hpp"
 #include "DMEM_Main.hpp"
 
-void GridkSendRecv(DMEM_AllData *dmem_all_data,
-                   DMEM_CommData *comm_data,
-                   HYPRE_Real *v,
-                   HYPRE_Int op);
-
-void FineIntraSendRecv(DMEM_AllData *dmem_all_data,
-                       DMEM_CommData *comm_data,
-                       HYPRE_Real *v,
-                       HYPRE_Int op);
+void SendRecv(DMEM_AllData *dmem_all_data,
+              DMEM_CommData *comm_data,
+              HYPRE_Real *v,
+              HYPRE_Int op);
 
 void CompleteRecv(DMEM_AllData *dmem_all_data,
                   DMEM_CommData *comm_data,

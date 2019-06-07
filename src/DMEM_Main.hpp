@@ -40,10 +40,12 @@ typedef struct{
    double solve_wtime;
    double smooth_wtime;
    double residual_wtime;
+   double residual_norm_wtime;
    double restrict_wtime;
    double prolong_wtime;
    double correct_wtime;
    double comm_wtime;
+   double coarsest_solve_wtime;
    double start_wtime;
    double end_wtime;
    double r_norm2;
@@ -62,7 +64,7 @@ typedef struct{
    int increment_cycle;
    int num_threads;
    double tol;
-   int format_output_flag;
+   int oneline_output_flag;
    int print_reshist_flag;
    int print_output_flag;
    int global_conv_flag;
@@ -82,6 +84,7 @@ typedef struct{
    int print_level_stats_flag;
    int smooth_interp_type;
    int read_type;
+   int print_output_level;
 }DMEM_InputData;
 
 
@@ -138,7 +141,6 @@ typedef struct{
    int type;
    int vector_type;
    int tag;
-   int *hypre_map;
 }DMEM_CommData;
 
 typedef struct{

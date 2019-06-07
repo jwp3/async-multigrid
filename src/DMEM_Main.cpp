@@ -63,7 +63,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.num_post_smooth_sweeps = 1;
    dmem_all_data.input.num_fine_smooth_sweeps = 1;
    dmem_all_data.input.num_coarse_smooth_sweeps = 1;
-   dmem_all_data.input.format_output_flag = 0;
+   dmem_all_data.input.oneline_output_flag = 0;
    dmem_all_data.input.num_threads = 1;
    dmem_all_data.input.print_output_flag = 1;
    dmem_all_data.input.smooth_weight = 1.0;
@@ -260,11 +260,18 @@ int main (int argc, char *argv[])
          arg_index++;
          if (strcmp(argv[arg_index], "local") == 0){
             dmem_all_data.input.converge_test_type = LOCAL_CONVERGE;
-            dmem_all_data.input.global_conv_flag = 0;
          }
          else if (strcmp(argv[arg_index], "global") == 0){
             dmem_all_data.input.converge_test_type = GLOBAL_CONVERGE;
-            dmem_all_data.input.global_conv_flag = 1;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-res_compute_type") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "local") == 0){
+            dmem_all_data.input.res_compute_type = LOCAL_RES;
+         }
+         else if (strcmp(argv[arg_index], "global") == 0){
+            dmem_all_data.input.res_compute_type = GLOBAL_RES;
          }
       }
       else if (strcmp(argv[arg_index], "-num_runs") == 0){
@@ -283,8 +290,12 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-no_output") == 0){
          dmem_all_data.input.print_output_flag = 0;
       }
-      else if (strcmp(argv[arg_index], "-format_output") == 0){
-         dmem_all_data.input.format_output_flag = 1;
+      else if (strcmp(argv[arg_index], "-oneline_output") == 0){
+         dmem_all_data.input.oneline_output_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-print_output_level") == 0){
+         arg_index++;
+         dmem_all_data.input.print_output_level = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-print_reshist") == 0){
          dmem_all_data.input.print_reshist_flag = 1;
