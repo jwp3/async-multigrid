@@ -5,7 +5,6 @@
 #include "DMEM_Misc.hpp"
 #include "DMEM_Add.hpp"
 #include "DMEM_Mult.hpp"
-#include "DMEM_SyncAdd.hpp"
 
 int main (int argc, char *argv[])
 {
@@ -33,7 +32,7 @@ int main (int argc, char *argv[])
    /* Hypre parameters */
    dmem_all_data.hypre.max_levels = 20;
    dmem_all_data.hypre.solver_id = 0;
-   dmem_all_data.hypre.agg_num_levels = 1;
+   dmem_all_data.hypre.agg_num_levels = 0;
    dmem_all_data.hypre.coarsen_type = 9; /* for proc-independent coarsening, use 7 or 9 */
    dmem_all_data.hypre.interp_type = 0;
    dmem_all_data.hypre.print_level = 0;
@@ -52,12 +51,12 @@ int main (int argc, char *argv[])
    dmem_all_data.mfem.amr_refs = 0;
 
    dmem_all_data.input.test_problem = LAPLACE_3D27PT;
-   dmem_all_data.input.tol = 1e-9;
+   dmem_all_data.input.tol = 1e-10;
+   dmem_all_data.input.inner_tol = .001;
    dmem_all_data.input.async_flag = 0;
-   dmem_all_data.input.async_type = FULL_ASYNC;
    dmem_all_data.input.global_conv_flag = 0;
    dmem_all_data.input.thread_part_type = ALL_LEVELS;
-   dmem_all_data.input.converge_test_type = LOCAL_CONVERGE;
+   dmem_all_data.input.converge_test_type = GLOBAL_CONVERGE;
    dmem_all_data.input.res_compute_type = LOCAL_RES;
    dmem_all_data.input.num_pre_smooth_sweeps = 1;
    dmem_all_data.input.num_post_smooth_sweeps = 1;
@@ -76,13 +75,17 @@ int main (int argc, char *argv[])
    dmem_all_data.input.print_level_stats_flag = 0;
    dmem_all_data.input.print_reshist_flag = 0;
    dmem_all_data.input.read_type = READ_SOL;
-   dmem_all_data.input.num_cycles = 20;
+   dmem_all_data.input.num_cycles = 1000;
+   dmem_all_data.input.num_inner_cycles = 5;
    dmem_all_data.input.increment_cycle = 1;
    dmem_all_data.input.start_cycle = 1;
+   dmem_all_data.input.coarsest_mult_level = 0;
+   dmem_all_data.input.check_res_flag = 1;
 
    /* Parse command line */
    int arg_index = 0;
    int print_usage = 0;
+   int coarsest_mult_level = 1;
 
    while (arg_index < argc){
       if (strcmp(argv[arg_index], "-n") == 0){
@@ -160,26 +163,16 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "afacx") == 0){
             dmem_all_data.input.solver = AFACX;
          }
-         else if (strcmp(argv[arg_index], "async_multadd") == 0){
-            dmem_all_data.input.solver = ASYNC_MULTADD;
-           // dmem_all_data.input.async_flag = 1;
-         }
-         else if (strcmp(argv[arg_index], "async_afacx") == 0){
-            dmem_all_data.input.solver = ASYNC_AFACX;
-           // dmem_all_data.input.async_flag = 1;
+         else if (strcmp(argv[arg_index], "mult_multadd") == 0){
+            dmem_all_data.input.solver = MULT_MULTADD;
          }
       }
       else if (strcmp(argv[arg_index], "-async") == 0){
          dmem_all_data.input.async_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-smooth_interp") == 0){
+      else if (strcmp(argv[arg_index], "-coarsest_mult_level") == 0){
          arg_index++;
-         if (strcmp(argv[arg_index], "j") == 0){
-            dmem_all_data.input.smooth_interp_type = JACOBI;
-         }
-         else if (strcmp(argv[arg_index], "L1j") == 0){
-            dmem_all_data.input.smooth_interp_type = L1_JACOBI;
-         }
+         coarsest_mult_level = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-smooth_weight") == 0){
          arg_index++;
@@ -193,6 +186,10 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.input.num_cycles = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-num_inner_cycles") == 0){
+         arg_index++;
+         dmem_all_data.input.num_inner_cycles = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-start_cycle") == 0){
          arg_index++;
          dmem_all_data.input.start_cycle = atoi(argv[arg_index]);
@@ -204,6 +201,10 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-tol") == 0){
          arg_index++;
          dmem_all_data.input.tol = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-inner_tol") == 0){
+         arg_index++;
+         dmem_all_data.input.inner_tol = atof(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-num_smooth_sweeps") == 0){
          arg_index++;
@@ -315,6 +316,13 @@ int main (int argc, char *argv[])
       arg_index++;
    }
 
+   if (dmem_all_data.input.solver == MULT_MULTADD){
+      dmem_all_data.input.coarsest_mult_level = coarsest_mult_level;
+   } 
+   else {
+      dmem_all_data.input.coarsest_mult_level = 0;
+   }
+
    dmem_all_data.grid.my_grid = 0;
    
    srand(0);
@@ -322,27 +330,34 @@ int main (int argc, char *argv[])
  
    start = omp_get_wtime(); 
    DMEM_Setup(&dmem_all_data);
-   DMEM_ResetData(&dmem_all_data);
    dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
-   if (dmem_all_data.input.solver == ASYNC_MULTADD){
-      DMEM_Add(&dmem_all_data);
-   }
-   else if (dmem_all_data.input.solver == MULTADD){
-      DMEM_SyncAdd(&dmem_all_data);
-   }
-   else if (dmem_all_data.input.solver == MULT){
-      DMEM_Mult(&dmem_all_data);
-   }
+   for (int run = 0; run < num_runs; run++){
+      DMEM_ResetData(&dmem_all_data);
 
-   DMEM_PrintOutput(&dmem_all_data);
+      if (dmem_all_data.input.solver == MULTADD ||
+          dmem_all_data.input.solver == BPX){
+         if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+            printf("\nSOLVER: multadd\n\n\n");
+         }
+         DMEM_Add(&dmem_all_data);
+      }
+      else if (dmem_all_data.input.solver == MULT ||
+               dmem_all_data.input.solver == MULT_MULTADD){
+         if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+            printf("\nSOLVER: classical multiplicative\n\n\n");
+         }
+         DMEM_Mult(&dmem_all_data);
+      }
+      DMEM_PrintOutput(&dmem_all_data);
+   }
 
   // HYPRE_BoomerAMGSolve(dmem_all_data.hypre.solver,
   //                      dmem_all_data.matrix.A_fine,
   //                      dmem_all_data.vector_fine.f,
   //                      dmem_all_data.vector_fine.u);
 
-  // if (dmem_all_data.input.solver == ASYNC_MULTADD){
+  // if (dmem_all_data.input.solver == MULTADD){
   //    HYPRE_Real *e_local_data;
   //    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)dmem_all_data.hypre.solver_gridk;
   //    hypre_ParVector *Vtemp = hypre_ParAMGDataVtemp(amg_data);

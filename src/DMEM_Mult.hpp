@@ -6,4 +6,6 @@
 
 void DMEM_Mult(DMEM_AllData *dmem_all_data);
 
+void DMEM_SyncAdd(DMEM_AllData *dmem_all_data);
+
 #endif

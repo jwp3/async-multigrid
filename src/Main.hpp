@@ -40,8 +40,10 @@
 #define MULT 0
 #define AFACX 1
 #define MULTADD 2
-#define ASYNC_AFACX 3
-#define ASYNC_MULTADD 4
+#define BPX 3
+#define MULT_MULTADD 4
+#define ASYNC_AFACX 5
+#define ASYNC_MULTADD 6
 
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1

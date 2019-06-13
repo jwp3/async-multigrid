@@ -23,7 +23,6 @@ DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 		 $(SRC_DIR)DMEM_MatVec.cpp \
 		 $(SRC_DIR)DMEM_Add.cpp \
 		 $(SRC_DIR)DMEM_Mult.cpp \
-		 $(SRC_DIR)DMEM_SyncAdd.cpp \
 		 $(SRC_DIR)DMEM_Test.cpp \
 
 CPP_COMPILE = g++ -fopenmp -O3

@@ -8,6 +8,8 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data);
 
 void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename);
 
+void DMEM_ResetAllCommData(DMEM_AllData *dmem_all_data);
+
 HYPRE_Real InnerProd(hypre_Vector *x,
                      hypre_Vector *y,
                      MPI_Comm comm);

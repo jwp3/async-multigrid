@@ -33,9 +33,7 @@ using namespace std;
 using namespace mfem;
 
 typedef struct{
-   int *smooth_relax;
-   int *smooth_sweeps;
-   int *cycles;
+   vector<double> level_wtime;
    double setup_wtime;
    double solve_wtime;
    double smooth_wtime;
@@ -48,6 +46,7 @@ typedef struct{
    double coarsest_solve_wtime;
    double start_wtime;
    double end_wtime;
+   double inner_solve_wtime;
    double r_norm2;
    double r0_norm2;
    double hypre_e_norm2;
@@ -60,10 +59,12 @@ typedef struct{
    int num_fine_smooth_sweeps;
    int num_coarse_smooth_sweeps;
    int num_cycles;
+   int num_inner_cycles;
    int start_cycle;
    int increment_cycle;
    int num_threads;
    double tol;
+   double inner_tol;
    int oneline_output_flag;
    int print_reshist_flag;
    int print_output_flag;
@@ -72,7 +73,6 @@ typedef struct{
    int smoother;
    int solver;
    int async_flag;
-   int async_type;
    int thread_part_type;
    int thread_part_distr_type;
    int converge_test_type;
@@ -85,6 +85,8 @@ typedef struct{
    int smooth_interp_type;
    int read_type;
    int print_output_level;
+   int coarsest_mult_level;
+   int check_res_flag;
 }DMEM_InputData;
 
 
@@ -206,8 +208,8 @@ typedef struct{
 typedef struct{
    int num_levels;
    int *n;
-   int tot_work;
-   int *level_work;
+   double tot_work;
+   double *level_work;
    int *num_procs_level;
    double *frac_level_work;
    int **procs;
@@ -220,6 +222,7 @@ typedef struct{
    double r_norm2_local;
    int r_norm2_local_converge_flag;
    int cycle;
+   int inner_cycle;
 }DMEM_IterData;
 
 typedef struct{
