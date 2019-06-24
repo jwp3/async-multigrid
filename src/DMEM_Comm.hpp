@@ -14,4 +14,8 @@ void CompleteRecv(DMEM_AllData *dmem_all_data,
                   HYPRE_Real *v,
                   HYPRE_Int op);
 
+void CompleteInFlight(DMEM_CommData *comm_data);
+
+void CheckInFlight(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data, int i);
+
 #endif

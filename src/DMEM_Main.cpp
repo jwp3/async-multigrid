@@ -38,6 +38,8 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.print_level = 0;
    dmem_all_data.hypre.solve_flag = 0;
    dmem_all_data.hypre.strong_threshold = .25;
+   dmem_all_data.hypre.multadd_trunc_factor = 0.0;
+   dmem_all_data.hypre.start_smooth_level = 0;
 
    int n = 10;
    dmem_all_data.matrix.nx = n;
@@ -81,6 +83,8 @@ int main (int argc, char *argv[])
    dmem_all_data.input.start_cycle = 1;
    dmem_all_data.input.coarsest_mult_level = 0;
    dmem_all_data.input.check_res_flag = 1;
+   dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
+   dmem_all_data.input.max_inflight = 1;
 
    /* Parse command line */
    int arg_index = 0;
@@ -167,8 +171,21 @@ int main (int argc, char *argv[])
             dmem_all_data.input.solver = MULT_MULTADD;
          }
       }
+      else if (strcmp(argv[arg_index], "-multadd_smooth_interp_level") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "all") == 0){
+            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
+         }
+         else if (strcmp(argv[arg_index], "grid") == 0){
+            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
+         }
+      }
       else if (strcmp(argv[arg_index], "-async") == 0){
          dmem_all_data.input.async_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-max_inflight") == 0){
+         arg_index++;
+         dmem_all_data.input.max_inflight = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-coarsest_mult_level") == 0){
          arg_index++;
@@ -181,6 +198,10 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-th") == 0){
          arg_index++;
          dmem_all_data.hypre.strong_threshold = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-multadd_trunc_factor") == 0){
+         arg_index++;
+         dmem_all_data.hypre.multadd_trunc_factor = atof(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0){
          arg_index++;
@@ -336,7 +357,8 @@ int main (int argc, char *argv[])
       DMEM_ResetData(&dmem_all_data);
 
       if (dmem_all_data.input.solver == MULTADD ||
-          dmem_all_data.input.solver == BPX){
+          dmem_all_data.input.solver == BPX ||
+          dmem_all_data.input.solver == AFACX){
          if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
             printf("\nSOLVER: multadd\n\n\n");
          }

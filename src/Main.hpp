@@ -44,6 +44,7 @@
 #define MULT_MULTADD 4
 #define ASYNC_AFACX 5
 #define ASYNC_MULTADD 6
+#define AFACY 7
 
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1
@@ -67,6 +68,9 @@
 
 #define READ_SOL 0
 #define READ_RES 1
+
+#define SMOOTH_INTERP_ALL_LEVELS 0
+#define SMOOTH_INTERP_MY_GRID 1
 
 using namespace std;
 using namespace mfem;

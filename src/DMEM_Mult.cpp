@@ -257,16 +257,9 @@ void SyncAddCycle(DMEM_AllData *dmem_all_data,
    HYPRE_Real *e_local_data = hypre_VectorData(hypre_ParVectorLocalVector(e));
    hypre_ParVectorSetConstantValues(e, 0.0);
 
-   if (dmem_all_data->input.solver == ASYNC_MULTADD){
-      x = dmem_all_data->vector_gridk.x;
-      hypre_ParVectorCopy(dmem_all_data->vector_gridk.r,
-                          F_array[0]);
-   }
-   else {
-      x = dmem_all_data->vector_fine.x;
-      hypre_ParVectorCopy(dmem_all_data->vector_fine.r,
-                          F_array[0]);
-   }
+   x = dmem_all_data->vector_fine.x;
+   hypre_ParVectorCopy(dmem_all_data->vector_fine.r,
+                       F_array[0]);
 
    HYPRE_Real *x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(x));
 

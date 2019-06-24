@@ -87,6 +87,8 @@ typedef struct{
    int print_output_level;
    int coarsest_mult_level;
    int check_res_flag;
+   int multadd_smooth_interp_level_type;
+   int max_inflight;
 }DMEM_InputData;
 
 
@@ -110,6 +112,8 @@ typedef struct{
    HYPRE_Int solver_id;
    HYPRE_Int solve_flag;
    HYPRE_Real strong_threshold;
+   HYPRE_Real multadd_trunc_factor;
+   HYPRE_Int start_smooth_level;
 }DMEM_HypreData;
 
 typedef struct{
@@ -137,11 +141,15 @@ typedef struct{
    vector<int> start;
    vector<int> end;
    vector<int> len;
+   vector<int> next_inflight;
+   vector<int> num_inflight;
+   vector<int> max_inflight;
    HYPRE_Real **data;
+   HYPRE_Real ***data_inflight;
    MPI_Request *requests;
-   int *new_info_flags;
+   MPI_Request **requests_inflight;
+   int **inflight_flags;
    int type;
-   int vector_type;
    int tag;
 }DMEM_CommData;
 
@@ -203,6 +211,7 @@ typedef struct{
    int *hypre_send_map;
    int *hypre_recv_map;
    int all_done_flag;
+   int outside_done_flag;
 }DMEM_AllCommData;
 
 typedef struct{
