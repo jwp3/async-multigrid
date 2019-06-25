@@ -4,16 +4,19 @@
 
 using namespace std;
 
-void DMEM_Laplacian_3D_27pt(DMEM_AllData *dmem_all_data,
-			    HYPRE_ParCSRMatrix *A_ptr,
-			    MPI_Comm comm,
-			    HYPRE_Int nx,
-			    HYPRE_Int ny,
-			    HYPRE_Int nz)
+void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
+                           HYPRE_ParCSRMatrix *A_ptr,
+                           HYPRE_ParVector *rhs_ptr,
+                           MPI_Comm comm,
+                           HYPRE_Int nx,
+                           HYPRE_Int ny,
+                           HYPRE_Int nz,
+                           HYPRE_Real eps)
 {
    HYPRE_Int P, Q, R;
 
-   HYPRE_ParCSRMatrix  A;
+   HYPRE_ParCSRMatrix A;
+   HYPRE_ParVector rhs;
 
    HYPRE_Int num_procs, my_id;
    HYPRE_Int p, q, r;
@@ -80,18 +83,25 @@ void DMEM_Laplacian_3D_27pt(DMEM_AllData *dmem_all_data,
     * Generate the matrix
     *-----------------------------------------------------------*/
 
-   values = hypre_CTAlloc(HYPRE_Real,  2, HYPRE_MEMORY_HOST);
+   if (dmem_all_data->input.test_problem == VARDIFCONV_3D7PT){
+      A = (HYPRE_ParCSRMatrix) GenerateVarDifConv(comm, nx, ny, nz, P, Q, R, p, q, r, eps, &rhs);
+      
+      *rhs_ptr = rhs;
+   }
+   else {
+      values = hypre_CTAlloc(HYPRE_Real,  2, HYPRE_MEMORY_HOST);
 
-   values[0] = 26.0;
-   if (nx == 1 || ny == 1 || nz == 1)
-      values[0] = 8.0;
-   if (nx*ny == 1 || nx*nz == 1 || ny*nz == 1)
-      values[0] = 2.0;
-   values[1] = -1.;
+      values[0] = 26.0;
+      if (nx == 1 || ny == 1 || nz == 1)
+         values[0] = 8.0;
+      if (nx*ny == 1 || nx*nz == 1 || ny*nz == 1)
+         values[0] = 2.0;
+      values[1] = -1.;
 
-   A = (HYPRE_ParCSRMatrix) GenerateLaplacian27pt(comm, nx, ny, nz, P, Q, R, p, q, r, values);
+      A = (HYPRE_ParCSRMatrix) GenerateLaplacian27pt(comm, nx, ny, nz, P, Q, R, p, q, r, values);
 
-   hypre_TFree(values, HYPRE_MEMORY_HOST);
+      hypre_TFree(values, HYPRE_MEMORY_HOST);
+   }
 
    *A_ptr = A;
 }

@@ -5,11 +5,16 @@
 
 using namespace std;
 
-void CompleteInFlight(DMEM_CommData *comm_data)
+void CompleteInFlight(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data)
 {
+   double begin;
    for (int i = 0; i < comm_data->procs.size(); i++){
       for (int j = 0; j < comm_data->max_inflight[i]; j++){
-         hypre_MPI_Wait(&(comm_data->requests_inflight[i][j]), MPI_STATUS_IGNORE);
+         if (comm_data->inflight_flags[i][j] == 1){
+            begin = MPI_Wtime();
+            hypre_MPI_Wait(&(comm_data->requests_inflight[i][j]), MPI_STATUS_IGNORE);
+            dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - begin;
+         }
       }
    }
 }
@@ -17,6 +22,7 @@ void CompleteInFlight(DMEM_CommData *comm_data)
 void CheckInFlight(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data, int i)
 {
    int flag;
+   double begin;
    while (1){
       int break_flag = 0;
       if (dmem_all_data->comm.all_done_flag == 0){
@@ -29,7 +35,9 @@ void CheckInFlight(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data, int i)
       }
       for (int j = 0; j < comm_data->max_inflight[i]; j++){ 
          if (comm_data->inflight_flags[i][j] == 1){
+            begin = MPI_Wtime();
             hypre_MPI_Test(&(comm_data->requests_inflight[i][j]), &flag, MPI_STATUS_IGNORE);
+            dmem_all_data->output.mpitest_wtime += MPI_Wtime() - begin;
             if (flag){
                comm_data->inflight_flags[i][j] = 0;
                comm_data->num_inflight[i]--;
@@ -77,6 +85,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
 
    int my_grid = dmem_all_data->grid.my_grid;
+   double begin;
 
    hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_fine);
 
@@ -97,6 +106,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                comm_data->data[i][j] = v[vec_start+j];
             }
          }
+         begin = MPI_Wtime();
          hypre_MPI_Isend(comm_data->data[i],
                          vec_len+1,
                          HYPRE_MPI_REAL,
@@ -104,10 +114,12 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                          comm_data->tag,
                          MPI_COMM_WORLD,
                          &(comm_data->requests[i]));
+         dmem_all_data->output.mpiisend_wtime += MPI_Wtime() - begin;
          comm_data->message_count[i]++;
       }
       /* inside recv */
       else if (comm_data->type == GRIDK_INSIDE_RECV || comm_data->type == FINE_INTRA_INSIDE_RECV){
+         begin = MPI_Wtime();
          hypre_MPI_Irecv(comm_data->data[i],
                          vec_len+1,
                          HYPRE_MPI_REAL,
@@ -115,24 +127,39 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                          comm_data->tag,
                          MPI_COMM_WORLD,
                          &(comm_data->requests[i]));
+         dmem_all_data->output.mpiirecv_wtime += MPI_Wtime() - begin;
          comm_data->message_count[i]++;
       }
       /* outside send */
       else if (comm_data->type == GRIDK_OUTSIDE_SEND || comm_data->type == FINE_INTRA_OUTSIDE_SEND){
          if (dmem_all_data->input.async_flag == 1){
             if (comm_data->done_flags[i] < 2){
+               if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
+                  for (HYPRE_Int j = 0; j < vec_len; j++){
+                     comm_data->data[i][j] += v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
+                  }
+               }
+               else {
+                  for (HYPRE_Int j = 0; j < vec_len; j++){
+                     comm_data->data[i][j] += v[vec_start+j];
+                  }
+               }
                CheckInFlight(dmem_all_data, comm_data, i);
                if (comm_data->num_inflight[i] < comm_data->max_inflight[i]){
                   int next_inflight = comm_data->next_inflight[i];
-                  if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
-                     for (HYPRE_Int j = 0; j < vec_len; j++){
-                        comm_data->data_inflight[i][next_inflight][j] = v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
-                     }
-                  }
-                  else {
-                     for (HYPRE_Int j = 0; j < vec_len; j++){
-                        comm_data->data_inflight[i][next_inflight][j] = v[vec_start+j];
-                     }
+                 // if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
+                 //    for (HYPRE_Int j = 0; j < vec_len; j++){
+                 //       comm_data->data_inflight[i][next_inflight][j] = v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
+                 //    }
+                 // }
+                 // else {
+                 //    for (HYPRE_Int j = 0; j < vec_len; j++){
+                 //       comm_data->data_inflight[i][next_inflight][j] = v[vec_start+j];
+                 //    }
+                 // }
+                  for (HYPRE_Int j = 0; j < vec_len; j++){
+                     comm_data->data_inflight[i][next_inflight][j] = comm_data->data[i][j];
+                     comm_data->data[i][j] = 0.0;
                   }
                   int num_cycles;
                   if (dmem_all_data->input.solver == MULT_MULTADD){
@@ -155,6 +182,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                         }
                      }
                   }
+                  begin = MPI_Wtime();
                   hypre_MPI_Isend(comm_data->data_inflight[i][next_inflight],
                                   vec_len+1,
                                   HYPRE_MPI_REAL,
@@ -162,6 +190,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                                   comm_data->tag,
                                   MPI_COMM_WORLD,
                                   &(comm_data->requests_inflight[i][next_inflight]));
+                  dmem_all_data->output.mpiisend_wtime += MPI_Wtime() - begin;
                   comm_data->inflight_flags[i][next_inflight] = 1;
                   comm_data->num_inflight[i]++;
                   SetNextInFlight(comm_data, i);
@@ -180,6 +209,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                   comm_data->data[i][j] = v[vec_start+j];
                }
             }
+            begin = MPI_Wtime();
             hypre_MPI_Isend(comm_data->data[i],
                             vec_len+1,
                             HYPRE_MPI_REAL,
@@ -187,6 +217,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                             comm_data->tag,
                             MPI_COMM_WORLD,
                             &(comm_data->requests[i]));
+            dmem_all_data->output.mpiisend_wtime += MPI_Wtime() - begin;
             comm_data->message_count[i]++;
          }
       }
@@ -226,6 +257,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                         }
                      }
                      comm_data->message_count[i]++;
+                     begin = MPI_Wtime();
                      hypre_MPI_Irecv(comm_data->data[i],
                                      vec_len+1,
                                      HYPRE_MPI_REAL,
@@ -233,15 +265,17 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                                      comm_data->tag,
                                      MPI_COMM_WORLD,
                                      &(comm_data->requests[i]));
+                     dmem_all_data->output.mpiirecv_wtime += MPI_Wtime() - begin;
                   }
                   else {
                      break;
                   }
-               };
+               }
             }
          }
          else {
             comm_data->message_count[i]++;
+            begin = MPI_Wtime();
             hypre_MPI_Irecv(comm_data->data[i],
                             vec_len+1,
                             HYPRE_MPI_REAL,
@@ -249,6 +283,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                             comm_data->tag,
                             MPI_COMM_WORLD,
                             &(comm_data->requests[i]));
+            dmem_all_data->output.mpiirecv_wtime += MPI_Wtime() - begin;
          }
       }
    }
@@ -259,9 +294,13 @@ void CompleteRecv(DMEM_AllData *dmem_all_data,
                   HYPRE_Real *v,
                   HYPRE_Int op)
 {
+   double begin;
+
+   begin = MPI_Wtime();
    hypre_MPI_Waitall(comm_data->procs.size(),
                      comm_data->requests,
                      hypre_MPI_STATUSES_IGNORE);
+   dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - begin;
  
    for (HYPRE_Int i = 0; i < comm_data->procs.size(); i++){
       HYPRE_Int vec_start = comm_data->start[i];

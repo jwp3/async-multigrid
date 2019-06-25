@@ -2,7 +2,7 @@
 #include "Misc.hpp"
 #include "DMEM_Setup.hpp"
 #include "DMEM_Main.hpp"
-#include "DMEM_Laplacian.hpp"
+#include "DMEM_BuildMatrix.hpp"
 #include "DMEM_Misc.hpp"
 #include "DMEM_ParMfem.hpp"
 
@@ -18,9 +18,7 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
 void ComputeWork(DMEM_AllData *all_data);
 void AssignProcs(DMEM_AllData *dmem_all_data);
 void PartitionGrids(DMEM_AllData *dmem_all_data);
-void ConstructMatrix(DMEM_AllData *dmem_all_data,
-                     HYPRE_ParCSRMatrix *A,
-                     MPI_Comm comm);
+void BuildMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVector *rhs, MPI_Comm comm);
 void CreateCommData_GlobalRes(DMEM_AllData *dmem_all_data);
 void CreateCommData_LocalRes(DMEM_AllData *dmem_all_data);
 void SetVectorComms(DMEM_AllData *dmem_all_data,
@@ -42,9 +40,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
     
    start = omp_get_wtime();
    /* fine */
-   ConstructMatrix(dmem_all_data,
-		   &(dmem_all_data->matrix.A_fine),
-		   MPI_COMM_WORLD);
+   BuildMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.b), MPI_COMM_WORLD);
   // char buffer[100];
   // sprintf(buffer, "A_%d.txt", num_procs);
   // DMEM_PrintParCSRMatrix(dmem_all_data->matrix.A_fine, buffer);
@@ -82,9 +78,6 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
       DistributeMatrix(dmem_all_data,
                        dmem_all_data->matrix.A_fine,
                        &(dmem_all_data->matrix.A_gridk));
-   //   ConstructMatrix(dmem_all_data, 
-   //		      &(dmem_all_data->matrix.A_gridk),
-   //		      dmem_all_data->grid.my_comm);
       ConstructVectors(dmem_all_data,
                        dmem_all_data->matrix.A_gridk,
                        &(dmem_all_data->vector_gridk));
@@ -1472,6 +1465,10 @@ void ResetOutputData(DMEM_AllData *dmem_all_data)
    dmem_all_data->output.start_wtime = 0.0;
    dmem_all_data->output.end_wtime = 0.0;
    dmem_all_data->output.inner_solve_wtime = 0.0;
+   dmem_all_data->output.mpiisend_wtime = 0.0;
+   dmem_all_data->output.mpiirecv_wtime = 0.0;
+   dmem_all_data->output.mpitest_wtime = 0.0;
+   dmem_all_data->output.mpiwait_wtime = 0.0;
 }
 
 void DMEM_ResetAllCommData(DMEM_AllData *dmem_all_data)
@@ -1701,16 +1698,16 @@ void ComputeWork(DMEM_AllData *dmem_all_data)
    }
 }
 
-void ConstructMatrix(DMEM_AllData *dmem_all_data,
-		     HYPRE_ParCSRMatrix *A,
-		     MPI_Comm comm)
+void BuildMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVector *rhs, MPI_Comm comm)
 {
-   DMEM_Laplacian_3D_27pt(dmem_all_data,
-                          A,
-                          comm,
-                          dmem_all_data->matrix.nx,
-                          dmem_all_data->matrix.ny,
-                          dmem_all_data->matrix.nz);
+   DMEM_BuildHypreMatrix(dmem_all_data,
+                         A,
+                         rhs,
+                         comm,
+                         dmem_all_data->matrix.nx,
+                         dmem_all_data->matrix.ny,
+                         dmem_all_data->matrix.nz,
+                         dmem_all_data->hypre.vardifconv_eps);
   // DMEM_ParMfem(dmem_all_data, A, comm);
 }
 

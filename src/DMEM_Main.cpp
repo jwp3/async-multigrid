@@ -40,11 +40,13 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.strong_threshold = .25;
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
+   dmem_all_data.hypre.vardifconv_eps = 1.0;
 
    int n = 10;
    dmem_all_data.matrix.nx = n;
    dmem_all_data.matrix.ny = n;
    dmem_all_data.matrix.nz = n;
+
    /* mfem parameters */
    dmem_all_data.mfem.ref_levels = 1;
    dmem_all_data.mfem.par_ref_levels = 1;
@@ -113,24 +115,16 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-problem") == 0){
          arg_index++;
-         if (strcmp(argv[arg_index], "5pt") == 0){
-            dmem_all_data.input.test_problem = LAPLACE_2D5PT;
-         }
-         else if (strcmp(argv[arg_index], "27pt") == 0){
+         if (strcmp(argv[arg_index], "27pt") == 0){
             dmem_all_data.input.test_problem = LAPLACE_3D27PT;
          }
-	 else if (strcmp(argv[arg_index], "7pt") == 0){
-            dmem_all_data.input.test_problem = LAPLACE_3D7PT;
+	 else if (strcmp(argv[arg_index], "vardifconv") == 0){
+            dmem_all_data.input.test_problem = VARDIFCONV_3D7PT;
          }
-         else if (strcmp(argv[arg_index], "mfem_laplace") == 0){
-            dmem_all_data.input.test_problem = MFEM_LAPLACE;
-         }
-         else if (strcmp(argv[arg_index], "mfem_elast") == 0){
-            dmem_all_data.input.test_problem = MFEM_ELAST;
-         }
-	 else if (strcmp(argv[arg_index], "mfem_maxwell") == 0){
-            dmem_all_data.input.test_problem = MFEM_MAXWELL;
-         }
+      }
+      else if (strcmp(argv[arg_index], "-vardifconv_eps") == 0){
+         arg_index++;
+         dmem_all_data.hypre.vardifconv_eps = atof(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-smoother") == 0){
          arg_index++;

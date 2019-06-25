@@ -60,11 +60,12 @@
 #define SEMI_ASYNC 1
 
 #define LAPLACE_2D5PT 0
-#define LAPLACE_3D27PT 1
-#define MFEM_LAPLACE 2
-#define MFEM_ELAST 3
-#define LAPLACE_3D7PT 4
+#define LAPLACE_3D7PT 1
+#define LAPLACE_3D27PT 2
+#define MFEM_LAPLACE 3
+#define MFEM_ELAST 4
 #define MFEM_MAXWELL 5
+#define VARDIFCONV_3D7PT 6
 
 #define READ_SOL 0
 #define READ_RES 1

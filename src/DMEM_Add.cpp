@@ -141,6 +141,7 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
       AsyncEnd(dmem_all_data);
    }
    dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
+
    if (dmem_all_data->input.solver == MULT_MULTADD){
       dmem_all_data->output.inner_solve_wtime += MPI_Wtime() - begin;
    }
@@ -406,6 +407,7 @@ void DMEM_AddCorrect_LocalRes(DMEM_AllData *dmem_all_data)
                         dmem_all_data->comm.gridjToGridk_Correct_outsideSend.requests,
                         MPI_STATUSES_IGNORE);
    }
+   dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - begin;
    dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
 
    SendRecv(dmem_all_data,
@@ -490,6 +492,7 @@ void DMEM_SolutionToFinest_LocalRes(DMEM_AllData *dmem_all_data,
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    int my_grid = dmem_all_data->grid.my_grid;
+   double begin;
 
    hypre_ParAMGData *fine_amg_data, *gridk_amg_data;
    HYPRE_Real *x_gridk_local_data, *x_fine_local_data;
@@ -501,9 +504,11 @@ void DMEM_SolutionToFinest_LocalRes(DMEM_AllData *dmem_all_data,
    x_gridk_local_data = hypre_VectorData(hypre_ParVectorLocalVector(x_gridk));
    x_fine_local_data = hypre_VectorData(hypre_ParVectorLocalVector(x_fine));
 
+   begin = MPI_Wtime();
    hypre_MPI_Waitall(dmem_all_data->comm.finestToGridk_Correct_insideSend.procs.size(),
                      dmem_all_data->comm.finestToGridk_Correct_insideSend.requests,
                      MPI_STATUSES_IGNORE);
+   dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - begin;
 
    SendRecv(dmem_all_data,
             &(dmem_all_data->comm.finestToGridk_Correct_insideSend),
@@ -527,6 +532,7 @@ void DMEM_ResidualToGridk_LocalRes(DMEM_AllData *dmem_all_data,
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    int my_grid = dmem_all_data->grid.my_grid;
+   double begin;
 
    hypre_ParAMGData *fine_amg_data, *gridk_amg_data;
    HYPRE_Real *r_local_data, *f_local_data;
@@ -538,9 +544,11 @@ void DMEM_ResidualToGridk_LocalRes(DMEM_AllData *dmem_all_data,
    r_local_data = hypre_VectorData(hypre_ParVectorLocalVector(r));
    f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(f));
 
+   begin = MPI_Wtime();
    hypre_MPI_Waitall(dmem_all_data->comm.finestToGridk_Residual_insideSend.procs.size(),
                      dmem_all_data->comm.finestToGridk_Residual_insideSend.requests,
                      MPI_STATUSES_IGNORE);
+   dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - begin;
 
    SendRecv(dmem_all_data,
             &(dmem_all_data->comm.finestToGridk_Residual_insideSend),
@@ -1011,13 +1019,9 @@ void AsyncRecvCleanup(DMEM_AllData *dmem_all_data)
                         MPI_STATUSES_IGNORE);
    }
    else {
-      CompleteInFlight(&(dmem_all_data->comm.gridjToGridk_Correct_outsideSend));
-     // hypre_MPI_Waitall(dmem_all_data->comm.gridjToGridk_Correct_outsideSend.procs.size(),
-     //                   dmem_all_data->comm.gridjToGridk_Correct_outsideSend.requests,
-     //                   MPI_STATUSES_IGNORE);
+      CompleteInFlight(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend));
    }
    dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
-  // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv));
 }
 
 void AsyncEnd(DMEM_AllData *dmem_all_data)
@@ -1117,7 +1121,6 @@ void CheckComm(DMEM_AllData *dmem_all_data)
          CheckInFlight(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), i);
       }
       dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
-     // MPITestComm(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend));
    }
 }
 

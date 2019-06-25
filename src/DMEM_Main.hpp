@@ -47,6 +47,10 @@ typedef struct{
    double start_wtime;
    double end_wtime;
    double inner_solve_wtime;
+   double mpiisend_wtime;
+   double mpiirecv_wtime;
+   double mpitest_wtime;
+   double mpiwait_wtime;
    double r_norm2;
    double r0_norm2;
    double hypre_e_norm2;
@@ -114,6 +118,7 @@ typedef struct{
    HYPRE_Real strong_threshold;
    HYPRE_Real multadd_trunc_factor;
    HYPRE_Int start_smooth_level;
+   HYPRE_Real vardifconv_eps;
 }DMEM_HypreData;
 
 typedef struct{
