@@ -66,6 +66,7 @@
 #define MFEM_ELAST 4
 #define MFEM_MAXWELL 5
 #define VARDIFCONV_3D7PT 6
+#define DIFCONV_3D7PT 6
 
 #define READ_SOL 0
 #define READ_RES 1

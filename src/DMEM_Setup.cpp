@@ -40,7 +40,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
     
    start = omp_get_wtime();
    /* fine */
-   BuildMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.b), MPI_COMM_WORLD);
+   BuildMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.e), MPI_COMM_WORLD);
   // char buffer[100];
   // sprintf(buffer, "A_%d.txt", num_procs);
   // DMEM_PrintParCSRMatrix(dmem_all_data->matrix.A_fine, buffer);
@@ -1704,10 +1704,11 @@ void BuildMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVe
                          A,
                          rhs,
                          comm,
-                         dmem_all_data->matrix.nx,
-                         dmem_all_data->matrix.ny,
-                         dmem_all_data->matrix.nz,
-                         dmem_all_data->hypre.vardifconv_eps);
+                         dmem_all_data->matrix.nx, dmem_all_data->matrix.ny, dmem_all_data->matrix.nz,
+                         dmem_all_data->matrix.difconv_cx, dmem_all_data->matrix.difconv_cy, dmem_all_data->matrix.difconv_cz,
+                         dmem_all_data->matrix.difconv_ax, dmem_all_data->matrix.difconv_ay, dmem_all_data->matrix.difconv_az,
+                         dmem_all_data->matrix.vardifconv_eps,
+                         dmem_all_data->matrix.difconv_atype);
   // DMEM_ParMfem(dmem_all_data, A, comm);
 }
 

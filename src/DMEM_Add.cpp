@@ -262,8 +262,9 @@ void AddCycle(DMEM_AllData *dmem_all_data)
    u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[coarsest_level]));
 
    hypre_ParVectorSetConstantValues(U_array[coarsest_level], 0.0);
+   begin = MPI_Wtime();
    if (my_grid == num_levels-1){
-      begin = MPI_Wtime();
+     // begin = MPI_Wtime();
       for (HYPRE_Int i = 0; i < num_rows; i++){
          v_local_data[i] = f_local_data[i];
       }
@@ -278,10 +279,10 @@ void AddCycle(DMEM_AllData *dmem_all_data)
                                             F_array[coarsest_level],
                                             Vtemp);
       }
-      dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
+     // dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
    }
    else {
-      begin = MPI_Wtime();
+     // begin = MPI_Wtime();
       if (dmem_all_data->input.solver == BPX){
          double prob = RandDouble(0, 1.0);
          for (HYPRE_Int i = 0; i < num_rows; i++){
@@ -330,8 +331,9 @@ void AddCycle(DMEM_AllData *dmem_all_data)
                dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
          }
       }
-      dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
+     // dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
    }
+   dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
   
    if (dmem_all_data->input.async_flag == 1){
       CheckComm(dmem_all_data);

@@ -40,12 +40,20 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.strong_threshold = .25;
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
-   dmem_all_data.hypre.vardifconv_eps = 1.0;
 
    int n = 10;
+   double c = 1.0, a = 1.0;
    dmem_all_data.matrix.nx = n;
    dmem_all_data.matrix.ny = n;
    dmem_all_data.matrix.nz = n;
+   dmem_all_data.matrix.difconv_ax = a;
+   dmem_all_data.matrix.difconv_ay = a;
+   dmem_all_data.matrix.difconv_az = a;
+   dmem_all_data.matrix.difconv_cx = c;
+   dmem_all_data.matrix.difconv_cy = c;
+   dmem_all_data.matrix.difconv_cz = c;
+   dmem_all_data.matrix.difconv_atype = 0;
+   dmem_all_data.matrix.vardifconv_eps = 1.0;
 
    /* mfem parameters */
    dmem_all_data.mfem.ref_levels = 1;
@@ -93,6 +101,9 @@ int main (int argc, char *argv[])
    int print_usage = 0;
    int coarsest_mult_level = 1;
 
+   int num_solvers = 0;
+   vector<int> solvers;
+
    while (arg_index < argc){
       if (strcmp(argv[arg_index], "-n") == 0){
          arg_index++;
@@ -113,10 +124,51 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.matrix.nz = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-c") == 0){
+         arg_index++;
+         c = atof(argv[arg_index]);
+         dmem_all_data.matrix.difconv_cx = c;
+         dmem_all_data.matrix.difconv_cy = c;
+         dmem_all_data.matrix.difconv_cz = c;
+      }
+      else if (strcmp(argv[arg_index], "-cx") == 0){
+         arg_index++;
+         dmem_all_data.matrix.difconv_cx = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-cy") == 0){
+         arg_index++;
+         dmem_all_data.matrix.difconv_cy = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-cz") == 0){
+         arg_index++;
+         dmem_all_data.matrix.difconv_cz = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-a") == 0){
+         arg_index++;
+         a = atof(argv[arg_index]);
+         dmem_all_data.matrix.difconv_ax = a;
+         dmem_all_data.matrix.difconv_ay = a;
+         dmem_all_data.matrix.difconv_az = a;
+      }
+      else if (strcmp(argv[arg_index], "-ax") == 0){
+         arg_index++;
+         dmem_all_data.matrix.difconv_ax = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-ay") == 0){
+         arg_index++;
+         dmem_all_data.matrix.difconv_ay = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-az") == 0){
+         arg_index++;
+         dmem_all_data.matrix.difconv_az = atof(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-problem") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "27pt") == 0){
             dmem_all_data.input.test_problem = LAPLACE_3D27PT;
+         }
+         else if (strcmp(argv[arg_index], "difconv") == 0){
+            dmem_all_data.input.test_problem = DIFCONV_3D7PT;
          }
 	 else if (strcmp(argv[arg_index], "vardifconv") == 0){
             dmem_all_data.input.test_problem = VARDIFCONV_3D7PT;
@@ -124,7 +176,7 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-vardifconv_eps") == 0){
          arg_index++;
-         dmem_all_data.hypre.vardifconv_eps = atof(argv[arg_index]);
+         dmem_all_data.matrix.vardifconv_eps = atof(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-smoother") == 0){
          arg_index++;
@@ -164,6 +216,8 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "mult_multadd") == 0){
             dmem_all_data.input.solver = MULT_MULTADD;
          }
+        // solvers.push_back(dmem_all_data.input.solver);
+        // num_solvers++;
       }
       else if (strcmp(argv[arg_index], "-multadd_smooth_interp_level") == 0){
          arg_index++;
@@ -338,6 +392,11 @@ int main (int argc, char *argv[])
       dmem_all_data.input.coarsest_mult_level = 0;
    }
 
+   if (num_solvers == 0){
+      solvers.push_back(dmem_all_data.input.solver);
+      num_solvers = 1;
+   }
+
    dmem_all_data.grid.my_grid = 0;
    
    srand(0);
@@ -347,25 +406,46 @@ int main (int argc, char *argv[])
    DMEM_Setup(&dmem_all_data);
    dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
-   for (int run = 0; run < num_runs; run++){
-      DMEM_ResetData(&dmem_all_data);
-
-      if (dmem_all_data.input.solver == MULTADD ||
-          dmem_all_data.input.solver == BPX ||
-          dmem_all_data.input.solver == AFACX){
+   for (int s = 0; s < num_solvers; s++){
+      dmem_all_data.input.solver = solvers[s];
+      for (int run = 0; run < num_runs; run++){
+         DMEM_ResetData(&dmem_all_data);
          if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-            printf("\nSOLVER: multadd\n\n\n");
+            printf("\nSOLVER: ");
          }
-         DMEM_Add(&dmem_all_data);
-      }
-      else if (dmem_all_data.input.solver == MULT ||
-               dmem_all_data.input.solver == MULT_MULTADD){
-         if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-            printf("\nSOLVER: classical multiplicative\n\n\n");
+         if (dmem_all_data.input.solver == MULT){
+            if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+               printf("classical multiplicative\n\n\n");
+            }
+            DMEM_Mult(&dmem_all_data);
          }
-         DMEM_Mult(&dmem_all_data);
+         else if (dmem_all_data.input.solver == MULT_MULTADD){
+            if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+               printf("classical multiplicative with multadd as coarse grid solver\n\n\n");
+            }
+            DMEM_Mult(&dmem_all_data);
+         }
+         else {
+            if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+               if (dmem_all_data.input.solver == BPX){
+                  printf("BPX\n\n\n");
+               }
+               else if (dmem_all_data.input.solver == AFACX){
+                  printf("AFACx\n\n\n");
+               }
+               else {
+                  if (dmem_all_data.input.async_flag == 1){
+                     printf("asynchronous multadd\n\n\n");
+                  }
+                  else {
+                     printf("multadd\n\n\n");
+                  }
+               }
+            }
+            DMEM_Add(&dmem_all_data);
+         }
+         DMEM_PrintOutput(&dmem_all_data);
       }
-      DMEM_PrintOutput(&dmem_all_data);
    }
 
   // HYPRE_BoomerAMGSolve(dmem_all_data.hypre.solver,

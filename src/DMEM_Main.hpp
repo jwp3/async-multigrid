@@ -118,7 +118,6 @@ typedef struct{
    HYPRE_Real strong_threshold;
    HYPRE_Real multadd_trunc_factor;
    HYPRE_Int start_smooth_level;
-   HYPRE_Real vardifconv_eps;
 }DMEM_HypreData;
 
 typedef struct{
@@ -135,6 +134,14 @@ typedef struct{
    int nx;
    int ny;
    int nz;
+   HYPRE_Real difconv_ax;
+   HYPRE_Real difconv_ay;
+   HYPRE_Real difconv_az;
+   HYPRE_Real difconv_cx;
+   HYPRE_Real difconv_cy;
+   HYPRE_Real difconv_cz;
+   int difconv_atype;
+   HYPRE_Real vardifconv_eps;
    HYPRE_ParCSRMatrix A_fine;
    HYPRE_ParCSRMatrix A_gridk;
 }DMEM_MatrixData;

@@ -8,9 +8,10 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
                            HYPRE_ParCSRMatrix *A_ptr,
                            HYPRE_ParVector *rhs_ptr,
                            MPI_Comm comm,
-                           HYPRE_Int nx,
-                           HYPRE_Int ny,
-                           HYPRE_Int nz,
-                           HYPRE_Real eps);
+                           HYPRE_Int nx, HYPRE_Int ny, HYPRE_Int nz,
+                           HYPRE_Real cx, HYPRE_Real cy, HYPRE_Real cz,
+                           HYPRE_Real ax, HYPRE_Real ay, HYPRE_Real az,
+                           HYPRE_Real eps,
+                           int atype);
 
 #endif
