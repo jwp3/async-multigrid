@@ -184,17 +184,11 @@ int main (int argc, char *argv[])
             dmem_all_data.input.smoother = JACOBI;
             dmem_all_data.input.smooth_interp_type = JACOBI;
          }
-         else if (strcmp(argv[arg_index], "gs") == 0){
-            dmem_all_data.input.smoother = GAUSS_SEIDEL;
-         }
          else if (strcmp(argv[arg_index], "hybrid_jgs") == 0){
             dmem_all_data.input.smoother = HYBRID_JACOBI_GAUSS_SEIDEL;
          }
-         else if (strcmp(argv[arg_index], "async_gs") == 0){
-            dmem_all_data.input.smoother = ASYNC_GAUSS_SEIDEL;
-         }
-         else if (strcmp(argv[arg_index], "semi_async_gs") == 0){
-            dmem_all_data.input.smoother = SEMI_ASYNC_GAUSS_SEIDEL;
+         else if (strcmp(argv[arg_index], "async_hybrid_jgs") == 0){
+            dmem_all_data.input.smoother = ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL;
          }
          else if (strcmp(argv[arg_index], "L1j") == 0){
             dmem_all_data.input.smoother = L1_JACOBI;

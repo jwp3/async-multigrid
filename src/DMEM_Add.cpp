@@ -318,17 +318,30 @@ void AddCycle(DMEM_AllData *dmem_all_data)
          coarsest_level -= 1;
       }
       else {
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            u_local_data[i] = dmem_all_data->input.smooth_weight * f_local_data[i] / A_data[A_i[i]];
+         if (dmem_all_data->input.smoother == L1_JACOBI){
+            for (HYPRE_Int i = 0; i < num_rows; i++){
+               u_local_data[i] = f_local_data[i] / dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level][i];
+            }
+         }
+         else {
+            for (HYPRE_Int i = 0; i < num_rows; i++){
+               u_local_data[i] = dmem_all_data->input.smooth_weight * f_local_data[i] / A_data[A_i[i]];
+            }
          }
          hypre_ParCSRMatrixMatvec(1.0,
                                   A_array[coarsest_level],
                                   U_array[coarsest_level],
                                   0.0,
                                   Vtemp);
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            u_local_data[i] = 2.0 * u_local_data[i] -
-               dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+         if (dmem_all_data->input.smoother == L1_JACOBI){
+            for (HYPRE_Int i = 0; i < num_rows; i++){
+               u_local_data[i] = 2.0 * u_local_data[i] - v_local_data[i] / dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level][i];
+            }
+         }
+         else {
+            for (HYPRE_Int i = 0; i < num_rows; i++){
+               u_local_data[i] = 2.0 * u_local_data[i] - dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+            }
          }
       }
      // dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
@@ -1159,6 +1172,7 @@ int CheckConverge(DMEM_AllData *dmem_all_data)
       }
       else {
          if (cycle >= num_cycles || dmem_all_data->iter.r_norm2_local_converge_flag == 1){
+            dmem_all_data->comm.all_done_flag = 1;
             return 1;
          }
         // if (dmem_all_data->input.res_compute_type == GLOBAL_RES){

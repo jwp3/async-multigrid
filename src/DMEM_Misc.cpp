@@ -32,40 +32,6 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    hypre_ParVector *r = dmem_all_data->vector_fine.r;
    dmem_all_data->output.r_norm2 = sqrt(hypre_ParVectorInnerProd(r, r));
 
-   MPI_Reduce(&(dmem_all_data->output.solve_wtime),          &min_solve_wtime,           1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.residual_wtime),       &min_residual_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.residual_norm_wtime),  &min_residual_norm_wtime,   1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.restrict_wtime),       &min_restrict_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.prolong_wtime),        &min_prolong_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.smooth_wtime),         &min_smooth_wtime,          1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-  // MPI_Reduce(&(dmem_all_data->output.coarsest_solve_wtime), &min_coarsest_solve_wtime,  1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.comm_wtime),           &min_comm_wtime,            1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.start_wtime),          &min_start_wtime,           1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.end_wtime),            &min_end_wtime,             1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.inner_solve_wtime),    &min_inner_solve_wtime,     1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpiisend_wtime),       &min_mpiisend_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpiirecv_wtime),       &min_mpiirecv_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &min_mpitest_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &min_mpiwait_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->iter.cycle),                  &min_cycles,                1, MPI_INT,    MPI_MIN, 0, MPI_COMM_WORLD);
- 
-   MPI_Reduce(&(dmem_all_data->output.solve_wtime),          &max_solve_wtime,           1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.residual_wtime),       &max_residual_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.residual_norm_wtime),  &max_residual_norm_wtime,   1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.restrict_wtime),       &max_restrict_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.prolong_wtime),        &max_prolong_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.smooth_wtime),         &max_smooth_wtime,          1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-  // MPI_Reduce(&(dmem_all_data->output.coarsest_solve_wtime), &max_coarsest_solve_wtime,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.comm_wtime),           &max_comm_wtime,            1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.start_wtime),          &max_start_wtime,           1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.end_wtime),            &max_end_wtime,             1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.inner_solve_wtime),    &max_inner_solve_wtime,     1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpiisend_wtime),       &max_mpiisend_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpiirecv_wtime),       &max_mpiirecv_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &max_mpitest_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &max_mpiwait_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->iter.cycle),                  &max_cycles,                1, MPI_INT,    MPI_MAX, 0, MPI_COMM_WORLD);
-
    MPI_Reduce(&(dmem_all_data->output.solve_wtime),          &mean_solve_wtime,          1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.residual_wtime),       &mean_residual_wtime,       1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.residual_norm_wtime),  &mean_residual_norm_wtime,  1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -86,8 +52,16 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    mean_solve_wtime /= (double)num_procs;
    mean_residual_wtime /= (double)num_procs;
    mean_residual_norm_wtime /= (double)num_procs;
-   mean_restrict_wtime /= (double)num_procs;
-   mean_prolong_wtime /= (double)num_procs;
+   if (dmem_all_data->input.solver == MULTADD ||
+       dmem_all_data->input.solver == BPX ||
+       dmem_all_data->input.solver == AFACX){
+      mean_restrict_wtime /= (double)(num_procs - dmem_all_data->grid.num_procs_level[0]);
+      mean_prolong_wtime /= (double)(num_procs - dmem_all_data->grid.num_procs_level[0]);
+   }
+   else {
+      mean_restrict_wtime /= (double)(num_procs);
+      mean_prolong_wtime /= (double)(num_procs);
+   }
    mean_smooth_wtime /= (double)num_procs;
   // mean_smooth_wtime /= (double)(num_procs-1);
   // mean_coarsest_solve_wtime /= (double)num_procs;
@@ -100,6 +74,50 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    mean_mpitest_wtime /= (double)num_procs;
    mean_mpiwait_wtime /= (double)num_procs;
    mean_cycles = (double)sum_cycles/(double)num_procs;
+
+   if (dmem_all_data->grid.my_grid == 0){
+      dmem_all_data->output.restrict_wtime = DBL_MAX;
+      dmem_all_data->output.prolong_wtime = DBL_MAX;
+   }
+
+   MPI_Reduce(&(dmem_all_data->output.solve_wtime),          &min_solve_wtime,           1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.residual_wtime),       &min_residual_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.residual_norm_wtime),  &min_residual_norm_wtime,   1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.restrict_wtime),       &min_restrict_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.prolong_wtime),        &min_prolong_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.smooth_wtime),         &min_smooth_wtime,          1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+  // MPI_Reduce(&(dmem_all_data->output.coarsest_solve_wtime), &min_coarsest_solve_wtime,  1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.comm_wtime),           &min_comm_wtime,            1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.start_wtime),          &min_start_wtime,           1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.end_wtime),            &min_end_wtime,             1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.inner_solve_wtime),    &min_inner_solve_wtime,     1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpiisend_wtime),       &min_mpiisend_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpiirecv_wtime),       &min_mpiirecv_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &min_mpitest_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &min_mpiwait_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->iter.cycle),                  &min_cycles,                1, MPI_INT,    MPI_MIN, 0, MPI_COMM_WORLD);
+
+   if (dmem_all_data->grid.my_grid == 0){
+      dmem_all_data->output.restrict_wtime = 0.0;
+      dmem_all_data->output.prolong_wtime = 0.0;
+   }
+ 
+   MPI_Reduce(&(dmem_all_data->output.solve_wtime),          &max_solve_wtime,           1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.residual_wtime),       &max_residual_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.residual_norm_wtime),  &max_residual_norm_wtime,   1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.restrict_wtime),       &max_restrict_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.prolong_wtime),        &max_prolong_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.smooth_wtime),         &max_smooth_wtime,          1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  // MPI_Reduce(&(dmem_all_data->output.coarsest_solve_wtime), &max_coarsest_solve_wtime,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.comm_wtime),           &max_comm_wtime,            1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.start_wtime),          &max_start_wtime,           1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.end_wtime),            &max_end_wtime,             1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.inner_solve_wtime),    &max_inner_solve_wtime,     1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpiisend_wtime),       &max_mpiisend_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpiirecv_wtime),       &max_mpiirecv_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &max_mpitest_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &max_mpiwait_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->iter.cycle),                  &max_cycles,                1, MPI_INT,    MPI_MAX, 0, MPI_COMM_WORLD);
 
 
   // if (dmem_all_data->input.solver == MULT){
@@ -131,7 +149,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
       char print_str[1000];
       if (dmem_all_data->input.oneline_output_flag == 0){
          strcpy(print_str, "Relative Residual 2-norm = %e\n\n"
-                           "Setup stats\n\n"
+                           //"Setup stats\n\n"
                            "Solve stats          \t  mean  \t   max  \t   min  \n"
                            "---------------------\t--------\t--------\t--------\n"
                            "Cycles               \t%.2f\t\t%d\t\t%d\n"

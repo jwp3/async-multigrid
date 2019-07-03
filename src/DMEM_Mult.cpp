@@ -82,8 +82,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       hypre_ParVectorCopy(F_array[fine_grid], Vtemp); 
       f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[fine_grid]));
       u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[fine_grid]));
-      HYPRE_Int num_rows =
-         hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[fine_grid]));
+      HYPRE_Int num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[fine_grid]));
       /* smooth */
       begin = MPI_Wtime();
       if (level == 0 && cycle > 1){
@@ -96,9 +95,15 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       else {
          hypre_ParVectorSetConstantValues(U_array[fine_grid], 0.0);
       }
-      for (HYPRE_Int i = 0; i < num_rows; i++){
-         u_local_data[i] +=
-            dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+      if (dmem_all_data->input.smoother == L1_JACOBI){
+         for (HYPRE_Int i = 0; i < num_rows; i++){
+            u_local_data[i] += v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
+         }
+      }
+      else {
+         for (HYPRE_Int i = 0; i < num_rows; i++){
+            u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+         }
       }
       dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
  
@@ -177,16 +182,22 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[fine_grid]));
       u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[fine_grid]));
       hypre_ParVectorCopy(F_array[fine_grid], Vtemp);
-      HYPRE_Int num_rows =
-         hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[fine_grid]));
+      HYPRE_Int num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[fine_grid]));
       /* smooth */
       hypre_ParCSRMatrixMatvec(-1.0,
                                A_array[fine_grid],
                                U_array[fine_grid],
                                1.0,
                                Vtemp);
-      for (HYPRE_Int i = 0; i < num_rows; i++){
-         u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+      if (dmem_all_data->input.smoother == L1_JACOBI){
+         for (HYPRE_Int i = 0; i < num_rows; i++){
+            u_local_data[i] += v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
+         }  
+      }
+      else {
+         for (HYPRE_Int i = 0; i < num_rows; i++){
+            u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+         }  
       }
       dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
       dmem_all_data->output.level_wtime[level] += MPI_Wtime() - level_begin;

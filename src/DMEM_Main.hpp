@@ -144,6 +144,8 @@ typedef struct{
    HYPRE_Real vardifconv_eps;
    HYPRE_ParCSRMatrix A_fine;
    HYPRE_ParCSRMatrix A_gridk;
+   double **L1_row_norm_gridk;
+   double **L1_row_norm_fine;
 }DMEM_MatrixData;
 
 typedef struct{
