@@ -113,6 +113,13 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
      // DMEM_PrintParCSRMatrix(dmem_all_data->matrix.A_gridk, buffer);
    }
 
+   if (dmem_all_data->input.solver == MULT){
+      hypre_GaussElimSetup((hypre_ParAMGData *)dmem_all_data->hypre.solver, dmem_all_data->grid.num_levels-1, 99);
+   }
+   else {
+      hypre_GaussElimSetup((hypre_ParAMGData *)dmem_all_data->hypre.solver_gridk, dmem_all_data->grid.num_levels-1, 99);
+   }
+
    if (dmem_all_data->input.smoother == L1_JACOBI){
       if (dmem_all_data->input.solver == MULT_MULTADD ||
           dmem_all_data->input.solver == MULT){
@@ -1433,14 +1440,21 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
 
    hypre_TFree(values, HYPRE_MEMORY_HOST);
 
-
    values = hypre_CTAlloc(HYPRE_Real, local_num_rows, HYPRE_MEMORY_HOST);
+   if (dmem_all_data->input.rhs_type == RHS_ZEROS){
+      for (int i = 0; i < local_num_rows; i++) values[i] = 0.0;
+   }
+   else if (dmem_all_data->input.rhs_type == RHS_ONES){
+      for (int i = 0; i < local_num_rows; i++) values[i] = 1.0;
+   }
+   else {
+      for (int i = 0; i < local_num_rows; i++) values[i] = RandDouble(-1.0, 1.0);
+   }
 
    /* initialize fine grid right-hand side */
    HYPRE_IJVectorCreate(hypre_MPI_COMM_WORLD, first_local_row, last_local_row, &ij_b);
    HYPRE_IJVectorSetObjectType(ij_b, HYPRE_PARCSR);
-   HYPRE_IJVectorInitialize(ij_b);
-   for (HYPRE_Int i = 0; i < local_num_rows; i++) values[i] = 1.0;
+   HYPRE_IJVectorInitialize(ij_b); 
    HYPRE_IJVectorSetValues(ij_b, local_num_rows, NULL, values);
    HYPRE_IJVectorGetObject(ij_b, &object);
    vector->b = (HYPRE_ParVector)object;
@@ -1448,7 +1462,6 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
    HYPRE_IJVectorCreate(hypre_MPI_COMM_WORLD, first_local_row, last_local_row, &ij_f);
    HYPRE_IJVectorSetObjectType(ij_f, HYPRE_PARCSR);
    HYPRE_IJVectorInitialize(ij_f);
-   for (HYPRE_Int i = 0; i < local_num_rows; i++) values[i] = 1.0;
    HYPRE_IJVectorSetValues(ij_f, local_num_rows, NULL, values);
    HYPRE_IJVectorGetObject(ij_f, &object);
    vector->f = (HYPRE_ParVector)object;
@@ -1457,7 +1470,6 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
    HYPRE_IJVectorCreate(hypre_MPI_COMM_WORLD, first_local_row, last_local_row, &ij_r);
    HYPRE_IJVectorSetObjectType(ij_r, HYPRE_PARCSR);
    HYPRE_IJVectorInitialize(ij_r);
-   for (HYPRE_Int i = 0; i < local_num_rows; i++) values[i] = 1.0;
    HYPRE_IJVectorSetValues(ij_r, local_num_rows, NULL, values);
    HYPRE_IJVectorGetObject(ij_r, &object);
    vector->r = (HYPRE_ParVector)object;

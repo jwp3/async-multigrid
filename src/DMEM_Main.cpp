@@ -95,6 +95,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.check_res_flag = 1;
    dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
    dmem_all_data.input.max_inflight = 1;
+   dmem_all_data.input.rhs_type = RHS_RAND;
 
    /* Parse command line */
    int arg_index = 0;
@@ -220,6 +221,18 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "grid") == 0){
             dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-rhs_type") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "zeros") == 0){
+            dmem_all_data.input.rhs_type = RHS_ZEROS;
+         }
+         else if (strcmp(argv[arg_index], "ones") == 0){
+            dmem_all_data.input.rhs_type = RHS_ONES;
+         }
+         else if (strcmp(argv[arg_index], "rand") == 0){
+            dmem_all_data.input.rhs_type = RHS_RAND;
          }
       }
       else if (strcmp(argv[arg_index], "-async") == 0){

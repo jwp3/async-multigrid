@@ -139,27 +139,8 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       }
    }
    else {
-      A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[coarsest_level]));
-      A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[coarsest_level]));
-      u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[coarsest_level]));
-      HYPRE_Int num_rows =
-         hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[coarsest_level]));
-      hypre_ParVectorSetConstantValues(U_array[coarsest_level], 0.0); 
-      HYPRE_Int num_relax = 100;
-      for (HYPRE_Int k = 0; k < num_relax; k++){
-         hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
-                                            A_array[coarsest_level],
-                                            U_array[coarsest_level],
-                                            1.0,
-                                            F_array[coarsest_level],
-                                            Vtemp);
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            u_local_data[i] +=
-               dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
-         }
-      }
+      hypre_GaussElimSolve(amg_data, coarsest_level, 99);
    }
-  // hypre_GaussElimSolve(amg_data, 0, 99);
    dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
     
    for (HYPRE_Int level = coarsest_level; level > 0; level--){

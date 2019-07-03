@@ -265,20 +265,7 @@ void AddCycle(DMEM_AllData *dmem_all_data)
    begin = MPI_Wtime();
    if (my_grid == num_levels-1){
      // begin = MPI_Wtime();
-      for (HYPRE_Int i = 0; i < num_rows; i++){
-         v_local_data[i] = f_local_data[i];
-      }
-      for (int k = 0; k < 100; k++){
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
-         }
-         hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
-                                            A_array[coarsest_level],
-                                            U_array[coarsest_level],
-                                            1.0,
-                                            F_array[coarsest_level],
-                                            Vtemp);
-      }
+      hypre_GaussElimSolve(amg_data, coarsest_level, 99);
      // dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
    }
    else {

@@ -75,6 +75,10 @@
 #define SMOOTH_INTERP_ALL_LEVELS 0
 #define SMOOTH_INTERP_MY_GRID 1
 
+#define RHS_ZEROS 0
+#define RHS_ONES 1
+#define RHS_RAND 2
+
 using namespace std;
 using namespace mfem;
 

@@ -93,6 +93,7 @@ typedef struct{
    int check_res_flag;
    int multadd_smooth_interp_level_type;
    int max_inflight;
+   int rhs_type;
 }DMEM_InputData;
 
 
