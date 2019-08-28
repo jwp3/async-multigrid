@@ -53,6 +53,8 @@ typedef struct{
    double mpiwait_wtime;
    double r_norm2;
    double r0_norm2;
+   double e0_Anorm;
+   double e_Anorm;
    double hypre_e_norm2;
    double mfem_e_norm2;
 }DMEM_OutputData;
@@ -94,6 +96,13 @@ typedef struct{
    int multadd_smooth_interp_level_type;
    int max_inflight;
    int rhs_type;
+   int init_guess_type;
+   int afacj_level;
+   int num_interpolants;
+   int P_gridk_droptol_flag;
+   int P_gridk_maxelmts_flag;
+   HYPRE_Real P_gridk_droptol;
+   HYPRE_Int P_gridk_maxelmts;
 }DMEM_InputData;
 
 
@@ -147,6 +156,10 @@ typedef struct{
    HYPRE_ParCSRMatrix A_gridk;
    double **L1_row_norm_gridk;
    double **L1_row_norm_fine;
+   hypre_ParCSRMatrix *P_gridk;
+   hypre_ParCSRMatrix *R_gridk;
+   hypre_ParCSRMatrix **P_fine;
+   hypre_ParCSRMatrix **R_fine;
 }DMEM_MatrixData;
 
 typedef struct{

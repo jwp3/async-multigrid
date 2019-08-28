@@ -59,8 +59,7 @@ int main (int argc, char *argv[])
    dmem_all_data.mfem.ref_levels = 1;
    dmem_all_data.mfem.par_ref_levels = 1;
    dmem_all_data.mfem.order = 1;
-   strcpy(dmem_all_data.mfem.mesh_file, "./mfem/mfem-3.4/data/ball-nurbs.mesh");
-   dmem_all_data.mfem.amr_refs = 0;
+   strcpy(dmem_all_data.mfem.mesh_file, "./mfem/mfem-3.4/data/beam-tet.mesh");
 
    dmem_all_data.input.test_problem = LAPLACE_3D27PT;
    dmem_all_data.input.tol = 1e-10;
@@ -68,7 +67,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.async_flag = 0;
    dmem_all_data.input.global_conv_flag = 0;
    dmem_all_data.input.thread_part_type = ALL_LEVELS;
-   dmem_all_data.input.converge_test_type = GLOBAL_CONVERGE;
+   dmem_all_data.input.converge_test_type = LOCAL_CONVERGE;
    dmem_all_data.input.res_compute_type = LOCAL_RES;
    dmem_all_data.input.num_pre_smooth_sweeps = 1;
    dmem_all_data.input.num_post_smooth_sweeps = 1;
@@ -87,7 +86,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.print_level_stats_flag = 0;
    dmem_all_data.input.print_reshist_flag = 0;
    dmem_all_data.input.read_type = READ_SOL;
-   dmem_all_data.input.num_cycles = 1000;
+   dmem_all_data.input.num_cycles = 10000;
    dmem_all_data.input.num_inner_cycles = 5;
    dmem_all_data.input.increment_cycle = 1;
    dmem_all_data.input.start_cycle = 1;
@@ -96,6 +95,13 @@ int main (int argc, char *argv[])
    dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
    dmem_all_data.input.max_inflight = 1;
    dmem_all_data.input.rhs_type = RHS_RAND;
+   dmem_all_data.input.init_guess_type = INITGUESS_RAND;
+   dmem_all_data.input.afacj_level = 0;
+   dmem_all_data.input.num_interpolants = NUMLEVELS_INTERPOLANTS;
+   dmem_all_data.input.P_gridk_droptol_flag = 0;
+   dmem_all_data.input.P_gridk_droptol = 0.0;
+   dmem_all_data.input.P_gridk_maxelmts_flag = 0;
+   dmem_all_data.input.P_gridk_maxelmts = 0;
 
    /* Parse command line */
    int arg_index = 0;
@@ -174,6 +180,9 @@ int main (int argc, char *argv[])
 	 else if (strcmp(argv[arg_index], "vardifconv") == 0){
             dmem_all_data.input.test_problem = VARDIFCONV_3D7PT;
          }
+         else if (strcmp(argv[arg_index], "mfem_elast") == 0){
+            dmem_all_data.input.test_problem = MFEM_ELAST;
+         }
       }
       else if (strcmp(argv[arg_index], "-vardifconv_eps") == 0){
          arg_index++;
@@ -205,11 +214,30 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "multadd") == 0){
             dmem_all_data.input.solver = MULTADD;
          }
+         else if (strcmp(argv[arg_index], "async_multadd") == 0){
+            dmem_all_data.input.solver = MULTADD;
+            dmem_all_data.input.async_flag = 1;
+         }
+         else if (strcmp(argv[arg_index], "afacj") == 0){
+            dmem_all_data.input.solver = MULTADD;
+            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
+         }
+         else if (strcmp(argv[arg_index], "async_afacj") == 0){
+            dmem_all_data.input.solver = MULTADD;
+            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
+            dmem_all_data.input.async_flag = 1;
+         }
          else if (strcmp(argv[arg_index], "afacx") == 0){
             dmem_all_data.input.solver = AFACX;
          }
          else if (strcmp(argv[arg_index], "mult_multadd") == 0){
             dmem_all_data.input.solver = MULT_MULTADD;
+         }
+         else if (strcmp(argv[arg_index], "sync_multadd") == 0){
+            dmem_all_data.input.solver = SYNC_MULTADD;
+         }
+         else if (strcmp(argv[arg_index], "sync_afacx") == 0){
+            dmem_all_data.input.solver = SYNC_AFACX;
          }
         // solvers.push_back(dmem_all_data.input.solver);
         // num_solvers++;
@@ -223,7 +251,7 @@ int main (int argc, char *argv[])
             dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
          }
       }
-      else if (strcmp(argv[arg_index], "-rhs_type") == 0){
+      else if (strcmp(argv[arg_index], "-rhs") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "zeros") == 0){
             dmem_all_data.input.rhs_type = RHS_ZEROS;
@@ -233,6 +261,18 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "rand") == 0){
             dmem_all_data.input.rhs_type = RHS_RAND;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-init_guess") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "zeros") == 0){
+            dmem_all_data.input.init_guess_type = INITGUESS_ZEROS;
+         }
+         else if (strcmp(argv[arg_index], "ones") == 0){
+            dmem_all_data.input.init_guess_type = INITGUESS_ONES;
+         }
+         else if (strcmp(argv[arg_index], "rand") == 0){
+            dmem_all_data.input.init_guess_type = INITGUESS_RAND;
          }
       }
       else if (strcmp(argv[arg_index], "-async") == 0){
@@ -245,6 +285,10 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-coarsest_mult_level") == 0){
          arg_index++;
          coarsest_mult_level = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-afacj_level") == 0){
+         arg_index++;
+         dmem_all_data.input.afacj_level = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-smooth_weight") == 0){
          arg_index++;
@@ -278,6 +322,16 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.input.tol = atof(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-interp_droptol") == 0){
+         arg_index++;
+         dmem_all_data.input.P_gridk_droptol = atof(argv[arg_index]);
+         dmem_all_data.input.P_gridk_droptol_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-interp_maxelmts") == 0){
+         arg_index++;
+         dmem_all_data.input.P_gridk_maxelmts = atof(argv[arg_index]);
+         dmem_all_data.input.P_gridk_maxelmts_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-inner_tol") == 0){
          arg_index++;
          dmem_all_data.input.inner_tol = atof(argv[arg_index]);
@@ -296,6 +350,14 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-num_post_smooth_sweeps") == 0){
          arg_index++;
          dmem_all_data.input.num_post_smooth_sweeps = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-num_fine_smooth_sweeps") == 0){
+         arg_index++;
+         dmem_all_data.input.num_fine_smooth_sweeps = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-num_coarse_smooth_sweeps") == 0){
+         arg_index++;
+         dmem_all_data.input.num_coarse_smooth_sweeps = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-mxl") == 0){
          arg_index++;
@@ -349,6 +411,15 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "global") == 0){
             dmem_all_data.input.res_compute_type = GLOBAL_RES;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-num_interps") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "one") == 0){
+            dmem_all_data.input.num_interpolants = ONE_INTERPOLANT;
+         }
+         else if (strcmp(argv[arg_index], "num_levels") == 0){
+            dmem_all_data.input.num_interpolants = NUMLEVELS_INTERPOLANTS;
          }
       }
       else if (strcmp(argv[arg_index], "-num_runs") == 0){
@@ -419,6 +490,9 @@ int main (int argc, char *argv[])
          DMEM_ResetData(&dmem_all_data);
          if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
             printf("\nSOLVER: ");
+            if (dmem_all_data.input.async_flag == 1){
+               printf("asynchronous ");
+            }
          }
          if (dmem_all_data.input.solver == MULT){
             if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
@@ -432,6 +506,19 @@ int main (int argc, char *argv[])
             }
             DMEM_Mult(&dmem_all_data);
          }
+         else if (dmem_all_data.input.solver == SYNC_MULTADD || dmem_all_data.input.solver == SYNC_AFACX){
+            if (dmem_all_data.input.solver == SYNC_AFACX){
+               if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+                  printf("synchronous afacx\n\n\n");
+               }
+            }
+            else {
+               if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+                  printf("synchronous multadd\n\n\n");
+               }
+            }
+            DMEM_SyncAdd(&dmem_all_data);
+         }
          else {
             if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
                if (dmem_all_data.input.solver == BPX){
@@ -441,8 +528,8 @@ int main (int argc, char *argv[])
                   printf("AFACx\n\n\n");
                }
                else {
-                  if (dmem_all_data.input.async_flag == 1){
-                     printf("asynchronous multadd\n\n\n");
+                  if (dmem_all_data.input.multadd_smooth_interp_level_type == SMOOTH_INTERP_MY_GRID){
+                     printf("AFACj\n\n\n");
                   }
                   else {
                      printf("multadd\n\n\n");

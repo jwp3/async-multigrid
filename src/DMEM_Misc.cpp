@@ -29,8 +29,27 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    
    double solve_wtime, residual_wtime, residual_norm_wtime, prolong_wtime, restrict_wtime, smooth_wtime, coarsest_solve_wtime, comm_wtime, start_wtime, end_wtime;
 
+  // if (dmem_all_data->input.solver != MULT){
+  //    int my_id_local, num_procs_local;
+  //    MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
+  //    MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
+  //    for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+  //       if (level == dmem_all_data->grid.my_grid){
+  //          if (my_id_local == 0){
+  //             printf("%d %d %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.solve_wtime);
+  //          }
+  //       }
+  //       MPI_Barrier(MPI_COMM_WORLD);
+  //    }
+  //    MPI_Barrier(MPI_COMM_WORLD);
+  // }
+
    hypre_ParVector *r = dmem_all_data->vector_fine.r;
    dmem_all_data->output.r_norm2 = sqrt(hypre_ParVectorInnerProd(r, r));
+
+   hypre_ParVector *Ax = dmem_all_data->vector_fine.e;
+   hypre_ParVector *x = dmem_all_data->vector_fine.x;
+   dmem_all_data->output.e_Anorm = sqrt(hypre_ParVectorInnerProd(Ax, x));
 
    MPI_Reduce(&(dmem_all_data->output.solve_wtime),          &mean_solve_wtime,          1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.residual_wtime),       &mean_residual_wtime,       1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -148,7 +167,8 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    if (my_id == 0){
       char print_str[1000];
       if (dmem_all_data->input.oneline_output_flag == 0){
-         strcpy(print_str, "Relative Residual 2-norm = %e\n\n"
+         strcpy(print_str, "Relative Residual 2-norm = %e\n"
+                           "Relative Error A-norm (only for rhs==0) = %e\n\n"
                            //"Setup stats\n\n"
                            "Solve stats          \t  mean  \t   max  \t   min  \n"
                            "---------------------\t--------\t--------\t--------\n"
@@ -171,10 +191,26 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
                            );
       }
       else {
-         strcpy(print_str, "%e %f %d %d %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e\n");
+         strcpy(print_str, "%e %e "
+                           "%f %d %d "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e "
+                           "%e %e %e\n");
       }
       printf(print_str,
              dmem_all_data->output.r_norm2/dmem_all_data->output.r0_norm2,
+             dmem_all_data->output.e_Anorm/dmem_all_data->output.e0_Anorm,
              mean_cycles, max_cycles, min_cycles,
              mean_solve_wtime, max_solve_wtime, min_solve_wtime,
              mean_residual_wtime, max_residual_wtime, min_residual_wtime,

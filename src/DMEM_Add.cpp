@@ -52,12 +52,10 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
    double begin = MPI_Wtime();
 
    if (dmem_all_data->input.res_compute_type == LOCAL_RES){
-      DMEM_ResidualToGridk_LocalRes(dmem_all_data, F_array_fine[finest_level], F_array_gridk[finest_level]);
-      HYPRE_Real *b_local_data_gridk = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data->vector_gridk.b));
-      HYPRE_Real *f_local_data_gridk = hypre_VectorData(hypre_ParVectorLocalVector(F_array_gridk[finest_level]));
-      for (int i = 0; i < num_rows_gridk; i++){
-         b_local_data_gridk[i] = f_local_data_gridk[i];
-      }
+     // DMEM_VectorToGridk_LocalRes(dmem_all_data, F_array_fine[finest_level], F_array_gridk[finest_level]);
+      DMEM_VectorToGridk_LocalRes(dmem_all_data, dmem_all_data->vector_fine.r, F_array_gridk[finest_level]);
+      DMEM_VectorToGridk_LocalRes(dmem_all_data, dmem_all_data->vector_fine.x, dmem_all_data->vector_gridk.x);
+      DMEM_VectorToGridk_LocalRes(dmem_all_data, dmem_all_data->vector_fine.b, dmem_all_data->vector_gridk.b);
    }
    if (dmem_all_data->input.async_flag == 1){
       AsyncStart(dmem_all_data);
@@ -66,13 +64,13 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
    double tol;
    HYPRE_Real r0_norm2;
    if (dmem_all_data->input.solver == MULT_MULTADD){
-      dmem_all_data->iter.inner_cycle = 1;
+      dmem_all_data->iter.inner_cycle = 0;
       dmem_all_data->input.check_res_flag = 0;
       tol = dmem_all_data->input.inner_tol;
       r0_norm2 = sqrt(hypre_ParVectorInnerProd(F_array_gridk[finest_level], F_array_gridk[finest_level]));
    }
    else {
-      dmem_all_data->iter.cycle = 1;
+      dmem_all_data->iter.cycle = 0;
       r0_norm2 = dmem_all_data->output.r0_norm2;
       tol = dmem_all_data->input.tol;
    }
@@ -92,15 +90,15 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
       }
       else {
          DMEM_AddCorrect_LocalRes(dmem_all_data);
-
          double residual_begin = MPI_Wtime();
          DMEM_AddResidual_LocalRes(dmem_all_data);
          dmem_all_data->output.residual_wtime += MPI_Wtime() - residual_begin;
       }
  
       if (dmem_all_data->input.check_res_flag == 1){
-         if (((dmem_all_data->input.res_compute_type == LOCAL_RES) || (dmem_all_data->input.res_compute_type == GLOBAL_RES && dmem_all_data->input.async_flag == 1)) && 
-             (dmem_all_data->iter.r_norm2_local_converge_flag == 0)){
+        // if (((dmem_all_data->input.res_compute_type == LOCAL_RES) || (dmem_all_data->input.res_compute_type == GLOBAL_RES && dmem_all_data->input.async_flag == 1)) && 
+        //     (dmem_all_data->iter.r_norm2_local_converge_flag == 0)){
+         if (dmem_all_data->input.res_compute_type == LOCAL_RES){
             double residual_norm_begin = MPI_Wtime();
             hypre_Vector *f = hypre_ParVectorLocalVector(F_array_gridk[finest_level]);
             dmem_all_data->iter.r_norm2_local = sqrt(InnerProd(f, f, comm_gridk))/r0_norm2;
@@ -109,7 +107,8 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
                dmem_all_data->iter.r_norm2_local_converge_flag = 1;
             }
          }
-         else if (dmem_all_data->input.res_compute_type == GLOBAL_RES && dmem_all_data->input.async_flag == 0){
+        // else if (dmem_all_data->input.res_compute_type == GLOBAL_RES && dmem_all_data->input.async_flag == 0){
+         else {
             double residual_norm_begin = MPI_Wtime();
             r = dmem_all_data->vector_fine.r;
             HYPRE_Real res_norm = sqrt(hypre_ParVectorInnerProd(r, r))/r0_norm2;
@@ -131,17 +130,6 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
           break;
       }   
    }
-  // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideRecv));
-  // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Residual_outsideRecv));
-  // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv));
-
-  // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv));
-   double end_begin = MPI_Wtime();
-   if (dmem_all_data->input.async_flag == 1){
-      AsyncEnd(dmem_all_data);
-   }
-   dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
-
    if (dmem_all_data->input.solver == MULT_MULTADD){
       dmem_all_data->output.inner_solve_wtime += MPI_Wtime() - begin;
    }
@@ -149,19 +137,36 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
       dmem_all_data->output.solve_wtime = MPI_Wtime() - begin;
    }
 
-  // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv)); 
-  // PrintMessageCount(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_insideRecv)); 
+   double end_begin = MPI_Wtime();
+   if (dmem_all_data->input.async_flag == 1){
+      AsyncEnd(dmem_all_data);
+   }
+   dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
+
+  // if (dmem_all_data->input.solver == MULT_MULTADD){
+  //    dmem_all_data->output.inner_solve_wtime += MPI_Wtime() - begin;
+  // }
+  // else {
+  //    dmem_all_data->output.solve_wtime = MPI_Wtime() - begin;
+  // }
+
    if (dmem_all_data->input.res_compute_type == LOCAL_RES){
       DMEM_SolutionToFinest_LocalRes(dmem_all_data, dmem_all_data->vector_gridk.x, dmem_all_data->vector_fine.x);
       if (dmem_all_data->input.solver == MULTADD ||
           dmem_all_data->input.solver == BPX ||
           dmem_all_data->input.solver == AFACX){
+
          hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
                                             dmem_all_data->matrix.A_fine,
                                             dmem_all_data->vector_fine.x,
                                             1.0,
                                             dmem_all_data->vector_fine.b,
                                             dmem_all_data->vector_fine.r);
+         hypre_ParCSRMatrixMatvec(1.0,
+                                  dmem_all_data->matrix.A_fine,
+                                  dmem_all_data->vector_fine.x,
+                                  0.0,
+                                  dmem_all_data->vector_fine.e);
       }
    }
    else {
@@ -232,26 +237,45 @@ void AddCycle(DMEM_AllData *dmem_all_data)
 //   return;
 
    int finest_level = dmem_all_data->input.coarsest_mult_level;
-   int coarsest_level = my_grid;
-   if (my_grid < num_levels - 1 && dmem_all_data->input.solver == AFACX){
+   int coarsest_level;
+   if (my_grid < num_levels-1 && dmem_all_data->input.solver == AFACX){
       coarsest_level = my_grid + 1;
    }
+   else {
+      coarsest_level = my_grid;
+   }
 
-   for (int level = finest_level; level < coarsest_level; level++){
-      double level_begin = MPI_Wtime();
-      fine_level = level;
-      coarse_level = level + 1;
-      begin = MPI_Wtime();
-      hypre_ParCSRMatrixMatvecT(1.0,
-                                R_array[fine_level],
-                                F_array[fine_level],
-                                0.0,
-                                F_array[coarse_level]);
-      dmem_all_data->output.restrict_wtime += MPI_Wtime() - begin;
-      if (dmem_all_data->input.async_flag == 1){
-         CheckComm(dmem_all_data);
+   if (dmem_all_data->input.num_interpolants == ONE_INTERPOLANT){
+      if (my_grid > 0){
+         begin = MPI_Wtime();
+         hypre_ParCSRMatrixMatvecT(1.0,
+                                   dmem_all_data->matrix.R_gridk,
+                                   F_array[0],
+                                   0.0,
+                                   F_array[coarsest_level]);
+         dmem_all_data->output.prolong_wtime += MPI_Wtime() - begin;
+         if (dmem_all_data->input.async_flag == 1){
+            CheckComm(dmem_all_data);
+         }
       }
-      dmem_all_data->output.level_wtime[level] += MPI_Wtime() - level_begin;
+   }
+   else {
+      for (int level = finest_level; level < coarsest_level; level++){
+         double level_begin = MPI_Wtime();
+         fine_level = level;
+         coarse_level = level + 1;
+         begin = MPI_Wtime();
+         hypre_ParCSRMatrixMatvecT(1.0,
+                                   R_array[fine_level],
+                                   F_array[fine_level],
+                                   0.0,
+                                   F_array[coarse_level]);
+         dmem_all_data->output.restrict_wtime += MPI_Wtime() - begin;
+         if (dmem_all_data->input.async_flag == 1){
+            CheckComm(dmem_all_data);
+         }
+         dmem_all_data->output.level_wtime[level] += MPI_Wtime() - level_begin;
+      }
    }
 
    begin = MPI_Wtime();
@@ -261,12 +285,11 @@ void AddCycle(DMEM_AllData *dmem_all_data)
    f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[coarsest_level]));
    u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[coarsest_level]));
 
-   hypre_ParVectorSetConstantValues(U_array[coarsest_level], 0.0);
    begin = MPI_Wtime();
    if (my_grid == num_levels-1){
-     // begin = MPI_Wtime();
+      begin = MPI_Wtime();
       hypre_GaussElimSolve(amg_data, coarsest_level, 99);
-     // dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
+      dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
    }
    else {
      // begin = MPI_Wtime();
@@ -279,30 +302,54 @@ void AddCycle(DMEM_AllData *dmem_all_data)
          }
       }
       else if (dmem_all_data->input.solver == AFACX){
-         for (int i = 0; i < num_rows; i++){
-            u_local_data[i] = dmem_all_data->input.smooth_weight * f_local_data[i] / A_data[A_i[i]];
-         }
-         fine_level = coarsest_level - 1;
-         coarse_level = coarsest_level;
-         hypre_ParCSRMatrixMatvec(1.0,
-                                  P_array[fine_level],
-                                  U_array[coarse_level],
-                                  0.0,
-                                  U_array[fine_level]);
-         f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[fine_level]));
-         u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[fine_level]));
-         A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[fine_level]));
-         A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[fine_level]));
-         num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[fine_level]));
-         hypre_ParCSRMatrixMatvec(1.0,
-                                  A_array[fine_level],
-                                  U_array[fine_level],
-                                  0.0,
-                                  Vtemp);
-         for (int i = 0; i < num_rows; i++){
-            u_local_data[i] = dmem_all_data->input.smooth_weight * (f_local_data[i] - v_local_data[i]) / A_data[A_i[i]];
+         hypre_ParVectorCopy(F_array[coarsest_level], Vtemp);
+         hypre_ParVectorSetConstantValues(U_array[coarsest_level], 0.0);
+         for (int k = 0; k < dmem_all_data->input.num_coarse_smooth_sweeps; k++){
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+            }
+            if (k == dmem_all_data->input.num_coarse_smooth_sweeps-1) break;
+            hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
+                                               A_array[coarsest_level],
+                                               U_array[coarsest_level],
+                                               1.0,
+                                               F_array[coarsest_level],
+                                               Vtemp);
          }
          coarsest_level -= 1;
+         hypre_ParCSRMatrixMatvec(1.0,
+                                  P_array[coarsest_level],
+                                  U_array[coarsest_level+1],
+                                  0.0,
+                                  U_array[coarsest_level]);
+         u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[coarsest_level]));
+         A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[coarsest_level]));
+         A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[coarsest_level]));
+         num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[coarsest_level]));
+
+         hypre_ParVector *e = dmem_all_data->vector_gridk.e;
+         HYPRE_Real *e_local_data = hypre_VectorData(hypre_ParVectorLocalVector(e));
+         hypre_ParVectorSetConstantValues(e, 0.0);
+         hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
+                                            A_array[coarsest_level],
+                                            U_array[coarsest_level],
+                                            1.0,
+                                            F_array[coarsest_level],
+                                            e);
+         hypre_ParVectorCopy(e, Vtemp);
+         hypre_ParVectorSetConstantValues(U_array[coarsest_level], 0.0);
+         for (int k = 0; k < dmem_all_data->input.num_fine_smooth_sweeps; k++){
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+            }
+            if (k == dmem_all_data->input.num_fine_smooth_sweeps-1) break;
+            hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
+                                               A_array[coarsest_level],
+                                               U_array[coarsest_level],
+                                               1.0,
+                                               e,
+                                               Vtemp);
+         }
       }
       else {
          if (dmem_all_data->input.smoother == L1_JACOBI){
@@ -338,21 +385,40 @@ void AddCycle(DMEM_AllData *dmem_all_data)
    if (dmem_all_data->input.async_flag == 1){
       CheckComm(dmem_all_data);
    }
-   for (int level = coarsest_level; level > finest_level; level--){
-      double level_begin = MPI_Wtime();
-      fine_level = level - 1;
-      coarse_level = level;
-      begin = MPI_Wtime();
-      hypre_ParCSRMatrixMatvec(1.0,
-                               P_array[fine_level], 
-                               U_array[coarse_level],
-                               0.0,
-                               U_array[fine_level]);
-      dmem_all_data->output.prolong_wtime += MPI_Wtime() - begin;
-      if (dmem_all_data->input.async_flag == 1){
-         CheckComm(dmem_all_data);
+   if (dmem_all_data->input.num_interpolants == ONE_INTERPOLANT){
+      if (my_grid > 0){
+         begin = MPI_Wtime();
+         hypre_ParCSRMatrixMatvec(1.0,
+                                  dmem_all_data->matrix.P_gridk,
+                                  U_array[coarsest_level],
+                                  0.0,
+                                  U_array[0]);
+         dmem_all_data->output.prolong_wtime += MPI_Wtime() - begin;
+         if (dmem_all_data->input.async_flag == 1){
+            CheckComm(dmem_all_data);
+         }
       }
-      dmem_all_data->output.level_wtime[level] += MPI_Wtime() - level_begin;
+   }
+   else {
+      for (int level = coarsest_level; level > finest_level; level--){
+         double level_begin = MPI_Wtime();
+         fine_level = level-1;
+         coarse_level = level;
+         begin = MPI_Wtime();
+         hypre_ParCSRMatrixMatvec(1.0,
+                                  P_array[fine_level], 
+                                  U_array[coarse_level],
+                                  0.0,
+                                  U_array[fine_level]);
+         dmem_all_data->output.prolong_wtime += MPI_Wtime() - begin;
+         if (dmem_all_data->input.async_flag == 1){
+            CheckComm(dmem_all_data);
+         }
+         dmem_all_data->output.level_wtime[level] += MPI_Wtime() - level_begin;
+      }
+   }
+   if (dmem_all_data->input.async_flag == 1){
+      CheckComm(dmem_all_data);
    }
 
   // if (my_grid == 0) hypre_ParVectorSetConstantValues(U_array[0], 0.0);
@@ -455,6 +521,9 @@ void DMEM_AddCorrect_LocalRes(DMEM_AllData *dmem_all_data)
      // printf("%e\n", x_local_data[i]);
    }
    dmem_all_data->output.correct_wtime += MPI_Wtime() - begin;
+   if (dmem_all_data->input.async_flag == 1){
+      CheckComm(dmem_all_data);
+   }
 }
 
 void DMEM_AddResidual_LocalRes(DMEM_AllData *dmem_all_data)
@@ -485,7 +554,6 @@ void DMEM_AddResidual_LocalRes(DMEM_AllData *dmem_all_data)
    }
 }
 
-//TODO: communicate locally within grid
 void DMEM_SolutionToFinest_LocalRes(DMEM_AllData *dmem_all_data,
                                     hypre_ParVector *x_gridk,
                                     hypre_ParVector *x_fine)
@@ -526,7 +594,7 @@ void DMEM_SolutionToFinest_LocalRes(DMEM_AllData *dmem_all_data,
                 READ);
 }
 
-void DMEM_ResidualToGridk_LocalRes(DMEM_AllData *dmem_all_data,
+void DMEM_VectorToGridk_LocalRes(DMEM_AllData *dmem_all_data,
                                    hypre_ParVector *r,
                                    hypre_ParVector *f)
 {
@@ -1158,7 +1226,7 @@ int CheckConverge(DMEM_AllData *dmem_all_data)
          }
       }
       else {
-         if (cycle >= num_cycles || dmem_all_data->iter.r_norm2_local_converge_flag == 1){
+         if (cycle >= num_cycles-1 || dmem_all_data->iter.r_norm2_local_converge_flag == 1){
             dmem_all_data->comm.all_done_flag = 1;
             return 1;
          }
@@ -1180,7 +1248,7 @@ int CheckConverge(DMEM_AllData *dmem_all_data)
       }
    }
    else {
-      if (cycle >= num_cycles || dmem_all_data->iter.r_norm2_local_converge_flag == 1){
+      if (cycle >= num_cycles-1 || dmem_all_data->iter.r_norm2_local_converge_flag == 1){
          return 1;
       }
    }

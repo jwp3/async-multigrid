@@ -16,7 +16,7 @@ SMEM_CPP_FILES = $(SRC_DIR)Laplacian.cpp \
 
 DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 		 $(SRC_DIR)DMEM_Misc.cpp \
-		 $(SRC_DIR)DMEM_Laplacian.cpp \
+		 $(SRC_DIR)DMEM_BuildMatrix.cpp \
 		 $(SRC_DIR)DMEM_ParMfem.cpp \
 		 $(SRC_DIR)DMEM_Setup.cpp \
 		 $(SRC_DIR)DMEM_Comm.cpp \

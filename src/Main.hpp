@@ -46,6 +46,9 @@
 #define ASYNC_AFACX 5
 #define ASYNC_MULTADD 6
 #define AFACY 7
+#define AFACJ 8
+#define SYNC_MULTADD 9
+#define SYNC_AFACX 10
 
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1
@@ -78,6 +81,13 @@
 #define RHS_ZEROS 0
 #define RHS_ONES 1
 #define RHS_RAND 2
+
+#define INITGUESS_ZEROS 0
+#define INITGUESS_ONES 1
+#define INITGUESS_RAND 2
+
+#define ONE_INTERPOLANT 0
+#define NUMLEVELS_INTERPOLANTS 1
 
 using namespace std;
 using namespace mfem;

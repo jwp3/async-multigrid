@@ -11,9 +11,9 @@ void DMEM_AddResidual_LocalRes(DMEM_AllData *dmem_all_data);
 void DMEM_SolutionToFinest_LocalRes(DMEM_AllData *dmem_all_data,
                                     hypre_ParVector *x_gridk,
                                     hypre_ParVector *x_fine);
-void DMEM_ResidualToGridk_LocalRes(DMEM_AllData *dmem_all_data,
-                                   hypre_ParVector *r,
-                                   hypre_ParVector *f);
+void DMEM_VectorToGridk_LocalRes(DMEM_AllData *dmem_all_data,
+                                 hypre_ParVector *r,
+                                 hypre_ParVector *f);
 
 void DMEM_AddCorrect_GlobalRes(DMEM_AllData *dmem_all_data);
 void DMEM_AddResidual_GlobalRes(DMEM_AllData *dmem_all_data);
