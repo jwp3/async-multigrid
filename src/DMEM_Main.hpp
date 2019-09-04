@@ -237,6 +237,7 @@ typedef struct{
    int outside_done_flag;
    int outside_recv_done_flag;
    int async_smooth_done_flag;
+   int is_async_smoothing_flag;
 }DMEM_AllCommData;
 
 typedef struct{

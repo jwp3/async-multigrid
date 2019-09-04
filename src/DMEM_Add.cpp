@@ -77,9 +77,9 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
       if (dmem_all_data->input.smoother == ASYNC_JACOBI){
          hypre_ParVectorCopy(F_array_gridk[0], dmem_all_data->vector_gridk.r);
          DMEM_AsyncSmooth(dmem_all_data, 0);
-         if (dmem_all_data->input.async_flag == 0){
+        // if (dmem_all_data->input.async_flag == 0){
             enter_add_loop_flag = 0;
-         }      
+        // }      
       }
    }
    
@@ -136,18 +136,6 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
           break;
       }   
    }
-   if (dmem_all_data->input.solver == MULT_MULTADD){
-      dmem_all_data->output.inner_solve_wtime += MPI_Wtime() - begin;
-   }
-   else {
-      dmem_all_data->output.solve_wtime = MPI_Wtime() - begin;
-   }
-
-   double end_begin = MPI_Wtime();
-   if (dmem_all_data->input.async_flag == 1){
-      AsyncEnd(dmem_all_data);
-   }
-   dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
 
   // if (dmem_all_data->input.solver == MULT_MULTADD){
   //    dmem_all_data->output.inner_solve_wtime += MPI_Wtime() - begin;
@@ -155,6 +143,19 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
   // else {
   //    dmem_all_data->output.solve_wtime = MPI_Wtime() - begin;
   // }
+
+   double end_begin = MPI_Wtime();
+   if (dmem_all_data->input.async_flag == 1){
+      AsyncEnd(dmem_all_data);
+   }
+   dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
+
+   if (dmem_all_data->input.solver == MULT_MULTADD){
+      dmem_all_data->output.inner_solve_wtime += MPI_Wtime() - begin;
+   }
+   else {
+      dmem_all_data->output.solve_wtime = MPI_Wtime() - begin;
+   }
 
    if (dmem_all_data->input.res_compute_type == LOCAL_RES){
       DMEM_SolutionToFinest_LocalRes(dmem_all_data, dmem_all_data->vector_gridk.x, dmem_all_data->vector_fine.x);
@@ -1036,15 +1037,15 @@ void AsyncRecvCleanup(DMEM_AllData *dmem_all_data)
       begin = MPI_Wtime();
       if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
          SendRecv(dmem_all_data,
-                       &(dmem_all_data->comm.finestToGridk_Correct_outsideRecv),
-                       e_local_data,
-                       ACCUMULATE);
+                  &(dmem_all_data->comm.finestToGridk_Correct_outsideRecv),
+                  e_local_data,
+                  ACCUMULATE);
       }
       else {
          SendRecv(dmem_all_data,
-                       &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv),
-                       e_local_data,
-                       ACCUMULATE);
+                  &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv),
+                  e_local_data,
+                  ACCUMULATE);
       }
       dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
       for (HYPRE_Int i = 0; i < num_rows; i++){
@@ -1198,42 +1199,49 @@ int CheckConverge(DMEM_AllData *dmem_all_data)
    }
 
    if (dmem_all_data->input.async_flag == 1){
-      if (dmem_all_data->input.converge_test_type == GLOBAL_CONVERGE){
-         int my_comm_done;
-         DMEM_CheckOutsideDoneFlag(dmem_all_data);
-         begin = MPI_Wtime();
-         MPI_Allreduce(&(dmem_all_data->comm.outside_done_flag),
-                       &(my_comm_done),
-                       1,
-                       MPI_INT,
-                       MPI_MIN,
-                       dmem_all_data->grid.my_comm);
-         dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
-         if (my_comm_done == 1){
-            dmem_all_data->comm.all_done_flag = 1;
+      if (dmem_all_data->comm.all_done_flag == 1){
+         if (DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), 2) == 1){ 
             return 1;
          }
       }
       else {
-         if (cycle >= num_cycles-1 || dmem_all_data->iter.r_norm2_local_converge_flag == 1){
-            dmem_all_data->comm.all_done_flag = 1;
-            return 1;
+         if (dmem_all_data->input.converge_test_type == GLOBAL_CONVERGE){
+            int my_comm_done;
+            DMEM_CheckOutsideDoneFlag(dmem_all_data);
+            begin = MPI_Wtime();
+            MPI_Allreduce(&(dmem_all_data->comm.outside_done_flag),
+                          &(my_comm_done),
+                          1,
+                          MPI_INT,
+                          MPI_MIN,
+                          dmem_all_data->grid.my_comm);
+            dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
+            if (my_comm_done == 1){
+               dmem_all_data->comm.all_done_flag = 1;
+              // return 1;
+            }
          }
-        // if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
-        //    if (CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend), 2) == 1 &&
-        //        CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend), 2) == 1 &&
-        //        CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend), 2) == 1){
-        //       PrintMessageFlags(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend));
-        //       PrintMessageFlags(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend));
-        //       PrintMessageFlags(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend));
-        //       return 1;
-        //    }
-        // }
-        // else {
-        //    if (CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), 2) == 1){
-        //       return 1;
-        //    }
-        // }
+         else {
+            if (cycle >= num_cycles-1 || dmem_all_data->iter.r_norm2_local_converge_flag == 1){
+               dmem_all_data->comm.all_done_flag = 1;
+              // return 1;
+            }
+           // if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
+           //    if (CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend), 2) == 1 &&
+           //        CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend), 2) == 1 &&
+           //        CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend), 2) == 1){
+           //       PrintMessageFlags(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend));
+           //       PrintMessageFlags(dmem_all_data, &(dmem_all_data->comm.finestToGridk_Correct_outsideSend));
+           //       PrintMessageFlags(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend));
+           //       return 1;
+           //    }
+           // }
+           // else {
+           //    if (CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), 2) == 1){
+           //       return 1;
+           //    }
+           // }
+         }
       }
    }
    else {

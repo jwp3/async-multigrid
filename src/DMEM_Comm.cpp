@@ -174,28 +174,36 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                   else {
                      num_cycles = dmem_all_data->input.num_cycles;
                   }
-                  if (dmem_all_data->comm.async_smooth_done_flag == 0){
+
+                  int my_converge_flag = 0;
+                  int all_done_flag;
+                  if (dmem_all_data->comm.is_async_smoothing_flag == 1){
+                     all_done_flag = dmem_all_data->comm.async_smooth_done_flag;
                      if (dmem_all_data->comm.outside_recv_done_flag == 1){
-                        comm_data->data_inflight[i][next_inflight][vec_len] = 2.0;
-                        comm_data->done_flags[i] = 2;
+                        my_converge_flag = 1;
                      }
                   }
                   else {
+                     all_done_flag = dmem_all_data->comm.all_done_flag;
                      if (dmem_all_data->iter.cycle >= num_cycles-1 ||
                          dmem_all_data->iter.r_norm2_local_converge_flag == 1){
-                        comm_data->data_inflight[i][next_inflight][vec_len] = 1.0;
-                        if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
+                        my_converge_flag = 1;
+                     }
+                  }
+                  if (my_converge_flag == 1){
+                     comm_data->data_inflight[i][next_inflight][vec_len] = 1.0;
+                     if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
+                        comm_data->done_flags[i] = 2;
+                     }
+                     else {
+                        comm_data->done_flags[i] = 1;
+                        if (all_done_flag == 1){
                            comm_data->done_flags[i] = 2;
-                        }
-                        else {
-                           comm_data->done_flags[i] = 1;
-                           if (dmem_all_data->comm.all_done_flag == 1){
-                              comm_data->done_flags[i] = 2;
-                              comm_data->data_inflight[i][next_inflight][vec_len] = 2.0;
-                           }
+                           comm_data->data_inflight[i][next_inflight][vec_len] = 2.0;
                         }
                      }
                   }
+
                   begin = MPI_Wtime();
                   hypre_MPI_Isend(comm_data->data_inflight[i][next_inflight],
                                   vec_len+1,

@@ -68,7 +68,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.async_smoother_flag = 0;
    dmem_all_data.input.global_conv_flag = 0;
    dmem_all_data.input.thread_part_type = ALL_LEVELS;
-   dmem_all_data.input.converge_test_type = LOCAL_CONVERGE;
+   dmem_all_data.input.converge_test_type = GLOBAL_CONVERGE;
    dmem_all_data.input.res_compute_type = LOCAL_RES;
    dmem_all_data.input.num_pre_smooth_sweeps = 1;
    dmem_all_data.input.num_post_smooth_sweeps = 1;

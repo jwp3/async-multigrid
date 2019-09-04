@@ -1827,7 +1827,7 @@ void DMEM_ResetData(DMEM_AllData *dmem_all_data)
    ResetVector(dmem_all_data, &(dmem_all_data->vector_fine));
    ResetResErrNorm(dmem_all_data, &(dmem_all_data->vector_fine));
 
-   dmem_all_data->comm.async_smooth_done_flag = 1;
+   dmem_all_data->comm.is_async_smoothing_flag = 0;
    HYPRE_Real *x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data->vector_gridk.x));
 
    if (dmem_all_data->input.async_smoother_flag == 1 &&
@@ -2000,7 +2000,7 @@ void ComputeWork(DMEM_AllData *dmem_all_data)
       if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
          dmem_all_data->grid.level_work[level] = (double)(hypre_ParCSRMatrixNumNonzeros(A_array[0]) + hypre_ParCSRMatrixNumRows(A_array[0])) / (double)dmem_all_data->grid.num_levels + (double)hypre_ParCSRMatrixNumRows(A_array[0]);
       }
-      else{
+      else {
          dmem_all_data->grid.level_work[level] = (double)(hypre_ParCSRMatrixNumNonzeros(A_array[0]) + (double)((dmem_all_data->grid.num_levels + 2)*hypre_ParCSRMatrixNumRows(A_array[0])));
       }
 
@@ -2030,19 +2030,25 @@ void ComputeWork(DMEM_AllData *dmem_all_data)
          dmem_all_data->grid.level_work[level] += pow((double)(hypre_ParCSRMatrixGlobalNumRows(A_array[fine_grid])), 2.0);
       }
       else {
-         if (dmem_all_data->input.solver == MULTADD ||
-             dmem_all_data->input.solver == BPX ||
-             dmem_all_data->input.solver == MULT_MULTADD){
-            dmem_all_data->grid.level_work[level] += (double)(hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) + 2.0*(double)hypre_ParCSRMatrixNumRows(A_array[fine_grid]));
+         if (level == 0 && dmem_all_data->input.solver == MULTADD && 
+             (dmem_all_data->input.smoother == ASYNC_JACOBI || dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL)){
+            dmem_all_data->grid.level_work[level] += (double)hypre_ParCSRMatrixNumRows(A_array[fine_grid]);
          }
-         else if (dmem_all_data->input.solver == AFACX){
-            dmem_all_data->grid.level_work[level] +=
-               (double)((dmem_all_data->input.num_coarse_smooth_sweeps-1) * hypre_ParCSRMatrixNumNonzeros(A_array[coarse_grid]) +
-                        dmem_all_data->input.num_coarse_smooth_sweeps * hypre_ParCSRMatrixNumRows(A_array[coarse_grid]) +
-                        hypre_ParCSRMatrixNumNonzeros(P_array[fine_grid]) +
-                        hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) +
-                        (dmem_all_data->input.num_fine_smooth_sweeps-1) * hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) +
-                        dmem_all_data->input.num_fine_smooth_sweeps * hypre_ParCSRMatrixNumRows(A_array[fine_grid]));
+         else {
+            if (dmem_all_data->input.solver == MULTADD ||
+                dmem_all_data->input.solver == BPX ||
+                dmem_all_data->input.solver == MULT_MULTADD){
+               dmem_all_data->grid.level_work[level] += (double)(hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) + 2.0*(double)hypre_ParCSRMatrixNumRows(A_array[fine_grid]));
+            }
+            else if (dmem_all_data->input.solver == AFACX){
+               dmem_all_data->grid.level_work[level] +=
+                  (double)((dmem_all_data->input.num_coarse_smooth_sweeps-1) * hypre_ParCSRMatrixNumNonzeros(A_array[coarse_grid]) +
+                           dmem_all_data->input.num_coarse_smooth_sweeps * hypre_ParCSRMatrixNumRows(A_array[coarse_grid]) +
+                           hypre_ParCSRMatrixNumNonzeros(P_array[fine_grid]) +
+                           hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) +
+                           (dmem_all_data->input.num_fine_smooth_sweeps-1) * hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) +
+                           dmem_all_data->input.num_fine_smooth_sweeps * hypre_ParCSRMatrixNumRows(A_array[fine_grid]));
+            }
          }
       }
 
