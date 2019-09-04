@@ -87,7 +87,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
    int my_grid = dmem_all_data->grid.my_grid;
    double begin;
 
-   hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_fine);
+   hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_gridk);
 
    for (int i = 0; i < comm_data->procs.size(); i++){
       flag = 0;
@@ -97,12 +97,12 @@ void SendRecv(DMEM_AllData *dmem_all_data,
       /* inside send */
       if (comm_data->type == GRIDK_INSIDE_SEND || comm_data->type == FINE_INTRA_INSIDE_SEND){
          if (comm_data->type == FINE_INTRA_INSIDE_SEND){
-            for (HYPRE_Int j = 0; j < vec_len; j++){
+            for (int j = 0; j < vec_len; j++){
                comm_data->data[i][j] = v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
             }
          }
          else {
-            for (HYPRE_Int j = 0; j < vec_len; j++){
+            for (int j = 0; j < vec_len; j++){
                comm_data->data[i][j] = v[vec_start+j];
             }
          }
@@ -134,29 +134,35 @@ void SendRecv(DMEM_AllData *dmem_all_data,
       else if (comm_data->type == GRIDK_OUTSIDE_SEND || comm_data->type == FINE_INTRA_OUTSIDE_SEND){
          if (dmem_all_data->input.async_flag == 1){
             if (comm_data->done_flags[i] < 2){
-               if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
-                  for (HYPRE_Int j = 0; j < vec_len; j++){
-                     comm_data->data[i][j] += v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
+
+               if (op == WRITE){
+                  if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
+                     for (int j = 0; j < vec_len; j++){
+                        comm_data->data[i][j] = v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
+                     }
+                  }
+                  else {
+                     for (int j = 0; j < vec_len; j++){
+                        comm_data->data[i][j] = v[vec_start+j];
+                     }
                   }
                }
                else {
-                  for (HYPRE_Int j = 0; j < vec_len; j++){
-                     comm_data->data[i][j] += v[vec_start+j];
+                  if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
+                     for (int j = 0; j < vec_len; j++){
+                        comm_data->data[i][j] += v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
+                     }
+                  }
+                  else {
+                     for (int j = 0; j < vec_len; j++){
+                        comm_data->data[i][j] += v[vec_start+j];
+                     }
                   }
                }
+              
                CheckInFlight(dmem_all_data, comm_data, i);
                if (comm_data->num_inflight[i] < comm_data->max_inflight[i]){
                   int next_inflight = comm_data->next_inflight[i];
-                 // if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
-                 //    for (HYPRE_Int j = 0; j < vec_len; j++){
-                 //       comm_data->data_inflight[i][next_inflight][j] = v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
-                 //    }
-                 // }
-                 // else {
-                 //    for (HYPRE_Int j = 0; j < vec_len; j++){
-                 //       comm_data->data_inflight[i][next_inflight][j] = v[vec_start+j];
-                 //    }
-                 // }
                   for (HYPRE_Int j = 0; j < vec_len; j++){
                      comm_data->data_inflight[i][next_inflight][j] = comm_data->data[i][j];
                      comm_data->data[i][j] = 0.0;
@@ -168,17 +174,25 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                   else {
                      num_cycles = dmem_all_data->input.num_cycles;
                   }
-                  if (dmem_all_data->iter.cycle >= num_cycles-1 ||
-                      dmem_all_data->iter.r_norm2_local_converge_flag == 1){
-                     comm_data->data_inflight[i][next_inflight][vec_len] = 1.0;
-                     if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
+                  if (dmem_all_data->comm.async_smooth_done_flag == 0){
+                     if (dmem_all_data->comm.outside_recv_done_flag == 1){
+                        comm_data->data_inflight[i][next_inflight][vec_len] = 2.0;
                         comm_data->done_flags[i] = 2;
                      }
-                     else {
-                        comm_data->done_flags[i] = 1;
-                        if (dmem_all_data->comm.all_done_flag == 1){
+                  }
+                  else {
+                     if (dmem_all_data->iter.cycle >= num_cycles-1 ||
+                         dmem_all_data->iter.r_norm2_local_converge_flag == 1){
+                        comm_data->data_inflight[i][next_inflight][vec_len] = 1.0;
+                        if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
                            comm_data->done_flags[i] = 2;
-                           comm_data->data_inflight[i][next_inflight][vec_len] = 2.0;
+                        }
+                        else {
+                           comm_data->done_flags[i] = 1;
+                           if (dmem_all_data->comm.all_done_flag == 1){
+                              comm_data->done_flags[i] = 2;
+                              comm_data->data_inflight[i][next_inflight][vec_len] = 2.0;
+                           }
                         }
                      }
                   }

@@ -5,6 +5,8 @@
 #include "DMEM_BuildMatrix.hpp"
 #include "DMEM_Misc.hpp"
 #include "DMEM_ParMfem.hpp"
+#include "DMEM_Add.hpp"
+#include "DMEM_Comm.hpp"
 
 using namespace std;
 
@@ -340,35 +342,6 @@ void SetMultaddHypreSolver(DMEM_AllData *dmem_all_data,
       dmem_all_data->hypre.start_smooth_level = max(0, dmem_all_data->hypre.start_smooth_level);
       hypre_BoomerAMGSetMultAdditive(*solver, dmem_all_data->hypre.start_smooth_level);
    }
-}
-
-void ResetCommData(DMEM_CommData *comm_data)
-{
-   if (comm_data->type == GRIDK_OUTSIDE_SEND || comm_data->type == FINE_INTRA_OUTSIDE_SEND){
-      for (int i = 0; i < comm_data->procs.size(); i++){
-         comm_data->num_inflight[i] = 0;
-         comm_data->next_inflight[i] = 0;
-         comm_data->message_count[i] = 0;
-         comm_data->done_flags[i] = 0;
-         for (int j = 0; j < comm_data->max_inflight[i]; j++){
-            comm_data->requests_inflight[i][j] = MPI_REQUEST_NULL;
-            comm_data->inflight_flags[i][j] = 0;
-            for (int k = 0; k < comm_data->len[i]+1; k++){
-               comm_data->data_inflight[i][j][k] = 0.0;
-            }
-         }
-      }
-   }
-  // else {
-      for (int i = 0; i < comm_data->procs.size(); i++){
-         comm_data->requests[i] = MPI_REQUEST_NULL;
-         comm_data->message_count[i] = 0;
-         comm_data->done_flags[i] = 0;
-         for (int j = 0; j < comm_data->len[i]+1; j++){
-            comm_data->data[i][j] = 0;
-         }
-      }
-  // }
 }
 
 void AllocCommVars(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data)
@@ -790,6 +763,66 @@ void CreateCommData_LocalRes(DMEM_AllData *dmem_all_data)
       dmem_all_data->comm.gridjToGridk_Correct_outsideRecv.end[i] -= gridk_start;
    }
    AllocCommData(dmem_all_data,  &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv));
+
+   /************************************
+    * FINE FOR ASYNC SMOOTHING
+    *************************************/
+   hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_gridk);
+   HYPRE_Int num_sends = hypre_ParCSRCommPkgNumSends(comm_pkg);
+   HYPRE_Int num_recvs = hypre_ParCSRCommPkgNumRecvs(comm_pkg);
+   hypre_CSRMatrix *offd = hypre_ParCSRMatrixOffd(dmem_all_data->matrix.A_gridk);
+   HYPRE_Int num_cols_offd = hypre_CSRMatrixNumCols(offd);
+   dmem_all_data->vector_gridk.x_ghost = hypre_SeqVectorCreate(num_cols_offd);
+   hypre_SeqVectorInitialize(dmem_all_data->vector_gridk.x_ghost);
+   int j;
+
+/* fine inside send */
+   if (dmem_all_data->input.async_flag == 0){
+      dmem_all_data->comm.finestIntra_outsideSend.type = FINE_INTRA_INSIDE_SEND;
+   }
+   else {
+      dmem_all_data->comm.finestIntra_outsideSend.type = FINE_INTRA_OUTSIDE_SEND;
+   }
+   dmem_all_data->comm.finestIntra_outsideSend.tag = FINE_INTRA_TAG;
+   for (int i = 0; i < num_sends; i++){
+      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      dmem_all_data->comm.finestIntra_outsideSend.procs.push_back(ip);
+   }
+   AllocCommVars(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend));
+   j = 0;
+   for (int i = 0; i < num_sends; i++){
+      int ip = hypre_ParCSRCommPkgSendProc(comm_pkg, i);
+      dmem_all_data->comm.finestIntra_outsideSend.start[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i);
+      dmem_all_data->comm.finestIntra_outsideSend.end[j] = hypre_ParCSRCommPkgSendMapStart(comm_pkg, i+1);
+      dmem_all_data->comm.finestIntra_outsideSend.len[j] =
+         dmem_all_data->comm.finestIntra_outsideSend.end[j] - dmem_all_data->comm.finestIntra_outsideSend.start[j];
+      j++;
+   }
+   AllocCommData(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend));
+
+/* fine outside recv */
+   if (dmem_all_data->input.async_flag == 0){
+      dmem_all_data->comm.finestIntra_outsideRecv.type = FINE_INTRA_INSIDE_RECV;
+   }
+   else {
+      dmem_all_data->comm.finestIntra_outsideRecv.type = FINE_INTRA_OUTSIDE_RECV;
+   }
+   dmem_all_data->comm.finestIntra_outsideRecv.tag = FINE_INTRA_TAG;
+   for (int i = 0; i < num_recvs; i++){
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
+      dmem_all_data->comm.finestIntra_outsideRecv.procs.push_back(ip);
+   }
+   AllocCommVars(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv));
+   j = 0;
+   for (int i = 0; i < num_recvs; i++){
+      int ip = hypre_ParCSRCommPkgRecvProc(comm_pkg, i);
+      dmem_all_data->comm.finestIntra_outsideRecv.start[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i);
+      dmem_all_data->comm.finestIntra_outsideRecv.end[j] = hypre_ParCSRCommPkgRecvVecStart(comm_pkg, i+1);
+      dmem_all_data->comm.finestIntra_outsideRecv.len[j] =
+         dmem_all_data->comm.finestIntra_outsideRecv.end[j] - dmem_all_data->comm.finestIntra_outsideRecv.start[j];
+      j++;
+   }
+   AllocCommData(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv));
 }
 
 void CreateCommData_GlobalRes(DMEM_AllData *dmem_all_data)
@@ -1706,6 +1739,35 @@ void ResetOutputData(DMEM_AllData *dmem_all_data)
    dmem_all_data->output.mpiwait_wtime = 0.0;
 }
 
+void ResetCommData(DMEM_CommData *comm_data)
+{
+   if (comm_data->type == GRIDK_OUTSIDE_SEND || comm_data->type == FINE_INTRA_OUTSIDE_SEND){
+      for (int i = 0; i < comm_data->procs.size(); i++){
+         comm_data->num_inflight[i] = 0;
+         comm_data->next_inflight[i] = 0;
+         comm_data->message_count[i] = 0;
+         comm_data->done_flags[i] = 0;
+         for (int j = 0; j < comm_data->max_inflight[i]; j++){
+            comm_data->requests_inflight[i][j] = MPI_REQUEST_NULL;
+            comm_data->inflight_flags[i][j] = 0;
+            for (int k = 0; k < comm_data->len[i]+1; k++){
+               comm_data->data_inflight[i][j][k] = 0.0;
+            }
+         }
+      }
+   }
+  // else {
+      for (int i = 0; i < comm_data->procs.size(); i++){
+         comm_data->requests[i] = MPI_REQUEST_NULL;
+         comm_data->message_count[i] = 0;
+         comm_data->done_flags[i] = 0;
+         for (int j = 0; j < comm_data->len[i]+1; j++){
+            comm_data->data[i][j] = 0;
+         }
+      }
+  // }
+}
+
 void DMEM_ResetAllCommData(DMEM_AllData *dmem_all_data)
 {
    if (dmem_all_data->input.solver == MULTADD ||
@@ -1749,16 +1811,55 @@ void DMEM_ResetAllCommData(DMEM_AllData *dmem_all_data)
          ResetCommData(&(dmem_all_data->comm.gridjToGridk_Correct_outsideSend));
          ResetCommData(&(dmem_all_data->comm.gridjToGridk_Correct_insideRecv));
          ResetCommData(&(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv));
+
+         ResetCommData(&(dmem_all_data->comm.finestIntra_outsideSend));
+         ResetCommData(&(dmem_all_data->comm.finestIntra_outsideRecv));
       }
    }
 }
 
 void DMEM_ResetData(DMEM_AllData *dmem_all_data)
 {
+   int my_grid = dmem_all_data->grid.my_grid;
+
    DMEM_ResetAllCommData(dmem_all_data);
    ResetOutputData(dmem_all_data);
    ResetVector(dmem_all_data, &(dmem_all_data->vector_fine));
    ResetResErrNorm(dmem_all_data, &(dmem_all_data->vector_fine));
+
+   dmem_all_data->comm.async_smooth_done_flag = 1;
+   HYPRE_Real *x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data->vector_gridk.x));
+
+   if (dmem_all_data->input.async_smoother_flag == 1 &&
+       (dmem_all_data->input.solver == MULTADD ||
+        dmem_all_data->input.solver == MULT_MULTADD)){
+      if (my_grid == 0){
+         if (dmem_all_data->input.async_flag == 1){
+            dmem_all_data->comm.finestIntra_outsideSend.type = FINE_INTRA_INSIDE_SEND;
+            dmem_all_data->comm.finestIntra_outsideRecv.type = FINE_INTRA_INSIDE_RECV;
+         }
+         HYPRE_Real *x_ghost_data = hypre_VectorData(dmem_all_data->vector_gridk.x_ghost);
+         SendRecv(dmem_all_data,
+                  &(dmem_all_data->comm.finestIntra_outsideSend),
+                  x_local_data,
+                  WRITE);
+         SendRecv(dmem_all_data,
+                  &(dmem_all_data->comm.finestIntra_outsideRecv),
+                  x_ghost_data,
+                  READ);
+         CompleteRecv(dmem_all_data,
+                      &(dmem_all_data->comm.finestIntra_outsideRecv),
+                      x_ghost_data,
+                      READ);
+         hypre_MPI_Waitall(dmem_all_data->comm.finestIntra_outsideSend.procs.size(),
+                           dmem_all_data->comm.finestIntra_outsideSend.requests,
+                           MPI_STATUSES_IGNORE);
+         if (dmem_all_data->input.async_flag == 1){
+            dmem_all_data->comm.finestIntra_outsideSend.type = FINE_INTRA_OUTSIDE_SEND;
+            dmem_all_data->comm.finestIntra_outsideRecv.type = FINE_INTRA_OUTSIDE_RECV;
+         }
+      }
+   }   
 }
 
 void AssignProcs(DMEM_AllData *dmem_all_data)

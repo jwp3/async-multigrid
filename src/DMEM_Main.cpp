@@ -65,6 +65,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.tol = 1e-10;
    dmem_all_data.input.inner_tol = .001;
    dmem_all_data.input.async_flag = 0;
+   dmem_all_data.input.async_smoother_flag = 0;
    dmem_all_data.input.global_conv_flag = 0;
    dmem_all_data.input.thread_part_type = ALL_LEVELS;
    dmem_all_data.input.converge_test_type = LOCAL_CONVERGE;
@@ -203,6 +204,11 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "L1j") == 0){
             dmem_all_data.input.smoother = L1_JACOBI;
             dmem_all_data.input.smooth_interp_type = L1_JACOBI;
+         }
+         else if (strcmp(argv[arg_index], "async_j") == 0){
+            dmem_all_data.input.smoother = ASYNC_JACOBI;
+            dmem_all_data.input.smooth_interp_type = JACOBI;
+            dmem_all_data.input.async_smoother_flag = 1;
          }
       }
       else if (strcmp(argv[arg_index], "-solver") == 0){

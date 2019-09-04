@@ -37,6 +37,7 @@
 #define ASYNC_GAUSS_SEIDEL 5
 #define L1_JACOBI 6
 #define ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL 7
+#define ASYNC_JACOBI 8
 
 #define MULT 0
 #define AFACX 1

@@ -16,7 +16,8 @@
 #define GRIDK_OUTSIDE_RECV 8
 
 #define READ 1
-#define ACCUMULATE 2
+#define WRITE 2
+#define ACCUMULATE 3
 
 #define FINE_INTRA_TAG 1
 #define FINEST_TO_GRIDK_CORRECT_TAG 2
@@ -79,6 +80,7 @@ typedef struct{
    int smoother;
    int solver;
    int async_flag;
+   int async_smoother_flag;
    int thread_part_type;
    int thread_part_distr_type;
    int converge_test_type;
@@ -138,6 +140,7 @@ typedef struct{
    hypre_ParVector *r;
    hypre_ParVector *e;
    hypre_Vector *x_ghost;
+   hypre_Vector *u_ghost;
 }DMEM_VectorData;
 
 typedef struct{
@@ -220,19 +223,11 @@ typedef struct{
 
 
 
-
-
-
-
-
-
-
    DMEM_CommData gridjToGridk_Correct_insideSend;
    DMEM_CommData gridjToGridk_Correct_insideRecv;
  
    DMEM_CommData gridjToGridk_Correct_outsideSend;
    DMEM_CommData gridjToGridk_Correct_outsideRecv;
-  
 
    HYPRE_Real *fine_send_data;
    HYPRE_Real *fine_recv_data;
@@ -240,6 +235,8 @@ typedef struct{
    int *hypre_recv_map;
    int all_done_flag;
    int outside_done_flag;
+   int outside_recv_done_flag;
+   int async_smooth_done_flag;
 }DMEM_AllCommData;
 
 typedef struct{
