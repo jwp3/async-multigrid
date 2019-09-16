@@ -103,6 +103,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.P_gridk_droptol = 0.0;
    dmem_all_data.input.P_gridk_maxelmts_flag = 0;
    dmem_all_data.input.P_gridk_maxelmts = 0;
+   dmem_all_data.input.res_update_type = RES_RECOMPUTE;
 
    /* Parse command line */
    int arg_index = 0;
@@ -210,15 +211,23 @@ int main (int argc, char *argv[])
             dmem_all_data.input.smooth_interp_type = JACOBI;
             dmem_all_data.input.async_smoother_flag = 1;
          }
+         else if (strcmp(argv[arg_index], "async_sps") == 0){
+            dmem_all_data.input.smoother = ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL;
+            dmem_all_data.input.smooth_interp_type = JACOBI;
+            dmem_all_data.input.async_smoother_flag = 1;
+         }
       }
       else if (strcmp(argv[arg_index], "-solver") == 0){
          arg_index++;
          dmem_all_data.input.solver = atoi(argv[arg_index]);
          if (strcmp(argv[arg_index], "mult") == 0){
             dmem_all_data.input.solver = MULT;
+            dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.async_smoother_flag = 0;
          }
          else if (strcmp(argv[arg_index], "multadd") == 0){
             dmem_all_data.input.solver = MULTADD;
+            dmem_all_data.input.async_flag = 0;
          }
          else if (strcmp(argv[arg_index], "async_multadd") == 0){
             dmem_all_data.input.solver = MULTADD;
@@ -227,6 +236,7 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "afacj") == 0){
             dmem_all_data.input.solver = MULTADD;
             dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
+            dmem_all_data.input.async_flag = 0;
          }
          else if (strcmp(argv[arg_index], "async_afacj") == 0){
             dmem_all_data.input.solver = MULTADD;
@@ -235,15 +245,20 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "afacx") == 0){
             dmem_all_data.input.solver = AFACX;
+            dmem_all_data.input.async_flag = 0;
          }
          else if (strcmp(argv[arg_index], "mult_multadd") == 0){
             dmem_all_data.input.solver = MULT_MULTADD;
          }
          else if (strcmp(argv[arg_index], "sync_multadd") == 0){
             dmem_all_data.input.solver = SYNC_MULTADD;
+            dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.async_smoother_flag = 0;
          }
          else if (strcmp(argv[arg_index], "sync_afacx") == 0){
             dmem_all_data.input.solver = SYNC_AFACX;
+            dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.async_smoother_flag = 0;
          }
         // solvers.push_back(dmem_all_data.input.solver);
         // num_solvers++;
@@ -419,6 +434,15 @@ int main (int argc, char *argv[])
             dmem_all_data.input.res_compute_type = GLOBAL_RES;
          }
       }
+      else if (strcmp(argv[arg_index], "-res_update_type") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "accumulate") == 0){
+            dmem_all_data.input.res_update_type = RES_ACCUMULATE;
+         }
+         else if (strcmp(argv[arg_index], "recompute") == 0){
+            dmem_all_data.input.res_update_type = RES_RECOMPUTE;
+         }
+      }
       else if (strcmp(argv[arg_index], "-num_interps") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "one") == 0){
@@ -479,6 +503,15 @@ int main (int argc, char *argv[])
    if (num_solvers == 0){
       solvers.push_back(dmem_all_data.input.solver);
       num_solvers = 1;
+   }
+
+   if (dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL &&
+       dmem_all_data.input.async_flag == 0){
+      dmem_all_data.input.smoother = ASYNC_JACOBI;
+   }
+   else if ((dmem_all_data.input.solver == SYNC_AFACX || dmem_all_data.input.solver == SYNC_MULTADD || dmem_all_data.input.solver == MULT) &&
+            dmem_all_data.input.async_flag == 0){
+      dmem_all_data.input.smoother = JACOBI;
    }
 
    dmem_all_data.grid.my_grid = 0;

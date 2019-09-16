@@ -38,6 +38,7 @@
 #define L1_JACOBI 6
 #define ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL 7
 #define ASYNC_JACOBI 8
+#define ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL 9
 
 #define MULT 0
 #define AFACX 1
@@ -89,6 +90,9 @@
 
 #define ONE_INTERPOLANT 0
 #define NUMLEVELS_INTERPOLANTS 1
+
+#define RES_RECOMPUTE 0
+#define RES_ACCUMULATE 1
 
 using namespace std;
 using namespace mfem;

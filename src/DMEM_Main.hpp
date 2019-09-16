@@ -44,6 +44,7 @@ typedef struct{
    double prolong_wtime;
    double correct_wtime;
    double comm_wtime;
+   double comp_wtime;
    double coarsest_solve_wtime;
    double start_wtime;
    double end_wtime;
@@ -103,10 +104,10 @@ typedef struct{
    int num_interpolants;
    int P_gridk_droptol_flag;
    int P_gridk_maxelmts_flag;
+   int res_update_type;
    HYPRE_Real P_gridk_droptol;
    HYPRE_Int P_gridk_maxelmts;
 }DMEM_InputData;
-
 
 typedef struct{
    int amr_refs;
@@ -169,12 +170,16 @@ typedef struct{
    vector<int> procs;
    vector<int> message_count;
    vector<int> done_flags;
+   vector<int> recv_flags;
    vector<int> start;
    vector<int> end;
    vector<int> len;
    vector<int> next_inflight;
    vector<int> num_inflight;
    vector<int> max_inflight;
+   vector<HYPRE_Real> r_norm;
+   vector<HYPRE_Real> r_norm_boundary;
+   vector<HYPRE_Real> r_norm_boundary_prev;
    HYPRE_Real **data;
    HYPRE_Real ***data_inflight;
    MPI_Request *requests;
@@ -182,6 +187,9 @@ typedef struct{
    int **inflight_flags;
    int type;
    int tag;
+   vector<vector<vector<HYPRE_Real>>> a_ghost_data;
+   vector<vector<vector<HYPRE_Int>>> a_ghost_j;
+   int update_res_in_comm;
 }DMEM_CommData;
 
 typedef struct{
@@ -254,8 +262,9 @@ typedef struct{
 }DMEM_GridData;
 
 typedef struct{
-   double r_norm2_local;
-   int r_norm2_local_converge_flag;
+   double r_L2norm_local;
+   double r_L1norm_local;
+   int r_L2norm_local_converge_flag;
    int cycle;
    int inner_cycle;
 }DMEM_IterData;

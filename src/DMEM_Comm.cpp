@@ -75,22 +75,24 @@ void SetNextInFlight(DMEM_CommData *comm_data, int i)
    comm_data->next_inflight[i] = comm_data->max_inflight[i];
 }
 
-void SendRecv(DMEM_AllData *dmem_all_data,
-              DMEM_CommData *comm_data,
-              HYPRE_Real *v,
-              HYPRE_Int op)
+int SendRecv(DMEM_AllData *dmem_all_data,
+             DMEM_CommData *comm_data,
+             HYPRE_Real *v,
+             HYPRE_Int op)
 {
    HYPRE_Int flag;
    int my_id;
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
 
    int my_grid = dmem_all_data->grid.my_grid;
-   double begin;
+   double comp_begin, begin;
+   int return_flag = 0;
 
    hypre_ParCSRCommPkg *comm_pkg = hypre_ParCSRMatrixCommPkg(dmem_all_data->matrix.A_gridk);
 
    for (int i = 0; i < comm_data->procs.size(); i++){
       flag = 0;
+      comm_data->recv_flags[i] = 0;
       HYPRE_Int ip = comm_data->procs[i];
       HYPRE_Int vec_start = comm_data->start[i];
       HYPRE_Int vec_len = comm_data->len[i];
@@ -116,6 +118,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                          &(comm_data->requests[i]));
          dmem_all_data->output.mpiisend_wtime += MPI_Wtime() - begin;
          comm_data->message_count[i]++;
+         return_flag = 1;
       }
       /* inside recv */
       else if (comm_data->type == GRIDK_INSIDE_RECV || comm_data->type == FINE_INTRA_INSIDE_RECV){
@@ -129,12 +132,13 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                          &(comm_data->requests[i]));
          dmem_all_data->output.mpiirecv_wtime += MPI_Wtime() - begin;
          comm_data->message_count[i]++;
+         comm_data->recv_flags[i] = 1;
+         return_flag = 1;
       }
       /* outside send */
       else if (comm_data->type == GRIDK_OUTSIDE_SEND || comm_data->type == FINE_INTRA_OUTSIDE_SEND){
          if (dmem_all_data->input.async_flag == 1){
             if (comm_data->done_flags[i] < 2){
-
                if (op == WRITE){
                   if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
                      for (int j = 0; j < vec_len; j++){
@@ -186,7 +190,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                   else {
                      all_done_flag = dmem_all_data->comm.all_done_flag;
                      if (dmem_all_data->iter.cycle >= num_cycles-1 ||
-                         dmem_all_data->iter.r_norm2_local_converge_flag == 1){
+                         dmem_all_data->iter.r_L2norm_local_converge_flag == 1){
                         my_converge_flag = 1;
                      }
                   }
@@ -204,9 +208,15 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                      }
                   }
 
+                  int send_len = vec_len+2;
+                  if (dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL &&
+                      comm_data->type == FINE_INTRA_OUTSIDE_SEND){
+                     comm_data->data_inflight[i][next_inflight][vec_len+1] = dmem_all_data->iter.r_L1norm_local;
+                  }
+
                   begin = MPI_Wtime();
                   hypre_MPI_Isend(comm_data->data_inflight[i][next_inflight],
-                                  vec_len+1,
+                                  send_len,
                                   HYPRE_MPI_REAL,
                                   ip,
                                   comm_data->tag,
@@ -217,17 +227,18 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                   comm_data->num_inflight[i]++;
                   SetNextInFlight(comm_data, i);
                   comm_data->message_count[i]++;
+                  return_flag = 1;
                }
             }
          }
          else {
             if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
-               for (HYPRE_Int j = 0; j < vec_len; j++){
+               for (int j = 0; j < vec_len; j++){
                   comm_data->data[i][j] = v[hypre_ParCSRCommPkgSendMapElmt(comm_pkg, vec_start+j)];
                }
             }
             else {
-               for (HYPRE_Int j = 0; j < vec_len; j++){
+               for (int j = 0; j < vec_len; j++){
                   comm_data->data[i][j] = v[vec_start+j];
                }
             }
@@ -241,6 +252,7 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                             &(comm_data->requests[i]));
             dmem_all_data->output.mpiisend_wtime += MPI_Wtime() - begin;
             comm_data->message_count[i]++;
+            return_flag = 1;
          }
       }
       /* outisde recv */
@@ -252,15 +264,36 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                   hypre_MPI_Test(&(comm_data->requests[i]), &flag, MPI_STATUS_IGNORE);
                   if (flag){
                      if (op == ACCUMULATE){
-                        for (HYPRE_Int j = 0; j < vec_len; j++){
+                        for (int j = 0; j < vec_len; j++){
                            v[vec_start+j] += comm_data->data[i][j];
                         }
                      }
                      else if (op == READ){
-                        for (HYPRE_Int j = 0; j < vec_len; j++){
+                        for (int j = 0; j < vec_len; j++){
                            v[vec_start+j] = comm_data->data[i][j];
                         }
                      }
+                     if (comm_data->update_res_in_comm == 1){
+                        comp_begin = MPI_Wtime();
+                        HYPRE_Int num_rows = hypre_ParCSRMatrixNumRows(dmem_all_data->matrix.A_gridk);
+                        HYPRE_Real *r_local_data = hypre_VectorData(hypre_ParVectorLocalVector(dmem_all_data->vector_gridk.r));
+                        HYPRE_Real *x_ghost_data = hypre_VectorData(dmem_all_data->vector_gridk.x_ghost);
+                        for (int j = 0; j < num_rows; j++){
+                           for (int k = 0; k < comm_data->a_ghost_j[i][j].size(); k++){
+                              int ii = comm_data->a_ghost_j[i][j][k];
+                              HYPRE_Real aij = comm_data->a_ghost_data[i][j][k];
+                              r_local_data[j] -= aij * x_ghost_data[ii];
+                           }
+                        }
+                        dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
+                     }
+
+                     int recv_len = vec_len+2;
+                     if (dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL &&
+                         comm_data->type == FINE_INTRA_OUTSIDE_RECV){
+                        comm_data->r_norm[i] = comm_data->data[i][vec_len+1];
+                     }
+
                      if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
                         if (comm_data->data[i][vec_len] == 1.0){
                            comm_data->done_flags[i] = 2;
@@ -281,13 +314,15 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                      comm_data->message_count[i]++;
                      begin = MPI_Wtime();
                      hypre_MPI_Irecv(comm_data->data[i],
-                                     vec_len+1,
+                                     recv_len,
                                      HYPRE_MPI_REAL,
                                      ip,
                                      comm_data->tag,
                                      MPI_COMM_WORLD,
                                      &(comm_data->requests[i]));
                      dmem_all_data->output.mpiirecv_wtime += MPI_Wtime() - begin;
+                     comm_data->recv_flags[i] = 1;
+                     return_flag = 1;
                   }
                   else {
                      break;
@@ -306,9 +341,12 @@ void SendRecv(DMEM_AllData *dmem_all_data,
                             MPI_COMM_WORLD,
                             &(comm_data->requests[i]));
             dmem_all_data->output.mpiirecv_wtime += MPI_Wtime() - begin;
+            comm_data->recv_flags[i] = 1;
+            return_flag = 1;
          }
       }
    }
+   return return_flag;
 }
 
 void CompleteRecv(DMEM_AllData *dmem_all_data,
