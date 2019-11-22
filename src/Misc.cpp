@@ -472,6 +472,7 @@ int SMEM_SRCLevelBarrier(AllData *all_data,
          #pragma omp flush(flag)
       }
    }
+   return 0;
 }
 
 void InitVectors(AllData *all_data)

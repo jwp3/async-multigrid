@@ -30,6 +30,9 @@
 #define LOCAL_CONVERGE 1
 #define GLOBAL_CONVERGE 2
 
+#define ASSIGN_PROCS_BALANCED_WORK 0
+#define ASSIGN_PROCS_SCALAR 1
+
 using namespace std;
 using namespace mfem;
 
@@ -82,8 +85,8 @@ typedef struct{
    int solver;
    int async_flag;
    int async_smoother_flag;
-   int thread_part_type;
-   int thread_part_distr_type;
+   int assign_procs_type;
+   double assign_procs_scalar;
    int converge_test_type;
    int res_compute_type;
    int test_problem;
@@ -107,6 +110,9 @@ typedef struct{
    int res_update_type;
    HYPRE_Real P_gridk_droptol;
    HYPRE_Int P_gridk_maxelmts;
+   int sps_probability_type;
+   double sps_alpha;
+   int hypre_memory;
 }DMEM_InputData;
 
 typedef struct{
@@ -137,10 +143,16 @@ typedef struct{
    hypre_ParVector *u;
    hypre_ParVector *f;
    hypre_ParVector *x;
+   hypre_ParVector *y;
+   hypre_ParVector *z;
    hypre_ParVector *b;
    hypre_ParVector *r;
    hypre_ParVector *e;
    hypre_Vector *x_ghost;
+   hypre_Vector *x_ghost_prev;
+   hypre_Vector *b_ghost;
+   hypre_Vector *a_diag;
+   hypre_Vector *a_diag_ghost;
    hypre_Vector *u_ghost;
 }DMEM_VectorData;
 
@@ -160,6 +172,12 @@ typedef struct{
    HYPRE_ParCSRMatrix A_gridk;
    double **L1_row_norm_gridk;
    double **L1_row_norm_fine;
+   double **wJacobi_scale_gridk;
+   double **wJacobi_scale_fine;
+   double **symmL1_row_norm_gridk;
+   double **symmL1_row_norm_fine;
+   double **symmwJacobi_scale_gridk;
+   double **symmwJacobi_scale_fine;
    hypre_ParCSRMatrix *P_gridk;
    hypre_ParCSRMatrix *R_gridk;
    hypre_ParCSRMatrix **P_fine;
@@ -267,6 +285,7 @@ typedef struct{
    int r_L2norm_local_converge_flag;
    int cycle;
    int inner_cycle;
+   int relax;
 }DMEM_IterData;
 
 typedef struct{

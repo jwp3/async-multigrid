@@ -102,7 +102,7 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
       hiny = 1./(ny+1);
       hinz = 1./(nz+1);
 
-      values = hypre_CTAlloc(HYPRE_Real,  7, HYPRE_MEMORY_HOST);
+      values = hypre_CTAlloc(HYPRE_Real,  7, dmem_all_data->input.hypre_memory);
 
       values[0] = 0.;
 
@@ -237,10 +237,36 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
 
       A = (HYPRE_ParCSRMatrix) GenerateDifConv(hypre_MPI_COMM_WORLD,
                                                nx, ny, nz, P, Q, R, p, q, r, values);
-      hypre_TFree(values, HYPRE_MEMORY_HOST); 
+      hypre_TFree(values, dmem_all_data->input.hypre_memory); 
+   }
+   else if (dmem_all_data->input.test_problem == LAPLACE_3D7PT){
+      values = hypre_CTAlloc(HYPRE_Real,  4, dmem_all_data->input.hypre_memory);
+
+      values[1] = -cx;
+      values[2] = -cy;
+      values[3] = -cz;
+
+      values[0] = 0.;
+      if (nx > 1)
+      {
+         values[0] += 2.0*cx;
+      }
+      if (ny > 1)
+      {
+         values[0] += 2.0*cy;
+      }
+      if (nz > 1)
+      {
+         values[0] += 2.0*cz;
+      }
+
+      A = (HYPRE_ParCSRMatrix) GenerateLaplacian(hypre_MPI_COMM_WORLD,
+                                                 nx, ny, nz, P, Q, R, p, q, r, values);
+
+      hypre_TFree(values, dmem_all_data->input.hypre_memory);
    }
    else {
-      values = hypre_CTAlloc(HYPRE_Real,  2, HYPRE_MEMORY_HOST);
+      values = hypre_CTAlloc(HYPRE_Real,  2, dmem_all_data->input.hypre_memory);
 
       values[0] = 26.0;
       if (nx == 1 || ny == 1 || nz == 1)
@@ -251,7 +277,7 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
 
       A = (HYPRE_ParCSRMatrix) GenerateLaplacian27pt(comm, nx, ny, nz, P, Q, R, p, q, r, values);
 
-      hypre_TFree(values, HYPRE_MEMORY_HOST);
+      hypre_TFree(values, dmem_all_data->input.hypre_memory);
    }
 
    *A_ptr = A;

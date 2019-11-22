@@ -1,6 +1,6 @@
 #include "DMEM_Main.hpp"
 #include "DMEM_Misc.hpp"
-
+#include "_hypre_utilities.h"
 
 void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
 {
@@ -9,6 +9,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
  
    int sum_cycles, min_cycles, max_cycles;
+   int sum_relax, min_relax, max_relax;
    double mean_cycles;
    double mean_level_wtime;
    double min_solve_wtime, max_solve_wtime, mean_solve_wtime;
@@ -29,21 +30,21 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    
    double solve_wtime, residual_wtime, residual_norm_wtime, prolong_wtime, restrict_wtime, smooth_wtime, coarsest_solve_wtime, comm_wtime, start_wtime, end_wtime;
 
-   if (dmem_all_data->input.solver != MULT){
-      int my_id_local, num_procs_local;
-      MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
-      MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
-      for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
-         if (level == dmem_all_data->grid.my_grid){
-           // if (my_id_local == 0){
-            if (level == 0){
-               printf("id %d level %d num cycles %d res time %e solve time %e\n", my_id, level, dmem_all_data->iter.cycle, dmem_all_data->output.residual_wtime, dmem_all_data->output.solve_wtime);
-            }
-         }
-         MPI_Barrier(MPI_COMM_WORLD);
-      }
-      MPI_Barrier(MPI_COMM_WORLD);
-   }
+  // if (dmem_all_data->input.solver == MULTADD){
+  //    int my_id_local, num_procs_local;
+  //    MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
+  //    MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
+  //    for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+  //       if (level == dmem_all_data->grid.my_grid){
+  //          if (my_id_local == 0){
+  //         // if (level == 0){
+  //             printf("level %d num cycles %d smooth %e work %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.smooth_wtime, dmem_all_data->grid.level_work[level]);
+  //          }
+  //       }
+  //       MPI_Barrier(MPI_COMM_WORLD);
+  //    }
+  //    MPI_Barrier(MPI_COMM_WORLD);
+  // }
 
    hypre_ParVector *r = dmem_all_data->vector_fine.r;
    dmem_all_data->output.r_norm2 = sqrt(hypre_ParVectorInnerProd(r, r));
@@ -68,6 +69,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &mean_mpitest_wtime,        1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &mean_mpiwait_wtime,        1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->iter.cycle),                  &sum_cycles,                1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->iter.relax),                  &sum_relax,                1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
 
    mean_solve_wtime /= (double)num_procs;
    mean_residual_wtime /= (double)num_procs;
@@ -95,7 +97,9 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    mean_mpiwait_wtime /= (double)num_procs;
    mean_cycles = (double)sum_cycles/(double)num_procs;
 
-   if (dmem_all_data->grid.my_grid == 0){
+   if ((dmem_all_data->input.solver == MULTADD ||
+       dmem_all_data->input.solver == BPX) &&
+       dmem_all_data->grid.my_grid == 0){
       dmem_all_data->output.restrict_wtime = DBL_MAX;
       dmem_all_data->output.prolong_wtime = DBL_MAX;
    }
@@ -117,7 +121,9 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &min_mpiwait_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->iter.cycle),                  &min_cycles,                1, MPI_INT,    MPI_MIN, 0, MPI_COMM_WORLD);
 
-   if (dmem_all_data->grid.my_grid == 0){
+   if ((dmem_all_data->input.solver == MULTADD ||
+        dmem_all_data->input.solver == BPX) && 
+        dmem_all_data->grid.my_grid == 0){
       dmem_all_data->output.restrict_wtime = 0.0;
       dmem_all_data->output.prolong_wtime = 0.0;
    }
@@ -228,6 +234,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
              mean_mpiirecv_wtime, max_mpiirecv_wtime, min_mpiirecv_wtime,
              mean_mpitest_wtime, max_mpitest_wtime, min_mpitest_wtime,
              mean_mpiwait_wtime, max_mpiwait_wtime, min_mpiwait_wtime);
+     // printf("\n\n%d\n", sum_relax);
    }
 }
 
@@ -348,4 +355,120 @@ HYPRE_Real InnerProd(hypre_Vector *x_local,
                  hypre_MPI_SUM,
                  comm);
    return inner_prod;
+}
+
+/* y = y + x ./ scale */
+void DMEM_HypreParVector_VecAxpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex *scale, HYPRE_Int size)
+{
+   HYPRE_Real *y_local_data = hypre_VectorData(hypre_ParVectorLocalVector(y));
+   HYPRE_Real *x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(x));
+
+#if defined(HYPRE_USING_CUDA)
+   hypreDevice_IVAXPY(size, scale, x_local_data, y_local_data);
+#else
+   for (int i = 0; i < size; i++){
+      y_local_data[i] += x_local_data[i] / scale[i];
+   }
+#endif
+}
+
+/* y = y + alpha * x */
+void DMEM_HypreParVector_Axpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex alpha, HYPRE_Int size)
+{
+   hypre_ParVectorAxpy(alpha, x, y);
+}
+
+/* copy x into y */
+void DMEM_HypreParVector_Copy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Int size)
+{
+   hypre_ParVectorCopy(x, y);
+}
+
+/* set y to alpha */
+void DMEM_HypreParVector_Set(hypre_ParVector *y, HYPRE_Complex alpha, HYPRE_Int size)
+{
+   hypre_ParVectorSetConstantValues(y, alpha); 
+}
+
+/* y = alpha * y */
+void DMEM_HypreParVector_Scale(hypre_ParVector *y, HYPRE_Complex alpha, HYPRE_Int size)
+{
+   hypre_ParVectorScale(alpha, y);
+}
+
+void DMEM_HypreRealArray_Copy(HYPRE_Real *y, HYPRE_Real *x, HYPRE_Int size)
+{
+   if (size == 0){
+      return;
+   }
+
+#if defined(HYPRE_USING_CUDA)
+   DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
+   DMEM_HypreRealArray_Prefetch(x, size, HYPRE_MEMORY_DEVICE);
+#if defined(HYPRE_USING_CUBLAS)
+   HYPRE_CUBLAS_CALL(cublasDcopy(hypre_HandleCublasHandle(hypre_handle), size, x, 1, y, 1));
+#else
+   HYPRE_THRUST_CALL(copy_n, x, size, y);
+#endif
+#else
+   for (int i = 0; i < size; i++){
+      y[i] = x[i];
+   }
+#endif
+
+#if defined(HYPRE_USING_CUDA)
+   hypre_SyncCudaComputeStream(hypre_handle);
+#endif
+}
+
+void DMEM_HypreRealArray_Axpy(HYPRE_Real *y, HYPRE_Real *x, HYPRE_Real alpha, HYPRE_Int size)
+{
+   if (size == 0){
+      return;
+   }
+
+#if defined(HYPRE_USING_CUDA)
+   DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
+   DMEM_HypreRealArray_Prefetch(x, size, HYPRE_MEMORY_DEVICE);
+#if defined(HYPRE_USING_CUBLAS)
+   HYPRE_CUBLAS_CALL(cublasDaxpy(hypre_HandleCublasHandle(hypre_handle), size, &alpha, x, 1, y, 1));
+#else
+   HYPRE_THRUST_CALL(transform, x, x+size, y, y, alpha * _1 + _2);
+#endif
+#else
+   for (int i = 0; i < size; i++){
+      y[i] += alpha * x[i];
+   }
+#endif
+
+#if defined(HYPRE_USING_CUDA)
+   hypre_SyncCudaComputeStream(hypre_handle);
+#endif
+}
+
+void DMEM_HypreRealArray_Set(HYPRE_Real *y, HYPRE_Real alpha, HYPRE_Int size)
+{
+   if (size == 0){
+      return;
+   }
+
+#if defined(HYPRE_USING_CUDA)
+   DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
+   HYPRE_THRUST_CALL(fill_n, y, size, alpha);
+#else
+   for (int i = 0; i < size; i++){
+      y[i] = alpha;
+   }
+#endif
+
+#if defined(HYPRE_USING_CUDA)
+   hypre_SyncCudaComputeStream(hypre_handle);
+#endif
+}
+
+void DMEM_HypreRealArray_Prefetch(HYPRE_Real *y, HYPRE_Int size, HYPRE_Int to_location)
+{
+#ifdef HYPRE_USING_UNIFIED_MEMORY
+   hypre_TMemcpy(y, y, HYPRE_Real, size, to_location, HYPRE_MEMORY_SHARED);
+#endif
 }

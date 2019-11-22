@@ -14,4 +14,22 @@ HYPRE_Real InnerProd(hypre_Vector *x,
                      hypre_Vector *y,
                      MPI_Comm comm);
 
+void DMEM_HypreParVector_VecAxpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex *scale, HYPRE_Int size);
+
+void DMEM_HypreParVector_Axpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex alpha, HYPRE_Int size);
+
+void DMEM_HypreParVector_Copy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Int size);
+
+void DMEM_HypreParVector_Set(hypre_ParVector *y, HYPRE_Complex alpha, HYPRE_Int size);
+
+void DMEM_HypreParVector_Scale(hypre_ParVector *y, HYPRE_Complex alpha, HYPRE_Int size);
+
+void DMEM_HypreRealArray_Copy(HYPRE_Real *y, HYPRE_Real *x, HYPRE_Int size);
+
+void DMEM_HypreRealArray_Axpy(HYPRE_Real *y, HYPRE_Real *x, HYPRE_Real alpha, HYPRE_Int size);
+
+void DMEM_HypreRealArray_Set(HYPRE_Real *y, HYPRE_Real alpha, HYPRE_Int size);
+
+void DMEM_HypreRealArray_Prefetch(HYPRE_Real *y, HYPRE_Int size, HYPRE_Int to_location);
+
 #endif

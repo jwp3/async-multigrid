@@ -14,11 +14,10 @@
 #include <algorithm>
 #include <list>
 #include <vector>
-#include <mm_malloc.h>
 #include <time.h>
 #include <functional>
 #include <omp.h>
-#include <mkl.h>
+//#include <mkl.h>
 
 #include "_hypre_utilities.h"
 #include "_hypre_parcsr_mv.h"
@@ -93,6 +92,9 @@
 
 #define RES_RECOMPUTE 0
 #define RES_ACCUMULATE 1
+
+#define SPS_PROBABILITY_EXPONENTIAL 0
+#define SPS_PROBABILITY_INVERSE 1
 
 using namespace std;
 using namespace mfem;
@@ -176,35 +178,35 @@ typedef struct{
    vector<vector<int>> i;
 }VectorData;
 
-typedef struct{
-   double *a;
-   MKL_INT *ia;
-   MKL_INT *ja;
-   MKL_INT n;
-   MKL_INT nnz;
-}PardisoCSR;
-
-typedef struct{
-   double wtime_setup;
-   void *pt[64];
-   MKL_INT maxfct;
-   MKL_INT mnum;
-   MKL_INT mtype;
-   MKL_INT phase;
-   MKL_INT *perm;
-   MKL_INT nrhs;
-   MKL_INT iparm[64];
-   MKL_INT msglvl;
-   MKL_INT error;
-   MKL_INT ddum;
-   MKL_INT idum;
-   PardisoCSR csr;
-}PardisoInfo;
-
-typedef struct{
-   PardisoCSR csr;
-   PardisoInfo info;
-}PardisoData;
+//typedef struct{
+//   double *a;
+//   MKL_INT *ia;
+//   MKL_INT *ja;
+//   MKL_INT n;
+//   MKL_INT nnz;
+//}PardisoCSR;
+//
+//typedef struct{
+//   double wtime_setup;
+//   void *pt[64];
+//   MKL_INT maxfct;
+//   MKL_INT mnum;
+//   MKL_INT mtype;
+//   MKL_INT phase;
+//   MKL_INT *perm;
+//   MKL_INT nrhs;
+//   MKL_INT iparm[64];
+//   MKL_INT msglvl;
+//   MKL_INT error;
+//   MKL_INT ddum;
+//   MKL_INT idum;
+//   PardisoCSR csr;
+//}PardisoInfo;
+//
+//typedef struct{
+//   PardisoCSR csr;
+//   PardisoInfo info;
+//}PardisoData;
 
 typedef struct{
    int amr_refs;
@@ -273,7 +275,7 @@ typedef struct{
    InputData input;
    OutputData output;
    GridData grid;
-   PardisoData pardiso;
+  // PardisoData pardiso;
    MfemData mfem;
 }AllData;
 

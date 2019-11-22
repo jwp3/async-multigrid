@@ -25,23 +25,25 @@ int main (int argc, char *argv[])
    HYPRE_Solver solver;
 
    /* Initialize MPI */
-   MPI_Init(&argc, &argv);
-   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
-   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+   hypre_MPI_Init(&argc, &argv);
+   hypre_MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
+   hypre_MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+   HYPRE_Init(argc, argv);
+
 
    /* Hypre parameters */
-   dmem_all_data.hypre.max_levels = 20;
+   dmem_all_data.hypre.max_levels = 25;
    dmem_all_data.hypre.solver_id = 0;
    dmem_all_data.hypre.agg_num_levels = 0;
    dmem_all_data.hypre.coarsen_type = 9; /* for proc-independent coarsening, use 7 or 9 */
-   dmem_all_data.hypre.interp_type = 0;
+   dmem_all_data.hypre.interp_type = 6;
    dmem_all_data.hypre.print_level = 0;
    dmem_all_data.hypre.solve_flag = 0;
    dmem_all_data.hypre.strong_threshold = .25;
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
 
-   int n = 10;
+   int n = 40;
    double c = 1.0, a = 1.0;
    dmem_all_data.matrix.nx = n;
    dmem_all_data.matrix.ny = n;
@@ -67,7 +69,8 @@ int main (int argc, char *argv[])
    dmem_all_data.input.async_flag = 0;
    dmem_all_data.input.async_smoother_flag = 0;
    dmem_all_data.input.global_conv_flag = 0;
-   dmem_all_data.input.thread_part_type = ALL_LEVELS;
+   dmem_all_data.input.assign_procs_type = ASSIGN_PROCS_BALANCED_WORK;
+   dmem_all_data.input.assign_procs_scalar = .5;
    dmem_all_data.input.converge_test_type = GLOBAL_CONVERGE;
    dmem_all_data.input.res_compute_type = LOCAL_RES;
    dmem_all_data.input.num_pre_smooth_sweeps = 1;
@@ -87,7 +90,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.print_level_stats_flag = 0;
    dmem_all_data.input.print_reshist_flag = 0;
    dmem_all_data.input.read_type = READ_SOL;
-   dmem_all_data.input.num_cycles = 10000;
+   dmem_all_data.input.num_cycles = 1000;
    dmem_all_data.input.num_inner_cycles = 5;
    dmem_all_data.input.increment_cycle = 1;
    dmem_all_data.input.start_cycle = 1;
@@ -95,8 +98,8 @@ int main (int argc, char *argv[])
    dmem_all_data.input.check_res_flag = 1;
    dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
    dmem_all_data.input.max_inflight = 1;
-   dmem_all_data.input.rhs_type = RHS_RAND;
-   dmem_all_data.input.init_guess_type = INITGUESS_RAND;
+   dmem_all_data.input.rhs_type = RHS_ONES;
+   dmem_all_data.input.init_guess_type = INITGUESS_ZEROS;
    dmem_all_data.input.afacj_level = 0;
    dmem_all_data.input.num_interpolants = NUMLEVELS_INTERPOLANTS;
    dmem_all_data.input.P_gridk_droptol_flag = 0;
@@ -104,6 +107,14 @@ int main (int argc, char *argv[])
    dmem_all_data.input.P_gridk_maxelmts_flag = 0;
    dmem_all_data.input.P_gridk_maxelmts = 0;
    dmem_all_data.input.res_update_type = RES_RECOMPUTE;
+   dmem_all_data.input.sps_probability_type = SPS_PROBABILITY_EXPONENTIAL;
+   dmem_all_data.input.sps_alpha = 1.0;
+
+//#ifdef HYPRE_USING_UNIFIED_MEMORY
+//   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
+//#else
+   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_HOST;
+//#endif
 
    /* Parse command line */
    int arg_index = 0;
@@ -176,6 +187,9 @@ int main (int argc, char *argv[])
          if (strcmp(argv[arg_index], "27pt") == 0){
             dmem_all_data.input.test_problem = LAPLACE_3D27PT;
          }
+         else if (strcmp(argv[arg_index], "7pt") == 0){
+            dmem_all_data.input.test_problem = LAPLACE_3D7PT;
+         }
          else if (strcmp(argv[arg_index], "difconv") == 0){
             dmem_all_data.input.test_problem = DIFCONV_3D7PT;
          }
@@ -196,11 +210,8 @@ int main (int argc, char *argv[])
             dmem_all_data.input.smoother = JACOBI;
             dmem_all_data.input.smooth_interp_type = JACOBI;
          }
-         else if (strcmp(argv[arg_index], "hybrid_jgs") == 0){
+         else if (strcmp(argv[arg_index], "hjgs") == 0){
             dmem_all_data.input.smoother = HYBRID_JACOBI_GAUSS_SEIDEL;
-         }
-         else if (strcmp(argv[arg_index], "async_hybrid_jgs") == 0){
-            dmem_all_data.input.smoother = ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL;
          }
          else if (strcmp(argv[arg_index], "L1j") == 0){
             dmem_all_data.input.smoother = L1_JACOBI;
@@ -213,6 +224,11 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "async_sps") == 0){
             dmem_all_data.input.smoother = ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL;
+            dmem_all_data.input.smooth_interp_type = JACOBI;
+            dmem_all_data.input.async_smoother_flag = 1;
+         }
+         else if (strcmp(argv[arg_index], "async_hjgs") == 0){
+            dmem_all_data.input.smoother = ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL;
             dmem_all_data.input.smooth_interp_type = JACOBI;
             dmem_all_data.input.async_smoother_flag = 1;
          }
@@ -296,6 +312,19 @@ int main (int argc, char *argv[])
             dmem_all_data.input.init_guess_type = INITGUESS_RAND;
          }
       }
+      else if (strcmp(argv[arg_index], "-assign_procs") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "balanced") == 0){
+            dmem_all_data.input.assign_procs_type = ASSIGN_PROCS_BALANCED_WORK;
+         }
+         else if (strcmp(argv[arg_index], "scalar") == 0){
+            dmem_all_data.input.assign_procs_type = ASSIGN_PROCS_SCALAR;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-assign_procs_scalar") == 0){
+         arg_index++;
+         dmem_all_data.input.assign_procs_scalar = atof(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-async") == 0){
          dmem_all_data.input.async_flag = 1;
       }
@@ -314,6 +343,10 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-smooth_weight") == 0){
          arg_index++;
          dmem_all_data.input.smooth_weight = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-sps_alpha") == 0){
+         arg_index++;
+         dmem_all_data.input.sps_alpha = atof(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-th") == 0){
          arg_index++;
@@ -436,10 +469,10 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-res_update_type") == 0){
          arg_index++;
-         if (strcmp(argv[arg_index], "accumulate") == 0){
+         if (strcmp(argv[arg_index], "accum") == 0){
             dmem_all_data.input.res_update_type = RES_ACCUMULATE;
          }
-         else if (strcmp(argv[arg_index], "recompute") == 0){
+         else if (strcmp(argv[arg_index], "recomp") == 0){
             dmem_all_data.input.res_update_type = RES_RECOMPUTE;
          }
       }
@@ -490,6 +523,9 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-mfem_test_error") == 0){
          dmem_all_data.input.mfem_test_error_flag = 1;
       }
+      else if (strcmp(argv[arg_index], "-gpu") == 0){
+         dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
+      }
       arg_index++;
    }
 
@@ -510,15 +546,19 @@ int main (int argc, char *argv[])
       dmem_all_data.input.smoother = ASYNC_JACOBI;
    }
    else if ((dmem_all_data.input.solver == SYNC_AFACX || dmem_all_data.input.solver == SYNC_MULTADD || dmem_all_data.input.solver == MULT) &&
-            dmem_all_data.input.async_flag == 0){
+            dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
       dmem_all_data.input.smoother = JACOBI;
    }
+
+  // if (dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
+  //    dmem_all_data.input.res_update_type = RES_ACCUMULATE;
+  // }
 
    dmem_all_data.grid.my_grid = 0;
    
    srand(0);
   // mkl_set_num_threads(1);
- 
+
    start = omp_get_wtime(); 
    DMEM_Setup(&dmem_all_data);
    dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
@@ -527,6 +567,7 @@ int main (int argc, char *argv[])
       dmem_all_data.input.solver = solvers[s];
       for (int run = 0; run < num_runs; run++){
          DMEM_ResetData(&dmem_all_data);
+
          if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
             printf("\nSOLVER: ");
             if (dmem_all_data.input.async_flag == 1){
@@ -548,7 +589,7 @@ int main (int argc, char *argv[])
          else if (dmem_all_data.input.solver == SYNC_MULTADD || dmem_all_data.input.solver == SYNC_AFACX){
             if (dmem_all_data.input.solver == SYNC_AFACX){
                if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-                  printf("synchronous afacx\n\n\n");
+                  printf("synchronous AFACx\n\n\n");
                }
             }
             else {

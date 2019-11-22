@@ -210,14 +210,14 @@ void DMEM_TestIsendrecv(DMEM_AllData *dmem_all_data)
    MPI_Status status;
    MPI_Request request = MPI_REQUEST_NULL;
    HYPRE_Int message_size = 10000, num_messages = 1000;
-   HYPRE_Real **sendbuf = hypre_CTAlloc(HYPRE_Real *, message_size, HYPRE_MEMORY_HOST);
-   HYPRE_Real *recvbuf = hypre_CTAlloc(HYPRE_Real, message_size, HYPRE_MEMORY_HOST);
+   HYPRE_Real **sendbuf = hypre_CTAlloc(HYPRE_Real *, message_size, dmem_all_data->input.hypre_memory);
+   HYPRE_Real *recvbuf = hypre_CTAlloc(HYPRE_Real, message_size, dmem_all_data->input.hypre_memory);
    MPI_Request *send_requests = (MPI_Request *)calloc(num_messages, sizeof(MPI_Request));
    vector<double> recv_vec;
 
    if (my_id == 0){
       for (int i = 0; i < num_messages; i++){
-         sendbuf[i] = hypre_CTAlloc(HYPRE_Real, message_size, HYPRE_MEMORY_HOST);
+         sendbuf[i] = hypre_CTAlloc(HYPRE_Real, message_size, dmem_all_data->input.hypre_memory);
          sendbuf[i][0] = i;
          hypre_MPI_Isend(sendbuf[i],
                          message_size,
