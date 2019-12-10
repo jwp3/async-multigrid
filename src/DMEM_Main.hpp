@@ -137,6 +137,7 @@ typedef struct{
    HYPRE_Real strong_threshold;
    HYPRE_Real multadd_trunc_factor;
    HYPRE_Int start_smooth_level;
+   HYPRE_Int num_functions;
 }DMEM_HypreData;
 
 typedef struct{

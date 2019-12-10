@@ -24,6 +24,9 @@ void DMEM_Mult(DMEM_AllData *dmem_all_data)
    hypre_ParVector *Vtemp = hypre_ParAMGDataVtemp(amg_data);
    HYPRE_Int num_levels = hypre_ParAMGDataNumLevels(amg_data);
    HYPRE_Int num_rows = hypre_ParCSRMatrixNumRows(A_array[0]); 
+   
+   DMEM_HypreParVector_Copy(U_array[0], dmem_all_data->vector_fine.x, num_rows);
+   DMEM_HypreParVector_Copy(F_array[0], dmem_all_data->vector_fine.b, num_rows);
   
    dmem_all_data->iter.cycle = 0;
    
@@ -111,13 +114,20 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       }
       else {
          DMEM_HypreParVector_Copy(Vtemp, F_array[fine_grid], num_rows);
-         DMEM_HypreParVector_Set(U_array[fine_grid], 0.0, num_rows);
+        // DMEM_HypreParVector_Set(U_array[fine_grid], 0.0, num_rows);
       }
 
       if (dmem_all_data->input.smoother == L1_JACOBI){
-         //DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+        // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
+         if (level == 0){
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] += v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
+            }
+         }
+         else {
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] = v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
+            }
          }
       }
       else if (dmem_all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
@@ -135,7 +145,17 @@ void MultCycle(DMEM_AllData *dmem_all_data,
                               Ztemp);
       }
       else {
-         DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
+         if (level == 0){
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+            }
+         }
+         else {
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] = dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+            }
+         }
+        // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
       }
 
       DMEM_HypreParVector_Copy(dmem_all_data->vector_fine.e, F_array[fine_grid], num_rows);
@@ -173,7 +193,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
   //    }
   // }
   // else {
-      hypre_GaussElimSolve(amg_data, coarsest_level, 99);
+      hypre_GaussElimSolve(amg_data, coarsest_level, 9);
   // }
    dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
    dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
@@ -216,7 +236,10 @@ void MultCycle(DMEM_AllData *dmem_all_data,
                                          Vtemp);
 
       if (dmem_all_data->input.smoother == L1_JACOBI){
-         DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
+        // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
+         for (int i = 0; i < num_rows; i++){
+            u_local_data[i] += v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
+         }
       }
       else if (dmem_all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
                dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL){
@@ -234,7 +257,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       }
       else {
         // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
-         for (HYPRE_Int i = 0; i < num_rows; i++){
+         for (int i = 0; i < num_rows; i++){
             u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
          }
       }

@@ -4,10 +4,11 @@
 #include "_hypre_utilities.h"
 
 using namespace std;
+using namespace mfem;
 
 static inline HYPRE_Int sign_double(HYPRE_Real a)
 {
-   return ( (0.0 < a) - (0.0 > a) );
+   return ((0.0 < a) - (0.0 > a));
 }
 
 void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
@@ -266,7 +267,7 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
       hypre_TFree(values, dmem_all_data->input.hypre_memory);
    }
    else {
-      values = hypre_CTAlloc(HYPRE_Real,  2, dmem_all_data->input.hypre_memory);
+      values = hypre_CTAlloc(HYPRE_Real, 2, dmem_all_data->input.hypre_memory);
 
       values[0] = 26.0;
       if (nx == 1 || ny == 1 || nz == 1)
@@ -284,18 +285,27 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
 }
 
 void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
-                          hypre_ParCSRMatrix **A,
+                          hypre_ParCSRMatrix **A_ptr,
+                          hypre_ParVector **b_ptr,
                           MPI_Comm comm)
 {
    int num_procs, my_id;
    MPI_Comm_size(comm, &num_procs);
    MPI_Comm_rank(comm, &my_id);
    bool static_cond = false;
+   bool amg_elast = 0;
    HYPRE_IJMatrix A_ij;
-
-   Mesh *mesh = new Mesh(dmem_all_data->mfem.mesh_file, 1, 1);
+   Mesh *mesh = new Mesh("./mfem_quartz/mfem-4.0/data/beam-hex.mesh", 1, 1);
+  // Mesh *mesh = new Mesh(dmem_all_data->mfem.mesh_file, 1, 1);
    int dim = mesh->Dimension();
    int sdim = mesh->SpaceDimension();
+
+  // if (dmem_all_data->input.test_problem == MFEM_ELAST_AMR){
+
+  // }
+  // else {
+      dmem_all_data->hypre.num_functions = dim;
+  // }
 
    if (mesh->NURBSext){
       mesh->DegreeElevate(dmem_all_data->mfem.order, dmem_all_data->mfem.order);
@@ -304,28 +314,44 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
    for (int l = 0; l < dmem_all_data->mfem.ref_levels; l++){
       mesh->UniformRefinement();
    }
-   mesh->EnsureNCMesh();
+   if (dmem_all_data->input.test_problem == MFEM_ELAST_AMR){
+      if (mesh->NURBSext){
+         mesh->SetCurvature(2);
+      }
+      mesh->EnsureNCMesh();
+   }
 
    ParMesh *pmesh = new ParMesh(comm, *mesh);
-   delete mesh;
+   if (dmem_all_data->input.test_problem == MFEM_ELAST_AMR){
+      mesh->Clear();
+   }
+   else {
+      delete mesh;
+   }
    for (int l = 0; l < dmem_all_data->mfem.par_ref_levels; l++){
       pmesh->UniformRefinement();
    }
-  // pmesh->EnsureNCMesh();
-
+  //pmesh->EnsureNCMesh();
 
    FiniteElementCollection *fec;
-   fec = new H1_FECollection(dmem_all_data->mfem.order, dim);
    ParFiniteElementSpace *fespace;
-
-   if (pmesh->NURBSext) {
-      fec = NULL;
-      fespace = (ParFiniteElementSpace *)pmesh->GetNodes()->FESpace();
-   }
-   else {
+   const bool use_nodal_fespace = pmesh->NURBSext && !amg_elast;
+   if (dmem_all_data->input.test_problem == MFEM_ELAST_AMR){
       fec = new H1_FECollection(dmem_all_data->mfem.order, dim);
       fespace = new ParFiniteElementSpace(pmesh, fec, dim, Ordering::byVDIM);
    }
+   else {
+      if (use_nodal_fespace){
+         fec = NULL;
+         fespace = (ParFiniteElementSpace *)pmesh->GetNodes()->FESpace();
+      }
+      else{
+         fec = new H1_FECollection(dmem_all_data->mfem.order, dim);
+         fespace = new ParFiniteElementSpace(pmesh, fec, dim, Ordering::byVDIM);
+      }
+   }
+
+   HYPRE_Int size = fespace->GlobalTrueVSize();
 
    Array<int> ess_tdof_list, ess_bdr(pmesh->bdr_attributes.Max());
    ess_bdr = 0;
@@ -343,10 +369,8 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
       f.Set(dim-1, new PWConstCoefficient(pull_force));
    }
 
-   LinearForm *b = new LinearForm(fespace);
+   ParLinearForm *b = new ParLinearForm(fespace);
    b->AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(f));
-   b->Assemble();
-
    ParGridFunction x(fespace);
    x = 0.0;
 
@@ -364,43 +388,173 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
    a->AddDomainIntegrator(integ);
 
    if (static_cond) { a->EnableStaticCondensation(); }
-   a->Assemble();
 
-   HypreParMatrix A_mfem;
+   HypreParMatrix A;
    Vector B, X;
-   a->FormLinearSystem(ess_tdof_list, x, *b, A_mfem, X, B);
 
-   *A = A_mfem.GetHypreMatrix();
+   if (dmem_all_data->input.test_problem == MFEM_ELAST_AMR){
+      Vector zero_vec(dim);
+      zero_vec = 0.0;
+      VectorConstantCoefficient zero_vec_coeff(zero_vec);
 
-  // HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, A_mfem.Height()-1, 0, A_mfem.Height()-1, A_ij);
-  // HYPRE_IJMatrixSetObjectType(A_ij, HYPRE_PARCSR);
-  // HYPRE_IJMatrixInitialize(A_ij);
+      const int tdim = dim*(dim+1)/2;
+      L2_FECollection flux_fec(dmem_all_data->mfem.order, dim);
+      ParFiniteElementSpace flux_fespace(pmesh, &flux_fec, tdim);
+      ParFiniteElementSpace smooth_flux_fespace(pmesh, fec, tdim);
+      L2ZienkiewiczZhuEstimator estimator(*integ, x, flux_fespace, smooth_flux_fespace);
 
-  // for (int i = 0; i < A_mfem.Height(); i++){
+      ThresholdRefiner refiner(estimator);
+      refiner.SetTotalErrorFraction(0.7);
 
-  //    Array<int> mfem_cols;
-  //    Vector mfem_srow;
-  //    A_mfem.GetRow(i, mfem_cols, mfem_srow);
+      const int max_dofs = 50000;
+      const int max_amr_itr = 20;
+      for (int it = 0; it <= max_amr_itr; it++)
+      {
+         HYPRE_Int global_dofs = fespace->GlobalTrueVSize();
 
-  //    int nnz = mfem_srow.Size();
+         a->Assemble();
+         b->Assemble();
+
+         Array<int> ess_tdof_list;
+         x.ProjectBdrCoefficient(zero_vec_coeff, ess_bdr);
+         fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+        // HypreParMatrix A;
+        // Vector B, X;
+         const int copy_interior = 1;
+         a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B, copy_interior);
+
+         HypreBoomerAMG *amg = new HypreBoomerAMG(A);
+         amg->SetSystemsOptions(dim);
+        // amg->SetPrintLevel(2);
+        // amg->Mult(B, X);
+        // delete amg;
+         CGSolver pcg(A.GetComm());
+         pcg.SetPreconditioner(*amg);
+         pcg.SetOperator(A);
+         pcg.SetRelTol(1e-6);
+         pcg.SetMaxIter(500);
+         pcg.SetPrintLevel(0); // set to 3 to print the first and the last iterations only
+         pcg.Mult(B, X);
+
+         a->RecoverFEMSolution(X, *b, x);
+
+         if (global_dofs > max_dofs)
+         {
+            break;
+         }
+
+         refiner.Apply(*pmesh);
+         if (refiner.Stop())
+         {
+            break;
+         }
+
+         fespace->Update();
+         x.Update();
+
+         if (pmesh->Nonconforming())
+         {
+            pmesh->Rebalance();
+
+            fespace->Update();
+            x.Update();
+         }
+
+         a->Update();
+         b->Update();
+      }
+   }
+   else {
+      a->Assemble();
+      b->Assemble();
+      a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+   }
+
+   *A_ptr = A.GetHypreMatrix();
+   if (dmem_all_data->input.rhs_type == RHS_FROM_PROBLEM){
+      HypreParVector *B_par = b->ParallelAssemble();
+      *b_ptr = B_par->GetHypreVector();
+   }
+
+  // HypreBoomerAMG *amg = new HypreBoomerAMG(A);
+  // if (amg_elast && !a->StaticCondensationIsEnabled())
+  // {
+  //    amg->SetElasticityOptions(fespace);
+  // }
+  // else
+  // {
+  //    amg->SetSystemsOptions(dim);
+  // }
+  // amg->SetPrintLevel(3);
+  // amg->Mult(B, X);
+
+
+
+
+
+
+  // HyprePCG *pcg = new HyprePCG(A);
+  // pcg->SetTol(1e-8);
+  // pcg->SetMaxIter(500);
+  // pcg->SetPrintLevel(2);
+  // pcg->SetPreconditioner(*amg);
+  // pcg->Mult(B, X);
+
+  // HYPRE_IJMatrix Aij;
+  // HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, A.GetGlobalNumRows()-1, 0, A.GetGlobalNumRows()-1, &Aij);
+  // HYPRE_IJMatrixSetObjectType(Aij, HYPRE_PARCSR);
+  // HYPRE_IJMatrixInitialize(Aij);
+
+  // SparseMatrix diag, offd;
+  // HYPRE_Int *cmap;
+  // A.GetDiag(diag);
+  // A.GetOffd(offd, cmap);
+
+  // for (int i = 0; i < diag.Height(); i++){
+
+  //    Array<int> mfem_diag_cols, mfem_offd_cols;
+  //    Vector mfem_diag_srow, mfem_offd_srow;
+  //    diag.GetRow(i, mfem_diag_cols, mfem_diag_srow);
+  //    offd.GetRow(i, mfem_offd_cols, mfem_offd_srow);
+
+  //    int nnz_diag = mfem_diag_srow.Size();
+  //    int nnz_offd = mfem_offd_srow.Size();
+  //    int nnz = nnz_diag + nnz_offd;
 
   //    double *values = (double *)malloc(nnz * sizeof(double));
   //    int *cols = (int *)malloc(nnz * sizeof(int));
 
-  //    for (int j = 0; j < nnz; j++){
-  //       cols[j] = mfem_cols[j];
-  //       values[j] = mfem_srow[j];
+  //    int jj = 0;
+  //    for (int j = 0; j < nnz_diag; j++){
+  //       cols[jj] = mfem_diag_cols[j];
+  //       values[jj] = mfem_diag_srow[j];
+  //       jj++;
+  //    }
+  //    for (int j = 0; j < nnz_offd; j++){
+  //       cols[jj] = mfem_offd_cols[j];
+  //       values[jj] = mfem_offd_srow[j];
+  //       jj++;
   //    }
 
-  //    HYPRE_IJMatrixSetValues(A_ij, 1, &nnz, &i, cols, values);
+  //    /* Set the values for row i */
+  //    HYPRE_IJMatrixSetValues(Aij, 1, &nnz, &i, cols, values);
   // }
 
-  // HYPRE_IJMatrixAssemble(A_ij);
-  // HYPRE_IJMatrixGetObject(A_ij, (void**)A);
+  // HYPRE_IJMatrixAssemble(Aij);
+  // void *object;
+  // HYPRE_IJMatrixGetObject(Aij, &object);
+  // *A_ptr = (hypre_ParCSRMatrix *)object;
 
-  // delete a;
-   delete b;
-  // delete fespace;
-   delete fec;
-   delete pmesh;
+
+   //delete pcg;
+   //delete amg;
+   //delete a;
+   //delete b;
+   //if (fec)
+   //{
+   //   delete fespace;
+   //   delete fec;
+   //}
+   //delete pmesh; 
 }

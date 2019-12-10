@@ -292,7 +292,12 @@ void AddCycle(DMEM_AllData *dmem_all_data)
    }
 
    begin = MPI_Wtime();
-   DMEM_AddSmooth(dmem_all_data, coarsest_level);
+   if (my_grid == dmem_all_data->grid.num_levels-1){
+       hypre_GaussElimSolve(amg_data, coarsest_level, 9);
+   }
+   else {
+      DMEM_AddSmooth(dmem_all_data, coarsest_level);
+   }
    dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
   
   // if (dmem_all_data->input.async_flag == 1){
@@ -301,17 +306,17 @@ void AddCycle(DMEM_AllData *dmem_all_data)
    if (dmem_all_data->input.num_interpolants == ONE_INTERPOLANT){
       if (my_grid > 0){
          begin = MPI_Wtime();
-        // hypre_ParCSRMatrixMatvec(1.0,
-        //                          dmem_all_data->matrix.P_gridk,
-        //                          U_array[coarsest_level],
-        //                          0.0,
-        //                          U_array[finest_level]);
-         hypre_ParCSRMatrixMatvecOutOfPlace(1.0,
-                                            dmem_all_data->matrix.P_gridk,
-                                            U_array[coarsest_level],
-                                            0.0,
-                                            Vtemp,
-                                            U_array[finest_level]);
+         hypre_ParCSRMatrixMatvec(1.0,
+                                  dmem_all_data->matrix.P_gridk,
+                                  U_array[coarsest_level],
+                                  0.0,
+                                  U_array[finest_level]);
+        // hypre_ParCSRMatrixMatvecOutOfPlace(1.0,
+        //                                    dmem_all_data->matrix.P_gridk,
+        //                                    U_array[coarsest_level],
+        //                                    0.0,
+        //                                    Vtemp,
+        //                                    U_array[finest_level]);
          dmem_all_data->output.restrict_wtime += MPI_Wtime() - begin;
       }
    }

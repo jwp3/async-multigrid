@@ -30,21 +30,22 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    
    double solve_wtime, residual_wtime, residual_norm_wtime, prolong_wtime, restrict_wtime, smooth_wtime, coarsest_solve_wtime, comm_wtime, start_wtime, end_wtime;
 
-  // if (dmem_all_data->input.solver == MULTADD){
-  //    int my_id_local, num_procs_local;
-  //    MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
-  //    MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
-  //    for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
-  //       if (level == dmem_all_data->grid.my_grid){
-  //          if (my_id_local == 0){
-  //         // if (level == 0){
-  //             printf("level %d num cycles %d smooth %e work %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.smooth_wtime, dmem_all_data->grid.level_work[level]);
-  //          }
-  //       }
-  //       MPI_Barrier(MPI_COMM_WORLD);
-  //    }
-  //    MPI_Barrier(MPI_COMM_WORLD);
-  // }
+
+   if (dmem_all_data->input.solver == MULTADD){
+      int my_id_local, num_procs_local;
+      MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
+      MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
+      for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+         if (level == dmem_all_data->grid.my_grid){
+            if (my_id_local == 0){
+           // if (level == 0){
+               printf("level %d num cycles %d smooth %e work %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.smooth_wtime, dmem_all_data->grid.level_work[level]);
+            }
+         }
+         MPI_Barrier(MPI_COMM_WORLD);
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+   }
 
    hypre_ParVector *r = dmem_all_data->vector_fine.r;
    dmem_all_data->output.r_norm2 = sqrt(hypre_ParVectorInnerProd(r, r));
@@ -174,6 +175,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    if (my_id == 0){
       char print_str[1000];
       if (dmem_all_data->input.oneline_output_flag == 0){
+         printf("Initial Residual 2-norm = %e\n", dmem_all_data->output.r0_norm2);
          strcpy(print_str, "Relative Residual 2-norm = %e\n"
                            "Relative Error A-norm (only for rhs==0) = %e\n\n"
                            //"Setup stats\n\n"
@@ -241,8 +243,9 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
 void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename)
 {
    int my_id, num_procs;
-   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
-   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+   MPI_Comm comm = hypre_ParCSRMatrixComm(A);
+   MPI_Comm_rank(comm, &my_id);
+   MPI_Comm_size(comm, &num_procs);
    HYPRE_Real *A_data;
    HYPRE_Int *A_i, *A_j;
    FILE *file_ptr;
@@ -286,7 +289,7 @@ void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename)
 
          fclose(file_ptr);
       }
-      MPI_Barrier(MPI_COMM_WORLD);
+      MPI_Barrier(comm);
    }
 }
 

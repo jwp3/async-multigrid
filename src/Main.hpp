@@ -17,6 +17,7 @@
 #include <time.h>
 #include <functional>
 #include <omp.h>
+#include<bits/stdc++.h>
 //#include <mkl.h>
 
 #include "_hypre_utilities.h"
@@ -71,7 +72,8 @@
 #define MFEM_ELAST 4
 #define MFEM_MAXWELL 5
 #define VARDIFCONV_3D7PT 6
-#define DIFCONV_3D7PT 6
+#define DIFCONV_3D7PT 7
+#define MFEM_ELAST_AMR 8
 
 #define READ_SOL 0
 #define READ_RES 1
@@ -82,6 +84,7 @@
 #define RHS_ZEROS 0
 #define RHS_ONES 1
 #define RHS_RAND 2
+#define RHS_FROM_PROBLEM 3
 
 #define INITGUESS_ZEROS 0
 #define INITGUESS_ONES 1

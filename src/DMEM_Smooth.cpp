@@ -481,7 +481,10 @@ void AsyncSmoothAddCorrect_LocalRes(DMEM_AllData *dmem_all_data)
          DMEM_HypreParVector_Axpy(U_array[0], dmem_all_data->vector_gridk.e, 1.0, num_rows);
       }
       else {
-         DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+         //DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+         for (int i = 0; i < num_rows; i++){
+            x_local_data[i] += e_local_data[i];
+         }
       }
    }
    dmem_all_data->output.correct_wtime += MPI_Wtime() - begin;
@@ -526,7 +529,10 @@ int AsyncSmoothCheckComm(DMEM_AllData *dmem_all_data)
          DMEM_HypreParVector_Axpy(U_array[0], dmem_all_data->vector_gridk.e, 1.0, num_rows);
       }
       else {
-         DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+         //DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+         for (int i = 0; i < num_rows; i++){
+            x_local_data[i] += e_local_data[i];
+         }
       }
    }
    begin = MPI_Wtime();
@@ -580,7 +586,10 @@ void AsyncSmoothRecvCleanup(DMEM_AllData *dmem_all_data)
                READ);      
       dmem_all_data->output.comm_wtime += MPI_Wtime() - begin;
       begin = MPI_Wtime();
-      DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+      //DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+      for (int i = 0; i < num_rows; i++){
+         x_local_data[i] += e_local_data[i];
+      }
       dmem_all_data->output.comp_wtime += MPI_Wtime() - begin;
    }
 
@@ -734,7 +743,10 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
    else {
       DMEM_HypreParVector_Set(U_array[coarsest_level], 0.0, num_rows);
       if (dmem_all_data->input.smoother == L1_JACOBI){
-         DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], F_array[coarsest_level], dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level], num_rows);
+         for (int i = 0; i < num_rows; i++){
+            u_local_data[i] = f_local_data[i] / dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level][i];
+         }
+        // DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], F_array[coarsest_level], dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level], num_rows);
       }
       else {
          for (int i = 0; i < num_rows; i++){
@@ -755,7 +767,10 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
      //                                    e,
      //                                    Vtemp);
       if (dmem_all_data->input.smoother == L1_JACOBI){
-         DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmL1_row_norm_gridk[coarsest_level], num_rows);
+         for (int i = 0; i < num_rows; i++){
+            u_local_data[i] = 2.0 * u_local_data[i] - v_local_data[i] / dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level][i];
+         }
+        // DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmL1_row_norm_gridk[coarsest_level], num_rows);
       }
       else {
          for (int i = 0; i < num_rows; i++){

@@ -35,13 +35,14 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.max_levels = 25;
    dmem_all_data.hypre.solver_id = 0;
    dmem_all_data.hypre.agg_num_levels = 0;
-   dmem_all_data.hypre.coarsen_type = 9; /* for proc-independent coarsening, use 7 or 9 */
+   dmem_all_data.hypre.coarsen_type = 9; /* for coarsening independent of the number of processes, use 7 or 9 */
    dmem_all_data.hypre.interp_type = 6;
    dmem_all_data.hypre.print_level = 0;
    dmem_all_data.hypre.solve_flag = 0;
-   dmem_all_data.hypre.strong_threshold = .25;
+   dmem_all_data.hypre.strong_threshold = .5;
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
+   dmem_all_data.hypre.num_functions = 1;
 
    int n = 40;
    double c = 1.0, a = 1.0;
@@ -61,7 +62,7 @@ int main (int argc, char *argv[])
    dmem_all_data.mfem.ref_levels = 1;
    dmem_all_data.mfem.par_ref_levels = 1;
    dmem_all_data.mfem.order = 1;
-   strcpy(dmem_all_data.mfem.mesh_file, "./mfem/mfem-3.4/data/beam-tet.mesh");
+   strcpy(dmem_all_data.mfem.mesh_file, "./mfem_quartz/mfem-3.4/data/beam-tet.mesh");
 
    dmem_all_data.input.test_problem = LAPLACE_3D27PT;
    dmem_all_data.input.tol = 1e-10;
@@ -98,7 +99,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.check_res_flag = 1;
    dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
    dmem_all_data.input.max_inflight = 1;
-   dmem_all_data.input.rhs_type = RHS_ONES;
+   dmem_all_data.input.rhs_type = RHS_RAND;
    dmem_all_data.input.init_guess_type = INITGUESS_ZEROS;
    dmem_all_data.input.afacj_level = 0;
    dmem_all_data.input.num_interpolants = NUMLEVELS_INTERPOLANTS;
@@ -182,6 +183,10 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.matrix.difconv_az = atof(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-atype") == 0){
+         arg_index++;
+         dmem_all_data.matrix.difconv_atype = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-problem") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "27pt") == 0){
@@ -198,6 +203,9 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "mfem_elast") == 0){
             dmem_all_data.input.test_problem = MFEM_ELAST;
+         }
+         else if (strcmp(argv[arg_index], "mfem_elast_amr") == 0){
+            dmem_all_data.input.test_problem = MFEM_ELAST_AMR;
          }
       }
       else if (strcmp(argv[arg_index], "-vardifconv_eps") == 0){
@@ -299,6 +307,9 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "rand") == 0){
             dmem_all_data.input.rhs_type = RHS_RAND;
          }
+         else if (strcmp(argv[arg_index], "from_problem") == 0){
+            dmem_all_data.input.rhs_type = RHS_FROM_PROBLEM;
+         }
       }
       else if (strcmp(argv[arg_index], "-init_guess") == 0){
          arg_index++;
@@ -352,10 +363,10 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.hypre.strong_threshold = atof(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-multadd_trunc_factor") == 0){
-         arg_index++;
-         dmem_all_data.hypre.multadd_trunc_factor = atof(argv[arg_index]);
-      }
+     // else if (strcmp(argv[arg_index], "-multadd_trunc_factor") == 0){
+     //    arg_index++;
+     //    dmem_all_data.hypre.multadd_trunc_factor = atof(argv[arg_index]);
+     // }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0){
          arg_index++;
          dmem_all_data.input.num_cycles = atoi(argv[arg_index]);
@@ -549,6 +560,14 @@ int main (int argc, char *argv[])
             dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
       dmem_all_data.input.smoother = JACOBI;
    }
+   
+   if (dmem_all_data.input.rhs_type == RHS_FROM_PROBLEM){
+      if (dmem_all_data.input.test_problem == LAPLACE_3D27PT ||
+          dmem_all_data.input.test_problem == LAPLACE_3D7PT  ||
+          dmem_all_data.input.test_problem == DIFCONV_3D7PT){
+         dmem_all_data.input.rhs_type = RHS_RAND;
+      }
+   }
 
   // if (dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
   //    dmem_all_data.input.res_update_type = RES_ACCUMULATE;
@@ -556,7 +575,7 @@ int main (int argc, char *argv[])
 
    dmem_all_data.grid.my_grid = 0;
    
-   srand(0);
+  // srand(0);
   // mkl_set_num_threads(1);
 
    start = omp_get_wtime(); 

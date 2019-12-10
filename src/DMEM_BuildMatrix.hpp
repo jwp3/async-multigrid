@@ -15,7 +15,8 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
                            int atype);
 
 void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
-                          hypre_ParCSRMatrix **A,
+                          hypre_ParCSRMatrix **A_ptr,
+                          hypre_ParVector **b_ptr,
                           MPI_Comm comm);
 
 #endif
