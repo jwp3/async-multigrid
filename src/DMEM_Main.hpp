@@ -56,6 +56,8 @@ typedef struct{
    double mpiirecv_wtime;
    double mpitest_wtime;
    double mpiwait_wtime;
+   double matvec_wtime;
+   double vecop_wtime;
    double r_norm2;
    double r0_norm2;
    double e0_Anorm;
@@ -105,14 +107,12 @@ typedef struct{
    int init_guess_type;
    int afacj_level;
    int num_interpolants;
-   int P_gridk_droptol_flag;
-   int P_gridk_maxelmts_flag;
    int res_update_type;
-   HYPRE_Real P_gridk_droptol;
-   HYPRE_Int P_gridk_maxelmts;
+   int simple_jacobi_flag;
    int sps_probability_type;
    double sps_alpha;
    int hypre_memory;
+   int async_comm_save_divisor;
 }DMEM_InputData;
 
 typedef struct{
@@ -120,6 +120,8 @@ typedef struct{
    int ref_levels;
    int par_ref_levels;
    int order;
+   int max_amr_iters;
+   int max_amr_dofs;
    char mesh_file[1000];
    double *u;
 }DMEM_MfemData;
@@ -138,6 +140,9 @@ typedef struct{
    HYPRE_Real multadd_trunc_factor;
    HYPRE_Int start_smooth_level;
    HYPRE_Int num_functions;
+   HYPRE_Int P_max_elmts;
+   HYPRE_Int add_P_max_elmts;
+   HYPRE_Real add_trunc_factor;
 }DMEM_HypreData;
 
 typedef struct{
@@ -287,6 +292,7 @@ typedef struct{
    int cycle;
    int inner_cycle;
    int relax;
+   int converge_flag;
 }DMEM_IterData;
 
 typedef struct{

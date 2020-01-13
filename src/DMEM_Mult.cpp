@@ -13,6 +13,8 @@ void SyncAddCycle(DMEM_AllData *dmem_all_data,
 
 void DMEM_Mult(DMEM_AllData *dmem_all_data)
 {
+   if (dmem_all_data->input.num_cycles <= 0) return;
+
    HYPRE_Int my_id;
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
 
@@ -33,16 +35,20 @@ void DMEM_Mult(DMEM_AllData *dmem_all_data)
    double begin = MPI_Wtime();
    while (1){
       MultCycle(dmem_all_data, dmem_all_data->iter.cycle);
-      double residual_begin = MPI_Wtime();
+
+      double matvec_begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
                                          A_array[0],
                                          dmem_all_data->vector_fine.x,
                                          1.0,
                                          dmem_all_data->vector_fine.b,
                                          dmem_all_data->vector_fine.r);
-      dmem_all_data->output.residual_wtime += MPI_Wtime() - residual_begin;
-      double residual_norm_begin = MPI_Wtime();
+      double matvec_end = MPI_Wtime();
+      dmem_all_data->output.residual_wtime += matvec_end - matvec_begin;
+      dmem_all_data->output.matvec_wtime += matvec_end - matvec_begin;
+
       hypre_ParVector *r = dmem_all_data->vector_fine.r;
+      double residual_norm_begin = MPI_Wtime();
       HYPRE_Real res_norm = sqrt(hypre_ParVectorInnerProd(r, r));
       dmem_all_data->output.residual_norm_wtime += MPI_Wtime() - residual_norm_begin;
       dmem_all_data->iter.cycle += 1;
@@ -64,7 +70,8 @@ void MultCycle(DMEM_AllData *dmem_all_data,
    HYPRE_Int my_id;
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)dmem_all_data->hypre.solver;
-   double begin;
+   double smooth_begin, restrict_begin, prolong_begin, matvec_begin, vecop_begin, level_begin;
+   double smooth_end, restrict_end, prolong_end, matvec_end, vecop_end, level_end;
 
    HYPRE_Real *u_local_data;
    HYPRE_Real *v_local_data;
@@ -92,7 +99,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
    }
 
    for (HYPRE_Int level = 0; level < coarsest_level; level++){
-      double level_begin = MPI_Wtime();
+      level_begin = MPI_Wtime();
       HYPRE_Int fine_grid = level;
       HYPRE_Int coarse_grid = level + 1;
 
@@ -108,7 +115,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[fine_grid]));
   
       /* smooth */
-      begin = MPI_Wtime();
+      smooth_begin = vecop_begin = MPI_Wtime();
       if (level == 0){
          DMEM_HypreParVector_Copy(Vtemp, dmem_all_data->vector_fine.r, num_rows);
       }
@@ -116,8 +123,10 @@ void MultCycle(DMEM_AllData *dmem_all_data,
          DMEM_HypreParVector_Copy(Vtemp, F_array[fine_grid], num_rows);
         // DMEM_HypreParVector_Set(U_array[fine_grid], 0.0, num_rows);
       }
+      dmem_all_data->output.vecop_wtime = MPI_Wtime() - vecop_begin;
 
       if (dmem_all_data->input.smoother == L1_JACOBI){
+         vecop_begin = MPI_Wtime();
         // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
          if (level == 0){
             for (int i = 0; i < num_rows; i++){
@@ -129,6 +138,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
                u_local_data[i] = v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
             }
          }
+         dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
       }
       else if (dmem_all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
                dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL){
@@ -145,6 +155,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
                               Ztemp);
       }
       else {
+         vecop_begin = MPI_Wtime();
          if (level == 0){
             for (int i = 0; i < num_rows; i++){
                u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
@@ -155,32 +166,38 @@ void MultCycle(DMEM_AllData *dmem_all_data,
                u_local_data[i] = dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
             }
          }
+         dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
         // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
       }
 
+      vecop_begin = MPI_Wtime(); 
       DMEM_HypreParVector_Copy(dmem_all_data->vector_fine.e, F_array[fine_grid], num_rows);
+      dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 
-      /* restrict */
+      matvec_begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
                                          A_array[fine_grid],
                                          U_array[fine_grid],
                                          1.0,
                                          dmem_all_data->vector_fine.e,
                                          Vtemp);
-      dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
-      begin = MPI_Wtime();
+      dmem_all_data->output.smooth_wtime += MPI_Wtime() - smooth_begin;
+      /* restrict */
+      restrict_begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvecT(1.0,
                                 R_array[fine_grid],
         			Vtemp,
                                 0.0,
                                 F_array[coarse_grid]);
-      dmem_all_data->output.restrict_wtime += MPI_Wtime() - begin;
-      dmem_all_data->output.level_wtime[level] += MPI_Wtime() - level_begin;
+      level_end = MPI_Wtime();
+      dmem_all_data->output.matvec_wtime += level_end - matvec_begin;
+      dmem_all_data->output.restrict_wtime += level_end - restrict_begin;
+      dmem_all_data->output.level_wtime[level] += level_end - level_begin;
    }
 
    double coarse_r0_norm2, res_norm;
    
-   begin = MPI_Wtime();
+   smooth_begin = MPI_Wtime();
   // if (dmem_all_data->input.solver == MULT_MULTADD){
   //    hypre_ParVectorSetConstantValues(dmem_all_data->vector_fine.x, 0.0);
   //    hypre_ParVectorSetConstantValues(dmem_all_data->vector_gridk.x, 0.0);
@@ -195,28 +212,31 @@ void MultCycle(DMEM_AllData *dmem_all_data,
   // else {
       hypre_GaussElimSolve(amg_data, coarsest_level, 9);
   // }
-   dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
-   dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
+   dmem_all_data->output.smooth_wtime += MPI_Wtime() - smooth_begin;
+  // dmem_all_data->output.coarsest_solve_wtime += MPI_Wtime() - begin;
     
    for (HYPRE_Int level = coarsest_level; level > 0; level--){
-      double level_begin = MPI_Wtime();
+      level_begin = MPI_Wtime();
       HYPRE_Int fine_grid = level - 1;
       HYPRE_Int coarse_grid = level;
 
+      vecop_begin = MPI_Wtime();
       DMEM_HypreParVector_Copy(dmem_all_data->vector_fine.e, U_array[fine_grid], num_rows);
+      dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 
       /* prolong and correct */
-      begin = MPI_Wtime();
+      prolong_begin = matvec_begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvecOutOfPlace(1.0,
                                          P_array[fine_grid], 
                                          U_array[coarse_grid],
                                          1.0,
                                          dmem_all_data->vector_fine.e,
                                          U_array[fine_grid]);
-      dmem_all_data->output.prolong_wtime += MPI_Wtime() - begin;
+      prolong_end = matvec_end = MPI_Wtime();
+      dmem_all_data->output.matvec_wtime += matvec_end - matvec_begin;
+      dmem_all_data->output.prolong_wtime += prolong_end - prolong_begin;
       
       /* smooth */
-      begin = MPI_Wtime();
       hypre_ParCSRMatrix *A = A_array[fine_grid];
       A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[fine_grid]));
       A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[fine_grid]));
@@ -224,22 +244,28 @@ void MultCycle(DMEM_AllData *dmem_all_data,
 
       u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[fine_grid]));
       f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[fine_grid]));
-      
+     
+      vecop_begin = MPI_Wtime(); 
       DMEM_HypreParVector_Copy(dmem_all_data->vector_fine.e, F_array[fine_grid], num_rows);
+      dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 
       /* smooth */
+      matvec_begin = smooth_begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
                                          A_array[fine_grid],
                                          U_array[fine_grid],
                                          1.0,
                                          dmem_all_data->vector_fine.e,
                                          Vtemp);
+      dmem_all_data->output.matvec_wtime += MPI_Wtime() - matvec_begin;
 
       if (dmem_all_data->input.smoother == L1_JACOBI){
+         vecop_begin = MPI_Wtime();
         // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
          for (int i = 0; i < num_rows; i++){
             u_local_data[i] += v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
          }
+         dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
       }
       else if (dmem_all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
                dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL){
@@ -256,16 +282,20 @@ void MultCycle(DMEM_AllData *dmem_all_data,
                               Ztemp);
       }
       else {
+         vecop_begin = MPI_Wtime();
         // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
          for (int i = 0; i < num_rows; i++){
             u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
          }
+         dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
       }
-      dmem_all_data->output.smooth_wtime += MPI_Wtime() - begin;
+      dmem_all_data->output.smooth_wtime += MPI_Wtime() - smooth_begin;
       dmem_all_data->output.level_wtime[level] += MPI_Wtime() - level_begin;
    }
 
+   vecop_begin = MPI_Wtime();
    DMEM_HypreParVector_Copy(dmem_all_data->vector_fine.x, U_array[0], num_rows);
+   dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 }
 
 void DMEM_SyncAdd(DMEM_AllData *dmem_all_data)

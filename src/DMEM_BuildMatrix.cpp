@@ -295,6 +295,14 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
    bool static_cond = false;
    bool amg_elast = 0;
    HYPRE_IJMatrix A_ij;
+//#if defined(HYPRE_USING_CUDA)
+//   const char *device_config = "cuda";
+//   Device device(device_config);
+//#else
+//   const char *device_config = "cpu";
+//   Device device(device_config);
+//#endif
+
    Mesh *mesh = new Mesh("./mfem_quartz/mfem-4.0/data/beam-hex.mesh", 1, 1);
   // Mesh *mesh = new Mesh(dmem_all_data->mfem.mesh_file, 1, 1);
    int dim = mesh->Dimension();
@@ -318,8 +326,8 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
       if (mesh->NURBSext){
          mesh->SetCurvature(2);
       }
-      mesh->EnsureNCMesh();
    }
+   mesh->EnsureNCMesh();
 
    ParMesh *pmesh = new ParMesh(comm, *mesh);
    if (dmem_all_data->input.test_problem == MFEM_ELAST_AMR){
@@ -406,10 +414,7 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
       ThresholdRefiner refiner(estimator);
       refiner.SetTotalErrorFraction(0.7);
 
-      const int max_dofs = 50000;
-      const int max_amr_itr = 20;
-      for (int it = 0; it <= max_amr_itr; it++)
-      {
+      for (int it = 0;; it++){
          HYPRE_Int global_dofs = fespace->GlobalTrueVSize();
 
          a->Assemble();
@@ -423,6 +428,7 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
         // Vector B, X;
          const int copy_interior = 1;
          a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B, copy_interior);
+         return;
 
          HypreBoomerAMG *amg = new HypreBoomerAMG(A);
          amg->SetSystemsOptions(dim);
@@ -439,22 +445,19 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
 
          a->RecoverFEMSolution(X, *b, x);
 
-         if (global_dofs > max_dofs)
-         {
+         if ((global_dofs > dmem_all_data->mfem.max_amr_dofs) || (it == dmem_all_data->mfem.max_amr_iters)){
             break;
          }
 
          refiner.Apply(*pmesh);
-         if (refiner.Stop())
-         {
+         if (refiner.Stop()){
             break;
          }
 
          fespace->Update();
          x.Update();
 
-         if (pmesh->Nonconforming())
-         {
+         if (pmesh->Nonconforming()){
             pmesh->Rebalance();
 
             fespace->Update();

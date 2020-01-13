@@ -21,7 +21,8 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
    int recv_flag;
-   double comp_begin, residual_begin, comm_begin, residual_norm_begin;
+   double matvec_begin, vecop_begin, residual_begin, residual_norm_begin, comm_begin, mpiwait_begin;
+   double matvec_end, vecop_end, residual_end, comm_end, mpiwait_end, residual_norm_end;
 
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)dmem_all_data->hypre.solver_gridk;
    hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
@@ -84,6 +85,8 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
       }
    }
 
+
+   // TODO: add timings for async hjgs
    int converge_flag = 0; 
    int update_flag = 1;
    while (1){
@@ -92,9 +95,8 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
          update_flag = 1;
       }
       if (update_flag == 1){
-         comp_begin = MPI_Wtime();
          if (dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL || dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
-            comp_begin = MPI_Wtime();
+            matvec_begin = MPI_Wtime();
             for (int i = 0; i < num_rows; i++){
                u_local_data[i] = 0.0;
             }
@@ -108,19 +110,20 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
                   int ii = A_offd_j[jj];
                   res -= A_offd_data[jj] * x_ghost_data[ii];
                }
-               u_local_data[i] = res / A_diag_data[A_diag_i[i]];
+               u_local_data[i] = dmem_all_data->input.smooth_weight * res / A_diag_data[A_diag_i[i]];
                x_local_data[i] += u_local_data[i];
                r_local_data[i] -= u_local_data[i];
             }
-            dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
+            dmem_all_data->output.matvec_wtime += MPI_Wtime() - matvec_begin;
          }
          else {
-            comp_begin = MPI_Wtime();
-           // for (int i = 0; i < num_rows; i++){
-           //    u_local_data[i] = dmem_all_data->input.smooth_weight * r_local_data[i] / A_diag_data[A_diag_i[i]];
-           // }
-            DMEM_HypreParVector_Set(U_array[0], 0.0, num_rows);
-            DMEM_HypreParVector_VecAxpy(U_array[0], dmem_all_data->vector_gridk.r, dmem_all_data->matrix.wJacobi_scale_gridk[0], num_rows);
+            vecop_begin = MPI_Wtime();
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] = dmem_all_data->input.smooth_weight * r_local_data[i] / A_diag_data[A_diag_i[i]];
+            }
+            dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
+           // DMEM_HypreParVector_Set(U_array[0], 0.0, num_rows);
+           // DMEM_HypreParVector_VecAxpy(U_array[0], dmem_all_data->vector_gridk.r, dmem_all_data->matrix.wJacobi_scale_gridk[0], num_rows);
 
            // for (int i = 0; i < num_rows; i++){
            //    HYPRE_Real Au_i = 0.0;
@@ -135,19 +138,17 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
            //    }
            //    u_local_data[i] = 2.0 * u_local_data[i] -  dmem_all_data->input.smooth_weight * Au_i / A_diag_data[A_diag_i[i]];
            // }
-            dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
          }
-         dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
          dmem_all_data->iter.relax += 1;
 
          AsyncSmoothAddCorrect_LocalRes(dmem_all_data);
          if (dmem_all_data->input.smoother == ASYNC_JACOBI){
-            comp_begin = MPI_Wtime();
-            DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, U_array[0], 1.0, num_rows);
-           // for (int i = 0; i < num_rows; i++){
-           //    x_local_data[i] += u_local_data[i];
-           // }
-            dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
+            vecop_begin = MPI_Wtime();
+            //DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, U_array[0], 1.0, num_rows);
+            for (int i = 0; i < num_rows; i++){
+               x_local_data[i] += u_local_data[i];
+            }
+            dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
          }
       }
       comm_begin = MPI_Wtime();
@@ -169,21 +170,19 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
                            &(dmem_all_data->comm.finestIntra_outsideRecv),
                            x_ghost_data,
                            READ); 
-      dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
       if (dmem_all_data->input.async_flag == 0 &&
           dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL){
-         comm_begin = MPI_Wtime();
          CompleteRecv(dmem_all_data,
                       &(dmem_all_data->comm.finestIntra_outsideRecv),
                       x_ghost_data,
                       READ);
-         double mpiwait_begin = MPI_Wtime();
+         mpiwait_begin = MPI_Wtime();
          hypre_MPI_Waitall(dmem_all_data->comm.finestIntra_outsideSend.procs.size(),
                            dmem_all_data->comm.finestIntra_outsideSend.requests,
                            MPI_STATUSES_IGNORE);
          dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - mpiwait_begin;
-         dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
       }
+      dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
       
       residual_begin = MPI_Wtime();
       if (dmem_all_data->input.smoother == ASYNC_JACOBI){
@@ -214,31 +213,24 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
             }
             
             if (dmem_all_data->input.async_flag == 0){ 
-               comm_begin = MPI_Wtime();
                if (dmem_all_data->input.async_flag == 0){
                   CompleteRecv(dmem_all_data,
                                &(dmem_all_data->comm.finestIntra_outsideRecv),
                                x_ghost_data,
                                READ);
-                  double mpiwait_begin = MPI_Wtime();
                   hypre_MPI_Waitall(dmem_all_data->comm.finestIntra_outsideSend.procs.size(),
                                     dmem_all_data->comm.finestIntra_outsideSend.requests,
                                     MPI_STATUSES_IGNORE);
-                  dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - mpiwait_begin;
                }
-               dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
-               comp_begin = MPI_Wtime();
                for (int i = 0; i < num_rows; i++){
                   for (int jj = A_offd_i[i]; jj < A_offd_i[i+1]; jj++){
                      int ii = A_offd_j[jj];
                      r_local_data[i] -= A_offd_data[jj] * x_ghost_data[ii];
                   }
                }
-               dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
             }
          }
          else {
-            comp_begin = MPI_Wtime();
            // for (int i = 0; i < num_rows; i++){
            //    r_local_data[i] = b_local_data[i];
            //    for (int jj = A_diag_i[i]; jj < A_diag_i[i+1]; jj++){
@@ -253,24 +245,24 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
                                             hypre_ParVectorLocalVector(dmem_all_data->vector_gridk.b),
                                             hypre_ParVectorLocalVector(dmem_all_data->vector_gridk.r),
                                             0);
-            dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
 
             if (dmem_all_data->input.async_flag == 0){
-               comm_begin = MPI_Wtime();
                if (dmem_all_data->input.async_flag == 0){
                   CompleteRecv(dmem_all_data,
                                &(dmem_all_data->comm.finestIntra_outsideRecv),
                                x_ghost_data,
                                READ);
-                  double mpiwait_begin = MPI_Wtime();
                   hypre_MPI_Waitall(dmem_all_data->comm.finestIntra_outsideSend.procs.size(),
                                     dmem_all_data->comm.finestIntra_outsideSend.requests,
                                     MPI_STATUSES_IGNORE);
-                  dmem_all_data->output.mpiwait_wtime += MPI_Wtime() - mpiwait_begin;
                }
-               dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin; 
             }
-            comp_begin = MPI_Wtime();
+            else {
+               recv_flag = SendRecv(dmem_all_data,
+                                    &(dmem_all_data->comm.finestIntra_outsideRecv),
+                                    x_ghost_data,
+                                    READ);
+            }
            // for (int i = 0; i < num_rows; i++){
            //    for (int jj = A_offd_i[i]; jj < A_offd_i[i+1]; jj++){
            //       int ii = A_offd_j[jj];
@@ -285,7 +277,12 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
                                             hypre_ParVectorLocalVector(Vtemp),
                                             hypre_ParVectorLocalVector(dmem_all_data->vector_gridk.r),
                                             0);
-            dmem_all_data->output.comp_wtime += MPI_Wtime() - comp_begin;
+            if (dmem_all_data->input.async_flag == 1){
+               recv_flag = SendRecv(dmem_all_data,
+                                    &(dmem_all_data->comm.finestIntra_outsideRecv),
+                                    x_ghost_data,
+                                    READ);
+            }
          }
       }
       dmem_all_data->output.residual_wtime += MPI_Wtime() - residual_begin;
@@ -293,7 +290,7 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
       if (dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
          int recv_flag2 = AsyncSmoothCheckComm(dmem_all_data);
          if (update_flag == 1 || recv_flag2 == 1){
-            comp_begin = MPI_Wtime();
+            residual_begin = MPI_Wtime();
             for (int i = 0; i < num_rows; i++){
                r_local_data[i] = b_local_data[i];
                for (int jj = A_diag_i[i]; jj < A_diag_i[i+1]; jj++){
@@ -305,6 +302,7 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
                   r_local_data[i] -= A_offd_data[jj] * x_ghost_data[ii];
                }
             }
+            dmem_all_data->output.residual_wtime += MPI_Wtime() - residual_begin;
             residual_norm_begin = MPI_Wtime();
             dmem_all_data->iter.r_L1norm_local = 0.0;
             for (int i = 0; i < num_rows; i++){
@@ -655,6 +653,8 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    HYPRE_Int num_rows;
    int fine_level, coarse_level;
+   double matvec_begin, vecop_begin;
+   double matvec_end, vecop_end;
 
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)dmem_all_data->hypre.solver_gridk;
 
@@ -681,7 +681,6 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
    f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[coarsest_level]));
    u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[coarsest_level]));
 
-   double begin = MPI_Wtime(); 
    if (dmem_all_data->input.solver == BPX){
       double prob = RandDouble(0, 1.0);
       for (int i = 0; i < num_rows; i++){
@@ -741,6 +740,7 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
       }
    }
    else {
+      vecop_begin = MPI_Wtime();
       DMEM_HypreParVector_Set(U_array[coarsest_level], 0.0, num_rows);
       if (dmem_all_data->input.smoother == L1_JACOBI){
          for (int i = 0; i < num_rows; i++){
@@ -754,31 +754,39 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
          }
         // DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], F_array[coarsest_level], dmem_all_data->matrix.wJacobi_scale_gridk[coarsest_level], num_rows);
       }
-      hypre_ParCSRMatrixMatvec(1.0,
-                               A_array[coarsest_level],
-                               U_array[coarsest_level],
-                               0.0,
-                               Vtemp);
+      dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 
-     // hypre_ParCSRMatrixMatvecOutOfPlace(1.0,
-     //                                    A_array[coarsest_level],
-     //                                    U_array[coarsest_level],
-     //                                    0.0,
-     //                                    e,
-     //                                    Vtemp);
-      if (dmem_all_data->input.smoother == L1_JACOBI){
-         for (int i = 0; i < num_rows; i++){
-            u_local_data[i] = 2.0 * u_local_data[i] - v_local_data[i] / dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level][i];
+      if (dmem_all_data->input.simple_jacobi_flag == 0){
+         matvec_begin = MPI_Wtime();
+         hypre_ParCSRMatrixMatvec(1.0,
+                                  A_array[coarsest_level],
+                                  U_array[coarsest_level],
+                                  0.0,
+                                  Vtemp);
+         dmem_all_data->output.matvec_wtime += MPI_Wtime() - matvec_begin;
+
+        // hypre_ParCSRMatrixMatvecOutOfPlace(1.0,
+        //                                    A_array[coarsest_level],
+        //                                    U_array[coarsest_level],
+        //                                    0.0,
+        //                                    e,
+        //                                    Vtemp);
+
+         vecop_begin = MPI_Wtime();
+         if (dmem_all_data->input.smoother == L1_JACOBI){
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] = 2.0 * u_local_data[i] - v_local_data[i] / dmem_all_data->matrix.L1_row_norm_gridk[coarsest_level][i];
+            }
+           // DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmL1_row_norm_gridk[coarsest_level], num_rows);
          }
-        // DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmL1_row_norm_gridk[coarsest_level], num_rows);
-      }
-      else {
-         for (int i = 0; i < num_rows; i++){
-            u_local_data[i] = 2.0 * u_local_data[i] - dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+         else {
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] = 2.0 * u_local_data[i] - dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
+            }
+           // DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmwJacobi_scale_gridk[coarsest_level], num_rows);
          }
-        // DMEM_HypreParVector_VecAxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmwJacobi_scale_gridk[coarsest_level], num_rows);
+         dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
       }
      // DMEM_HypreParVector_Scale(U_array[coarsest_level], 2.0, num_rows);
    }
-   //dmem_all_data->output.comp_wtime += MPI_Wtime() - begin;
 }

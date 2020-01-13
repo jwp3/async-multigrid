@@ -16,9 +16,6 @@ void DMEM_VectorToGridk_LocalRes(DMEM_AllData *dmem_all_data,
                                  hypre_ParVector *f);
 void DMEM_AddCheckComm(DMEM_AllData *dmem_all_data);
 
-void DMEM_AddCorrect_GlobalRes(DMEM_AllData *dmem_all_data);
-void DMEM_AddResidual_GlobalRes(DMEM_AllData *dmem_all_data);
-
 int DMEM_CheckOutsideDoneFlag(DMEM_AllData *dmem_all_data);
 void DMEM_AsyncRecvStart(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data);
 

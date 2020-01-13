@@ -137,12 +137,6 @@ int SendRecv(DMEM_AllData *dmem_all_data,
       /* inside recv */
       else if (comm_data->type == GRIDK_INSIDE_RECV || comm_data->type == FINE_INTRA_INSIDE_RECV){
          begin = MPI_Wtime();
-//#if defined(HYPRE_USING_GPU) && defined(HYPRE_USING_UNIFIED_MEMORY)
-//         SetAsyncMode(1);
-//         HypreComplexPrefetchToDevice(comm_data->data[i], vec_len);
-//         cudaStreamSynchronize(HYPRE_STREAM(4));
-//         SetAsyncMode(0);
-//#endif
          hypre_MPI_Irecv(comm_data->data[i],
                          vec_len+1,
                          HYPRE_MPI_REAL,
@@ -159,38 +153,6 @@ int SendRecv(DMEM_AllData *dmem_all_data,
       else if (comm_data->type == GRIDK_OUTSIDE_SEND || comm_data->type == FINE_INTRA_OUTSIDE_SEND){
          if (dmem_all_data->input.async_flag == 1){ /* async outside send */
             if (comm_data->done_flags[i] < 2){
-//#if defined(HYPRE_USING_GPU) && defined(HYPRE_USING_UNIFIED_MEMORY)
-//               if (op == WRITE){
-//                  if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
-//                     PackOnDevice(comm_data->data[i], v, hypre_ParCSRCommPkgSendMapElmts(comm_pkg), vec_start, vec_end, HYPRE_STREAM(4));
-//                  }
-//                  else {
-//                     HypreComplexPrefetchToDevice(comm_data->data[i], vec_len);
-//                     HypreComplexPrefetchToDevice(&v[vec_start], vec_len);
-//                     VecCopy(comm_data->data[i], &v[vec_start], vec_len, HYPRE_STREAM(4));
-//                     cudaStreamSynchronize(HYPRE_STREAM(4));
-//                  }
-//               }
-//               else {
-//                  HYPRE_Real alpha = 1.0;
-//                  if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
-//                    // PackOnDeviceAxpy(comm_data->data[i], v, hypre_ParCSRCommPkgSendMapElmts(comm_pkg), alpha, vec_start, vec_end, HYPRE_STREAM(4));
-//                  }
-//                  else {
-//                     HypreComplexPrefetchToDevice(comm_data->data[i], vec_len);
-//                     HypreComplexPrefetchToDevice(&v[vec_start], vec_len);
-//                     static cublasHandle_t handle;
-//                     static HYPRE_Int firstcall = 1;
-//                     if (firstcall){
-//                        handle = getCublasHandle();
-//                        firstcall = 0;
-//                     }
-//                     cublasDaxpy(handle, vec_len, &alpha, &v[vec_start], 1, comm_data->data[i], 1);
-//                     cudaStreamSynchronize(HYPRE_STREAM(4));
-//                  }
-//               }
-//#else
-
 //#if defined(HYPRE_USING_CUDA)
 //               if (op == WRITE){
 //                  if (comm_data->type == FINE_INTRA_OUTSIDE_SEND){
@@ -243,14 +205,6 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                CheckInFlight(dmem_all_data, comm_data, i);
                if (comm_data->num_inflight[i] < comm_data->max_inflight[i]){
                   int next_inflight = comm_data->next_inflight[i];
-//#if defined(HYPRE_USING_GPU) && defined(HYPRE_USING_UNIFIED_MEMORY)
-//                  HypreComplexPrefetchToDevice(comm_data->data[i], vec_len);
-//                  HypreComplexPrefetchToDevice(comm_data->data_inflight[i][next_inflight], vec_len);
-//                  VecCopy(comm_data->data_inflight[i][next_inflight], comm_data->data[i], vec_len, HYPRE_STREAM(4));
-//                  VecSet(comm_data->data[i], vec_len, 0.0, HYPRE_STREAM(4));
-//                  cudaStreamSynchronize(HYPRE_STREAM(4));
-//#else
-
 //#if defined(HYPRE_USING_CUDA)
 //                  DMEM_HypreRealArray_Copy(comm_data->data_inflight[i][next_inflight], comm_data->data[i], vec_len);
 //                  DMEM_HypreRealArray_Set(comm_data->data[i], 0.0, vec_len);
@@ -278,7 +232,7 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                   }
                   else {
                      all_done_flag = dmem_all_data->comm.all_done_flag;
-                     if (dmem_all_data->iter.cycle >= num_cycles-1 ||
+                     if (dmem_all_data->iter.cycle >= num_cycles-2 ||
                          dmem_all_data->iter.r_L2norm_local_converge_flag == 1){
                         my_converge_flag = 1;
                      }
@@ -463,12 +417,6 @@ int SendRecv(DMEM_AllData *dmem_all_data,
             }
          }
          else {
-//#if defined(HYPRE_USING_GPU) && defined(HYPRE_USING_UNIFIED_MEMORY)
-//            SetAsyncMode(1);
-//            HypreComplexPrefetchToDevice(comm_data->data[i], vec_len);
-//            cudaStreamSynchronize(HYPRE_STREAM(4));
-//            SetAsyncMode(0);
-//#endif
             comm_data->message_count[i]++;
             begin = MPI_Wtime();
             hypre_MPI_Irecv(comm_data->data[i],

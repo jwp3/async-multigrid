@@ -43,6 +43,9 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
    dmem_all_data.hypre.num_functions = 1;
+   dmem_all_data.hypre.P_max_elmts = 1;
+   dmem_all_data.hypre.add_P_max_elmts = 0;
+   dmem_all_data.hypre.add_trunc_factor = 0.0;
 
    int n = 40;
    double c = 1.0, a = 1.0;
@@ -60,8 +63,10 @@ int main (int argc, char *argv[])
 
    /* mfem parameters */
    dmem_all_data.mfem.ref_levels = 1;
-   dmem_all_data.mfem.par_ref_levels = 1;
+   dmem_all_data.mfem.par_ref_levels = 0;
    dmem_all_data.mfem.order = 1;
+   dmem_all_data.mfem.max_amr_iters = 1000;
+   dmem_all_data.mfem.max_amr_dofs = 50000;
    strcpy(dmem_all_data.mfem.mesh_file, "./mfem_quartz/mfem-3.4/data/beam-tet.mesh");
 
    dmem_all_data.input.test_problem = LAPLACE_3D27PT;
@@ -100,16 +105,14 @@ int main (int argc, char *argv[])
    dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
    dmem_all_data.input.max_inflight = 1;
    dmem_all_data.input.rhs_type = RHS_RAND;
-   dmem_all_data.input.init_guess_type = INITGUESS_ZEROS;
+   dmem_all_data.input.init_guess_type = INITGUESS_RAND;
    dmem_all_data.input.afacj_level = 0;
    dmem_all_data.input.num_interpolants = NUMLEVELS_INTERPOLANTS;
-   dmem_all_data.input.P_gridk_droptol_flag = 0;
-   dmem_all_data.input.P_gridk_droptol = 0.0;
-   dmem_all_data.input.P_gridk_maxelmts_flag = 0;
-   dmem_all_data.input.P_gridk_maxelmts = 0;
    dmem_all_data.input.res_update_type = RES_RECOMPUTE;
    dmem_all_data.input.sps_probability_type = SPS_PROBABILITY_EXPONENTIAL;
    dmem_all_data.input.sps_alpha = 1.0;
+   dmem_all_data.input.simple_jacobi_flag = 0;
+   dmem_all_data.input.async_comm_save_divisor = 1;
 
 //#ifdef HYPRE_USING_UNIFIED_MEMORY
 //   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
@@ -129,6 +132,7 @@ int main (int argc, char *argv[])
       if (strcmp(argv[arg_index], "-n") == 0){
          arg_index++;
 	 n = atoi(argv[arg_index]);
+         dmem_all_data.mfem.max_amr_dofs = n;
 	 dmem_all_data.matrix.nx = n;
          dmem_all_data.matrix.ny = n;
          dmem_all_data.matrix.nz = n;
@@ -287,6 +291,9 @@ int main (int argc, char *argv[])
         // solvers.push_back(dmem_all_data.input.solver);
         // num_solvers++;
       }
+      else if (strcmp(argv[arg_index], "-simple_jacobi") == 0){
+         dmem_all_data.input.simple_jacobi_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-multadd_smooth_interp_level") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "all") == 0){
@@ -363,10 +370,6 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.hypre.strong_threshold = atof(argv[arg_index]);
       }
-     // else if (strcmp(argv[arg_index], "-multadd_trunc_factor") == 0){
-     //    arg_index++;
-     //    dmem_all_data.hypre.multadd_trunc_factor = atof(argv[arg_index]);
-     // }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0){
          arg_index++;
          dmem_all_data.input.num_cycles = atoi(argv[arg_index]);
@@ -386,16 +389,6 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-tol") == 0){
          arg_index++;
          dmem_all_data.input.tol = atof(argv[arg_index]);
-      }
-      else if (strcmp(argv[arg_index], "-interp_droptol") == 0){
-         arg_index++;
-         dmem_all_data.input.P_gridk_droptol = atof(argv[arg_index]);
-         dmem_all_data.input.P_gridk_droptol_flag = 1;
-      }
-      else if (strcmp(argv[arg_index], "-interp_maxelmts") == 0){
-         arg_index++;
-         dmem_all_data.input.P_gridk_maxelmts = atof(argv[arg_index]);
-         dmem_all_data.input.P_gridk_maxelmts_flag = 1;
       }
       else if (strcmp(argv[arg_index], "-inner_tol") == 0){
          arg_index++;
@@ -432,6 +425,18 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.hypre.agg_num_levels = atoi(argv[arg_index]);
       }
+      else if ( strcmp(argv[arg_index], "-Pmx") == 0 ){
+         arg_index++;
+         dmem_all_data.hypre.P_max_elmts = atoi(argv[arg_index]);
+      }
+      else if ( strcmp(argv[arg_index], "-add_Pmx") == 0 ){
+         arg_index++;
+         dmem_all_data.hypre.add_P_max_elmts = atoi(argv[arg_index]);
+      }
+      else if ( strcmp(argv[arg_index], "-add_tr") == 0 ){
+         arg_index++;
+         dmem_all_data.hypre.add_trunc_factor = atof(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-coarsen_type") == 0){
          arg_index++;
          dmem_all_data.hypre.coarsen_type = atoi(argv[arg_index]);
@@ -448,9 +453,13 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.mfem.par_ref_levels = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-mfem_amr_refs") == 0){
+      else if (strcmp(argv[arg_index], "-mfem_max_amr_iters") == 0){
          arg_index++;
-         dmem_all_data.mfem.amr_refs = atoi(argv[arg_index]);
+         dmem_all_data.mfem.max_amr_iters = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-mfem_max_amr_dofs") == 0){
+         arg_index++;
+         dmem_all_data.mfem.max_amr_dofs = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-mfem_order") == 0){
          arg_index++;
@@ -500,6 +509,10 @@ int main (int argc, char *argv[])
          arg_index++;
          num_runs = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-async_comm_save") == 0){
+         arg_index++;
+         dmem_all_data.input.async_comm_save_divisor = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-read_type") == 0){
          arg_index++;
          if (strcmp(argv[arg_index], "sol") == 0){
@@ -540,6 +553,8 @@ int main (int argc, char *argv[])
       arg_index++;
    }
 
+   dmem_all_data.input.async_comm_save_divisor = max(1, dmem_all_data.input.async_comm_save_divisor);
+
    if (dmem_all_data.input.solver == MULT_MULTADD){
       dmem_all_data.input.coarsest_mult_level = coarsest_mult_level;
    } 
@@ -552,9 +567,9 @@ int main (int argc, char *argv[])
       num_solvers = 1;
    }
 
-   if (dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL &&
+   if ((dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL || dmem_all_data.input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL || dmem_all_data.input.smoother == ASYNC_JACOBI) &&
        dmem_all_data.input.async_flag == 0){
-      dmem_all_data.input.smoother = ASYNC_JACOBI;
+      dmem_all_data.input.smoother = JACOBI;
    }
    else if ((dmem_all_data.input.solver == SYNC_AFACX || dmem_all_data.input.solver == SYNC_MULTADD || dmem_all_data.input.solver == MULT) &&
             dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
@@ -580,6 +595,7 @@ int main (int argc, char *argv[])
 
    start = omp_get_wtime(); 
    DMEM_Setup(&dmem_all_data);
+   return 0;
    dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
    for (int s = 0; s < num_solvers; s++){
