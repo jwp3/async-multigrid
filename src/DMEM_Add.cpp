@@ -82,6 +82,7 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
    double solve_begin = MPI_Wtime();
    if (my_grid == 0){
       if (dmem_all_data->input.smoother == ASYNC_JACOBI ||
+          dmem_all_data->input.smoother == ASYNC_L1_JACOBI ||
           dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL ||
           dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
          DMEM_HypreParVector_Copy(dmem_all_data->vector_gridk.r, F_array_gridk[finest_level], num_rows_gridk);

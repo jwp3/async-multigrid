@@ -117,7 +117,7 @@ int main (int argc, char *argv[])
 //#ifdef HYPRE_USING_UNIFIED_MEMORY
 //   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
 //#else
-   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_HOST;
+   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
 //#endif
 
    /* Parse command line */
@@ -237,6 +237,11 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "async_j") == 0){
             dmem_all_data.input.smoother = ASYNC_JACOBI;
             dmem_all_data.input.smooth_interp_type = JACOBI;
+            dmem_all_data.input.async_smoother_flag = 1;
+         }
+         else if (strcmp(argv[arg_index], "async_L1j") == 0){
+            dmem_all_data.input.smoother = ASYNC_L1_JACOBI;
+            dmem_all_data.input.smooth_interp_type = L1_JACOBI;
             dmem_all_data.input.async_smoother_flag = 1;
          }
          else if (strcmp(argv[arg_index], "async_sps") == 0){
@@ -552,9 +557,6 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-mfem_test_error") == 0){
          dmem_all_data.input.mfem_test_error_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-gpu") == 0){
-         dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
-      }
       arg_index++;
    }
 
@@ -580,11 +582,15 @@ int main (int argc, char *argv[])
             dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
       dmem_all_data.input.smoother = JACOBI;
    }
+
+   if ((dmem_all_data.input.smoother == ASYNC_L1_JACOBI) &&
+       dmem_all_data.input.async_flag == 0){
+      dmem_all_data.input.smoother = L1_JACOBI;
+   }
    
    if (dmem_all_data.input.rhs_type == RHS_FROM_PROBLEM){
-      if (dmem_all_data.input.test_problem == LAPLACE_3D27PT ||
-          dmem_all_data.input.test_problem == LAPLACE_3D7PT  ||
-          dmem_all_data.input.test_problem == DIFCONV_3D7PT){
+      if (dmem_all_data.input.test_problem != MFEM_ELAST && 
+          dmem_all_data.input.test_problem != MFEM_ELAST_AMR){
          dmem_all_data.input.rhs_type = RHS_RAND;
       }
    }

@@ -118,8 +118,15 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
          }
          else {
             vecop_begin = MPI_Wtime();
-            for (int i = 0; i < num_rows; i++){
-               u_local_data[i] = dmem_all_data->input.smooth_weight * r_local_data[i] / A_diag_data[A_diag_i[i]];
+            if (dmem_all_data->input.smoother == ASYNC_L1_JACOBI){
+               for (int i = 0; i < num_rows; i++){
+                  u_local_data[i] = r_local_data[i] / dmem_all_data->matrix.L1_row_norm_gridk[0][i];
+               }
+            }
+            else {
+               for (int i = 0; i < num_rows; i++){
+                  u_local_data[i] = dmem_all_data->input.smooth_weight * r_local_data[i] / A_diag_data[A_diag_i[i]];
+               }
             }
             dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
            // DMEM_HypreParVector_Set(U_array[0], 0.0, num_rows);
@@ -142,7 +149,7 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
          dmem_all_data->iter.relax += 1;
 
          AsyncSmoothAddCorrect_LocalRes(dmem_all_data);
-         if (dmem_all_data->input.smoother == ASYNC_JACOBI){
+         if (dmem_all_data->input.smoother == ASYNC_JACOBI || dmem_all_data->input.smoother == ASYNC_L1_JACOBI){
             vecop_begin = MPI_Wtime();
             //DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.x, U_array[0], 1.0, num_rows);
             for (int i = 0; i < num_rows; i++){
@@ -185,7 +192,7 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
       dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
       
       residual_begin = MPI_Wtime();
-      if (dmem_all_data->input.smoother == ASYNC_JACOBI){
+      if (dmem_all_data->input.smoother == ASYNC_JACOBI || dmem_all_data->input.smoother == ASYNC_L1_JACOBI){
          if (dmem_all_data->input.res_update_type == RES_ACCUMULATE){
             if (update_flag == 1){
                for (int i = 0; i < num_rows; i++){

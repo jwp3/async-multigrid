@@ -238,13 +238,14 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
    if (dmem_all_data->input.solver == MULT ||
        dmem_all_data->input.solver == SYNC_MULTADD ||
        dmem_all_data->input.solver == SYNC_AFACX){
-      hypre_GaussElimSetup(amg_data_fine, hypre_ParAMGDataNumLevels(amg_data_fine)-1, 9);
+      hypre_GaussElimSetup(amg_data_fine, dmem_all_data->grid.num_levels-1, 9);
    }
    else {
       hypre_GaussElimSetup(amg_data_gridk, dmem_all_data->grid.num_levels-1, 9);
    }
 
-   if (dmem_all_data->input.smoother == L1_JACOBI){
+   if (dmem_all_data->input.smoother == L1_JACOBI ||
+       dmem_all_data->input.smoother == ASYNC_L1_JACOBI){
       if (dmem_all_data->input.solver == MULT_MULTADD ||
           dmem_all_data->input.solver == MULT ||
           dmem_all_data->input.solver == SYNC_MULTADD ||
@@ -252,21 +253,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
          dmem_all_data->matrix.L1_row_norm_fine = hypre_CTAlloc(HYPRE_Real *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
          A_array = hypre_ParAMGDataAArray(amg_data_fine);
          for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
-            HYPRE_Real *A_diag_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[level]));
-            HYPRE_Int *A_diag_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[level]));
-            HYPRE_Real *A_offd_data = hypre_CSRMatrixData(hypre_ParCSRMatrixOffd(A_array[level]));
-            HYPRE_Int *A_offd_i = hypre_CSRMatrixI(hypre_ParCSRMatrixOffd(A_array[level]));
-            int num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[level]));
-            dmem_all_data->matrix.L1_row_norm_fine[level] = hypre_CTAlloc(HYPRE_Real, num_rows, dmem_all_data->input.hypre_memory);
-            for (int i = 0; i < num_rows; i++){
-               dmem_all_data->matrix.L1_row_norm_fine[level][i] = A_diag_data[A_diag_i[i]];
-               for (int jj = A_diag_i[i]+1; jj < A_diag_i[i+1]; jj++){
-                  dmem_all_data->matrix.L1_row_norm_fine[level][i] += fabs(A_diag_data[jj]);
-               }
-               for (int jj = A_offd_i[i]; jj < A_offd_i[i+1]; jj++){
-                  dmem_all_data->matrix.L1_row_norm_fine[level][i] += fabs(A_offd_data[jj]);
-               }
-            }
+            hypre_ParCSRComputeL1Norms(A_array[level], 1, NULL, &(dmem_all_data->matrix.L1_row_norm_fine[level]));
          }
       }
       if (dmem_all_data->input.solver == MULTADD ||
@@ -274,21 +261,9 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
           dmem_all_data->input.solver == MULT_MULTADD ||
           dmem_all_data->input.solver == AFACX){
          dmem_all_data->matrix.L1_row_norm_gridk = hypre_CTAlloc(HYPRE_Real *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
-         dmem_all_data->matrix.symmL1_row_norm_gridk = hypre_CTAlloc(HYPRE_Real *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
          A_array = hypre_ParAMGDataAArray(amg_data_gridk);
          for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
-            HYPRE_Real *A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[level]));
-            HYPRE_Int *A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[level]));
-            int num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[level]));
-            dmem_all_data->matrix.L1_row_norm_gridk[level] = hypre_CTAlloc(HYPRE_Real, num_rows, dmem_all_data->input.hypre_memory);
-            dmem_all_data->matrix.symmL1_row_norm_gridk[level] = hypre_CTAlloc(HYPRE_Real, num_rows, dmem_all_data->input.hypre_memory);
-            for (int i = 0; i < num_rows; i++){
-               dmem_all_data->matrix.L1_row_norm_gridk[level][i] = 0;
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  dmem_all_data->matrix.L1_row_norm_gridk[level][i] += fabs(A_data[jj]);
-               }
-               dmem_all_data->matrix.symmL1_row_norm_gridk[level][i] = -dmem_all_data->matrix.L1_row_norm_gridk[level][i] / 2.0;
-            }
+            hypre_ParCSRComputeL1Norms(A_array[level], 1, NULL, &(dmem_all_data->matrix.L1_row_norm_gridk[level]));
          }
       }
    }
@@ -374,20 +349,22 @@ void SetMultaddHypreSolver(DMEM_AllData *dmem_all_data,
    HYPRE_BoomerAMGSetAggNumLevels(*solver, dmem_all_data->hypre.agg_num_levels);
    HYPRE_BoomerAMGSetStrongThreshold(*solver, dmem_all_data->hypre.strong_threshold);
 
-   if (dmem_all_data->input.smoother == L1_JACOBI){
+   if (dmem_all_data->input.smoother == L1_JACOBI ||
+       dmem_all_data->input.smoother == ASYNC_L1_JACOBI){
       HYPRE_BoomerAMGSetRelaxType(*solver, 18);
+      HYPRE_BoomerAMGSetAddRelaxType(*solver, 18);
    }
    else {
       HYPRE_BoomerAMGSetRelaxType(*solver, 0);
+      HYPRE_BoomerAMGSetAddRelaxType(*solver, 0);
+      HYPRE_BoomerAMGSetRelaxWt(*solver, dmem_all_data->input.smooth_weight);
+      HYPRE_BoomerAMGSetAddRelaxWt(*solver, dmem_all_data->input.smooth_weight);
    }
-   HYPRE_BoomerAMGSetRelaxWt(*solver, dmem_all_data->input.smooth_weight);
 
    /* multadd options */
    HYPRE_BoomerAMGSetMultAdditive(*solver, 0);
    HYPRE_BoomerAMGSetMultAddTruncFactor(*solver, dmem_all_data->hypre.add_trunc_factor);
    HYPRE_BoomerAMGSetMultAddPMaxElmts(*solver, dmem_all_data->hypre.add_P_max_elmts);
-   HYPRE_BoomerAMGSetAddRelaxType(*solver, 0);
-   HYPRE_BoomerAMGSetAddRelaxWt(*solver, dmem_all_data->input.smooth_weight);
    HYPRE_BoomerAMGSetPMaxElmts(*solver, dmem_all_data->hypre.P_max_elmts);
    
    if (dmem_all_data->input.multadd_smooth_interp_level_type == SMOOTH_INTERP_MY_GRID){
