@@ -49,4 +49,14 @@ void InitSolve(AllData *all_data);
 
 vector<int> Divisors(int x);
 
+void FreeOrdering(OrderingData *P);
+
+void FreeMetis(MetisGraph *G);
+
+void FreeCSR(CSR *A);
+
+void FreeTriplet(Triplet *T);
+
+void WriteCSR(CSR A, char *out_str, int base);
+
 #endif

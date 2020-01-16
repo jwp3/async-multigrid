@@ -29,6 +29,8 @@
 
 #include "mfem.hpp"
 
+#include "metis.h"
+
 #define JACOBI 0
 #define GAUSS_SEIDEL 1
 #define HYBRID_JACOBI_GAUSS_SEIDEL 2
@@ -74,6 +76,7 @@
 #define VARDIFCONV_3D7PT 6
 #define DIFCONV_3D7PT 7
 #define MFEM_ELAST_AMR 8
+#define MATRIX_FROM_FILE 9
 
 #define READ_SOL 0
 #define READ_RES 1
@@ -281,5 +284,45 @@ typedef struct{
   // PardisoData pardiso;
    MfemData mfem;
 }AllData;
+
+typedef struct{
+   idx_t *xadj;
+   idx_t *adjncy;
+   real_t *adjwgt;
+   idx_t n;
+   idx_t nnz;
+}MetisGraph;
+
+typedef struct{
+   int *i;
+   int *j;
+   double *val;
+   int n;
+   int nnz;
+}Triplet;
+
+typedef struct{
+   int i;
+   int j;
+   double val;
+}Triplet_AOS;
+
+typedef struct{
+   double *val;
+   int *i;
+   int *j_ptr;
+   int n;
+   int nnz;
+   int n_glob;
+}CSR;
+
+typedef struct{
+   int nparts;
+   int *dispv;
+   int *disp;
+   int *part;
+   int *perm;
+   int *map;
+}OrderingData;
 
 #endif

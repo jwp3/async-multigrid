@@ -113,6 +113,7 @@ typedef struct{
    double sps_alpha;
    int hypre_memory;
    int async_comm_save_divisor;
+   char mat_file_str[1024];
 }DMEM_InputData;
 
 typedef struct{

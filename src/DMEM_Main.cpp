@@ -43,7 +43,7 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
    dmem_all_data.hypre.num_functions = 1;
-   dmem_all_data.hypre.P_max_elmts = 1;
+   dmem_all_data.hypre.P_max_elmts = 3;
    dmem_all_data.hypre.add_P_max_elmts = 0;
    dmem_all_data.hypre.add_trunc_factor = 0.0;
 
@@ -210,6 +210,11 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "mfem_elast_amr") == 0){
             dmem_all_data.input.test_problem = MFEM_ELAST_AMR;
+         }
+         else if (strcmp(argv[arg_index], "file") == 0){
+            dmem_all_data.input.test_problem = MATRIX_FROM_FILE;
+            arg_index++;
+            strcpy(dmem_all_data.input.mat_file_str, argv[arg_index]);
          }
       }
       else if (strcmp(argv[arg_index], "-vardifconv_eps") == 0){
@@ -595,7 +600,6 @@ int main (int argc, char *argv[])
 
    start = omp_get_wtime(); 
    DMEM_Setup(&dmem_all_data);
-   return 0;
    dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
    for (int s = 0; s < num_solvers; s++){

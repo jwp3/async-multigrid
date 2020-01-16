@@ -38,4 +38,6 @@ void DMEM_HypreRealArray_Set(HYPRE_Real *y, HYPRE_Real alpha, HYPRE_Int size);
 
 void DMEM_HypreRealArray_Prefetch(HYPRE_Real *y, HYPRE_Int size, HYPRE_Int to_location);
 
+void DMEM_WriteCSR(CSR A, char *out_str, int base, OrderingData P, MPI_Comm comm);
+
 #endif

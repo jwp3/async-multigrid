@@ -498,3 +498,31 @@ void DMEM_HypreRealArray_Prefetch(HYPRE_Real *y, HYPRE_Int size, HYPRE_Int to_lo
    hypre_TMemcpy(y, y, HYPRE_Real, size, to_location, HYPRE_MEMORY_SHARED);
 #endif
 }
+
+void DMEM_WriteCSR(CSR A, char *out_str, int base, OrderingData P, MPI_Comm comm)
+{
+   int num_procs, my_id;
+   MPI_Comm_rank(comm, &my_id);
+   MPI_Comm_size(comm, &num_procs);
+
+   int row, col, k;
+   double elem;
+   FILE *out_file;
+   if (my_id == 0) remove(out_str);
+
+   for (int p = 0; p < num_procs; p++){
+      if (p == my_id){
+         out_file = fopen(out_str, "a");
+         for (int i = 0; i < A.n; i++){
+            for (int j = A.j_ptr[i]; j < A.j_ptr[i+1]; j++){
+               row = P.disp[my_id] + i;
+               col = A.i[j];
+               elem = A.val[j];
+               fprintf(out_file, "%d   %d   %e\n", row+base, col+base, elem);
+            }
+         }
+         fclose(out_file);
+      }
+      MPI_Barrier(comm);
+   }
+}

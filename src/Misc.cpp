@@ -575,3 +575,53 @@ vector<int> Divisors(int x)
    }
    return divs;
 }
+
+void FreeOrdering(OrderingData *P)
+{
+   free(P->dispv);
+   free(P->disp);
+   free(P->part);
+   free(P->perm);
+   free(P->map);
+}
+
+void FreeMetis(MetisGraph *G)
+{
+   free(G->adjncy);
+   free(G->adjwgt);
+   free(G->xadj);
+}
+
+void FreeCSR(CSR *A)
+{
+   free(A->val);
+   free(A->i);
+   free(A->j_ptr);
+}
+
+void FreeTriplet(Triplet *T)
+{
+   free(T->i);
+   free(T->j);
+   free(T->val);
+}
+
+void WriteCSR(CSR A, char *out_str, int base)
+{
+   int row, col, k;
+   double elem;
+   char buffer[100];
+   strcpy(buffer, out_str);
+   FILE *out_file;
+   remove(buffer);
+   out_file = fopen(buffer, "a");
+   for (int i = 0; i < A.n; i++){
+      for (int j = A.j_ptr[i]; j < A.j_ptr[i+1]; j++){
+         row = i;
+         col = A.i[j];
+         elem = A.val[j];
+         fprintf(out_file, "%d   %d   %e\n", col+base, row+base, elem);
+      }
+   }
+   fclose(out_file);
+}

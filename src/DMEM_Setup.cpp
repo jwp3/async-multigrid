@@ -22,15 +22,12 @@ void ConstructVectors(DMEM_AllData *dmem_all_data,
 void ComputeWork(DMEM_AllData *all_data);
 void AssignProcs(DMEM_AllData *dmem_all_data);
 void PartitionGrids(DMEM_AllData *dmem_all_data);
-void BuildMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVector *rhs, MPI_Comm comm);
+void SetupMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVector *rhs, MPI_Comm comm);
 //void CreateCommData_GlobalRes(DMEM_AllData *dmem_all_data);
 void CreateCommData_LocalRes(DMEM_AllData *dmem_all_data);
 void SetVectorComms(DMEM_AllData *dmem_all_data,
                     DMEM_VectorData *vector,
                     MPI_Comm comm);
-void DistributeMatrix(DMEM_AllData *dmem_all_data,
-                      hypre_ParCSRMatrix *A,
-                      hypre_ParCSRMatrix **B);
 void ComputeWork(AllData *dmem_all_data);
 
 //TODO: clear extra memory
@@ -48,8 +45,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
    amg_data_gridk = (hypre_ParAMGData *)dmem_all_data->hypre.solver_gridk;
 
    start = omp_get_wtime();
-   BuildMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.b), MPI_COMM_WORLD);
-   return;
+   SetupMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.b), MPI_COMM_WORLD);
   // char buffer[100];
   // sprintf(buffer, "A_%d.txt", num_procs);
   // DMEM_PrintParCSRMatrix(dmem_all_data->matrix.A_fine, buffer);
@@ -124,7 +120,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
       } 
       ComputeWork(dmem_all_data);
       AssignProcs(dmem_all_data);
-      DistributeMatrix(dmem_all_data,
+      DMEM_DistributeHypreParCSRMatrix_FineToGridk(dmem_all_data,
                        dmem_all_data->matrix.A_fine,
                        &(dmem_all_data->matrix.A_gridk));
       hypre_MatvecCommPkgCreate(dmem_all_data->matrix.A_gridk);
@@ -149,7 +145,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
       hypre_ParCSRMatrix **A_array_gridk = hypre_ParAMGDataAArray(amg_data_gridk);
       A_array_gridk = hypre_CTAlloc(hypre_ParCSRMatrix *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
       for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
-         DistributeMatrix(dmem_all_data,
+         DMEM_DistributeHypreParCSRMatrix_FineToGridk(dmem_all_data,
                           A_array_fine[level],
                           &(A_array_gridk[level]));
          hypre_ParCSRMatrixOwnsRowStarts(A_array_gridk[level]) = 1;
@@ -167,7 +163,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
       if (dmem_all_data->input.num_interpolants == ONE_INTERPOLANT){
          for (int level = 1; level < dmem_all_data->grid.num_levels; level++){
             if (dmem_all_data->grid.my_grid == level){ 
-               DistributeMatrix(dmem_all_data,
+               DMEM_DistributeHypreParCSRMatrix_FineToGridk(dmem_all_data,
                                 dmem_all_data->matrix.P_fine[level-1],
                                 &(dmem_all_data->matrix.P_gridk));
                hypre_ParCSRMatrixOwnsColStarts(dmem_all_data->matrix.P_gridk) = 0;
@@ -176,7 +172,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
             }
             else {
                hypre_ParCSRMatrix *Q;
-               DistributeMatrix(dmem_all_data,
+               DMEM_DistributeHypreParCSRMatrix_FineToGridk(dmem_all_data,
                                 dmem_all_data->matrix.P_fine[level-1],
                                 &Q);
             }
@@ -186,7 +182,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
          hypre_ParCSRMatrix **P_array_gridk = hypre_ParAMGDataPArray(amg_data_gridk);
          P_array_gridk = hypre_CTAlloc(hypre_ParCSRMatrix *, dmem_all_data->grid.num_levels-1, dmem_all_data->input.hypre_memory);
          for (int level = 0; level < dmem_all_data->grid.num_levels-1; level++){
-            DistributeMatrix(dmem_all_data,
+            DMEM_DistributeHypreParCSRMatrix_FineToGridk(dmem_all_data,
                              P_array_fine[level],
                              &(P_array_gridk[level]));
             hypre_ParCSRMatrixOwnsColStarts(P_array_gridk[level]) = 0;
@@ -1048,340 +1044,6 @@ void CreateCommData_LocalRes(DMEM_AllData *dmem_all_data)
    AllocCommData(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv));
 }
 
-
-void DistributeMatrix(DMEM_AllData *dmem_all_data,
-                      hypre_ParCSRMatrix *A,
-                      hypre_ParCSRMatrix **B)
-{
-   HYPRE_Int num_procs, my_id;
-   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
-   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-
-   MPI_Comm my_comm = dmem_all_data->grid.my_comm;
-
-   HYPRE_Int loc_num_procs, loc_my_id;
-   MPI_Comm_rank(my_comm, &loc_my_id);
-   MPI_Comm_size(my_comm, &loc_num_procs);
-
-   HYPRE_Int my_grid = dmem_all_data->grid.my_grid;
-   HYPRE_Int num_levels = dmem_all_data->grid.num_levels;
-   
-   HYPRE_Int num_procs_level, rest, **ps, **pe;
-   ps = (HYPRE_Int **)malloc(num_levels * sizeof(HYPRE_Int *));
-   pe = (HYPRE_Int **)malloc(num_levels * sizeof(HYPRE_Int *));
-   //printf("%d, %d, %d\n", num_procs, num_my_procs, rest);
-
-   int finest_level;
-   if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
-      finest_level = dmem_all_data->input.coarsest_mult_level + 1;
-   }
-   else{
-      finest_level = dmem_all_data->input.coarsest_mult_level;
-   }
-   for (int level = finest_level; level < num_levels; level++){
-      ps[level] = (HYPRE_Int *)calloc(dmem_all_data->grid.num_procs_level[level], sizeof(HYPRE_Int));
-      pe[level] = (HYPRE_Int *)calloc(dmem_all_data->grid.num_procs_level[level], sizeof(HYPRE_Int));
-
-      num_procs_level = num_procs/dmem_all_data->grid.num_procs_level[level];
-      rest = num_procs - num_procs_level*dmem_all_data->grid.num_procs_level[level];
-      for (int p = 0; p < dmem_all_data->grid.num_procs_level[level]; p++){
-         if (p < rest){
-            ps[level][p] = p*num_procs_level + p;
-            pe[level][p] = (p + 1)*num_procs_level + p + 1;
-         }
-         else {
-            ps[level][p] = p*num_procs_level + rest;
-            pe[level][p] = (p + 1)*num_procs_level + rest;
-         }
-      }
-   }
-
-  // printf("(%d,%d,%d): %d, %d\n", loc_my_id, my_grid, num_my_procs, ps, pe)
-
-   double *recvbuf_v, *sendbuf_v;
-   int *recvbuf_i, *sendbuf_i;
-   int *recvbuf_j, *sendbuf_j;
-   int *recvbuf, *sendbuf;
-   int *rdispls, *recvcounts;
-   int *sdispls, *sendcounts;
-   int sendcount, recvcount;
-
-   recvcounts = (int *)calloc(num_procs, sizeof(int));
-   rdispls = (int *)calloc(num_procs, sizeof(int));
-   sendcounts = (int *)calloc(num_procs, sizeof(int));
-   sdispls = (int *)calloc(num_procs, sizeof(int));
-
-   hypre_CSRMatrix *diag = hypre_ParCSRMatrixDiag(A);
-   hypre_CSRMatrix *offd = hypre_ParCSRMatrixOffd(A);
-
-   HYPRE_Int *diag_j = hypre_CSRMatrixJ(diag);
-   HYPRE_Int *diag_i = hypre_CSRMatrixI(diag);
-   HYPRE_Real *diag_data = hypre_CSRMatrixData(diag);
-
-   HYPRE_Int *offd_j = hypre_CSRMatrixJ(offd);
-   HYPRE_Int *offd_i = hypre_CSRMatrixI(offd);
-   HYPRE_Real *offd_data = hypre_CSRMatrixData(offd);
-
-   /* indicate to other processes that I need their diag and offd */
-   recvbuf = (int *)calloc(num_procs, sizeof(int));
-   sendbuf = (int *)calloc(num_procs, sizeof(int));
-
-   HYPRE_Int *recv_flags = (HYPRE_Int *)calloc(num_procs, sizeof(HYPRE_Int));
-   for (HYPRE_Int p = 0; p < num_procs; p++){
-      if (p >= ps[my_grid][loc_my_id] && p < pe[my_grid][loc_my_id]){
-         sendbuf[p] = 1;
-         recv_flags[p] = 1;
-      }
-   }
-  
-   MPI_Alltoall(sendbuf,
-                1,
-                MPI_INT,
-                recvbuf,
-                1,
-                MPI_INT,
-                MPI_COMM_WORLD);
-
-   /* send nnz */
-   HYPRE_Int nnz = hypre_CSRMatrixNumNonzeros(diag) + hypre_CSRMatrixNumNonzeros(offd);
-   int *send_flags = (int *)calloc(num_procs, sizeof(int));
-   sendcount = 0;
-   for (int p = 0; p < num_procs; p++){
-      sendbuf[p] = 0;
-      if (recvbuf[p] == 1){
-         send_flags[p] = 1;
-         sendbuf[p] = nnz;
-      }
-      /* we need sdispls and sendcount later when we send I,J,V */
-      if (p > 0){
-         sdispls[p] = sdispls[p-1] + sendbuf[p-1];
-      }
-      sendcounts[p] = sendbuf[p];
-      sendcount += sendbuf[p];
-   }
-
-   MPI_Alltoall(sendbuf,
-                1,
-                MPI_INT,
-                recvbuf,
-                1,
-                MPI_INT,
-                MPI_COMM_WORLD);
-
-
-  // if (my_id == 1)
-  // for (HYPRE_Int p = 0; p < num_procs; p++) printf("%d\n", recvbuf[p]);
-
- 
-   /* send I,J,V */
-   recvcount = 0;
-   for (HYPRE_Int p = 0; p < num_procs; p++){
-      if (p > 0){
-         rdispls[p] = rdispls[p-1] + recvbuf[p-1];
-      }
-      recvcounts[p] = recvbuf[p];
-      recvcount += recvbuf[p];
-   }
-
-   free(sendbuf);
-   free(recvbuf);
-
-   recvbuf_i = (int *)calloc(recvcount, sizeof(int));
-   recvbuf_j = (int *)calloc(recvcount, sizeof(int));
-   recvbuf_v = (double *)calloc(recvcount, sizeof(double));
-
-   sendbuf_j = (int *)calloc(sendcount, sizeof(int));
-   sendbuf_i = (int *)calloc(sendcount, sizeof(int));
-   sendbuf_v = (double *)calloc(sendcount, sizeof(double));
-
-  // HYPRE_Int *I = (HYPRE_Int *)calloc(recvcount, sizeof(HYPRE_Int));
-  // HYPRE_Int *J = (HYPRE_Int *)calloc(recvcount, sizeof(HYPRE_Int));
-  // HYPRE_Real *V = (HYPRE_Real *)calloc(recvcount, sizeof(HYPRE_Real));
-
- 
-   HYPRE_Int k = 0;
-   for (HYPRE_Int p = 0; p < num_procs; p++){
-      if (send_flags[p] == 1){
-
-         HYPRE_Int first_row_index = hypre_ParCSRMatrixFirstRowIndex(A);
-         HYPRE_Int first_col_diag = hypre_ParCSRMatrixFirstColDiag(A);
-         HYPRE_Int num_rows = hypre_CSRMatrixNumRows(diag);
-         HYPRE_Int *col_map_offd = hypre_ParCSRMatrixColMapOffd(A);
-
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            for (HYPRE_Int jj = diag_i[i]; jj < diag_i[i+1]; jj++){
-               HYPRE_Int ii = diag_j[jj];
-
-               sendbuf_i[k] = first_row_index+i;
-               sendbuf_j[k] = first_col_diag+ii;
-               sendbuf_v[k] = diag_data[jj];
-
-               k++;
-            }
-         }
-
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            for (HYPRE_Int jj = offd_i[i]; jj < offd_i[i+1]; jj++){
-               HYPRE_Int ii = offd_j[jj];
-
-               sendbuf_i[k] = first_row_index+i;
-               sendbuf_j[k] = col_map_offd[ii];
-               sendbuf_v[k] = offd_data[jj];
-
-               k++;
-            }
-         }
-      }
-   }
- 
-   MPI_Alltoallv(sendbuf_i,
-                 sendcounts,
-                 sdispls,
-                 MPI_INT,
-                 recvbuf_i,
-                 recvcounts,
-                 rdispls,
-                 MPI_INT,
-                 MPI_COMM_WORLD);
-
-   MPI_Alltoallv(sendbuf_j,
-                 sendcounts,
-                 sdispls,
-                 MPI_INT,
-                 recvbuf_j,
-                 recvcounts,
-                 rdispls,
-                 MPI_INT,
-                 MPI_COMM_WORLD);
-
-   MPI_Alltoallv(sendbuf_v,
-                 sendcounts,
-                 sdispls,
-                 MPI_DOUBLE,
-                 recvbuf_v,
-                 recvcounts,
-                 rdispls,
-                 MPI_DOUBLE,
-                 MPI_COMM_WORLD);
-
-   
-   HYPRE_IJMatrix ij_matrix;
-   int ilower = MinInt(recvbuf_i, recvcount);
-   int iupper = MaxInt(recvbuf_i, recvcount);
-   int jlower = MinInt(recvbuf_j, recvcount);
-   int jupper = MaxInt(recvbuf_j, recvcount);
-
-   recvbuf = (int *)calloc(4*num_procs, sizeof(int));
-   sendbuf = (int *)calloc(4*num_procs, sizeof(int));
-
-   for (int p = 0; p < num_procs; p++){
-      if (send_flags[p] == 1){
-         int first_row_index = hypre_ParCSRMatrixFirstRowIndex(A);
-         int last_row_index = hypre_ParCSRMatrixLastRowIndex(A);
-         int first_col_diag = hypre_ParCSRMatrixFirstColDiag(A);
-         int last_col_diag = hypre_ParCSRMatrixLastColDiag(A);
-
-         sendbuf[4*p] =   first_row_index;
-         sendbuf[4*p+1] = last_row_index;
-         sendbuf[4*p+2] = first_col_diag;
-         sendbuf[4*p+3] = last_col_diag;
-      }
-   }
-   
-  // printf("%d: interp %d %d\n", my_id, iupper, jupper);
-
-   MPI_Alltoall(sendbuf,
-                4,
-                MPI_INT,
-                recvbuf,
-                4,
-                MPI_INT,
-                MPI_COMM_WORLD);
-
-   ilower = jlower = INT_MAX;//max(hypre_ParCSRMatrixGlobalNumRows(A), hypre_ParCSRMatrixGlobalNumCols(A))+1;
-   iupper = jupper = INT_MIN;
-   for (int p = 0; p < num_procs; p++){
-      if (recv_flags[p] == 1){
-         if (ilower > recvbuf[4*p]){
-            ilower = recvbuf[4*p];
-         }
-         if (iupper < recvbuf[4*p+1]){
-            iupper = recvbuf[4*p+1];
-         }
-         if (jlower > recvbuf[4*p+2]){
-            jlower = recvbuf[4*p+2];
-         }
-         if (jupper < recvbuf[4*p+3]){
-            jupper = recvbuf[4*p+3];
-         }
-      }
-   }
-   
-   free(sendbuf);
-   free(recvbuf);
-   
-
-   HYPRE_IJMatrixCreate(my_comm, ilower, iupper, jlower, jupper, &ij_matrix);
-   HYPRE_IJMatrixSetObjectType(ij_matrix, HYPRE_PARCSR);
-   HYPRE_IJMatrixInitialize(ij_matrix);
-
-
-  // printf("%d, %d\n", ilower, iupper);
-
-   HYPRE_Int num_rows = iupper-ilower+1;
-   vector<vector<int>> col_vec(num_rows, vector<int>(0));
-   vector<vector<double>> val_vec(num_rows, vector<double>(0));
-   for (HYPRE_Int k = 0; k < recvcount; k++){
-      HYPRE_Int row_ind = recvbuf_i[k]-ilower;
-      col_vec[row_ind].push_back(recvbuf_j[k]);
-      val_vec[row_ind].push_back(recvbuf_v[k]);
-   }
-   for (HYPRE_Int i = 0; i < num_rows; i++){
-      int ncols = col_vec[i].size(); 
-      int *cols = (int *)calloc(ncols, sizeof(int));
-      double *values = (double *)calloc(ncols, sizeof(double));
-      for (HYPRE_Int j = 0; j < ncols; j++){
-         cols[j] = col_vec[i].back();
-         values[j] = val_vec[i].back();
-         col_vec[i].pop_back();
-         val_vec[i].pop_back();
-      }
-      int I = ilower+i;
-      HYPRE_IJMatrixSetValues(ij_matrix, 1, &ncols, &I, cols, values);
-      free(cols);
-      free(values);
-   }
-
-   HYPRE_IJMatrixAssemble(ij_matrix);
-   HYPRE_IJMatrixGetObject(ij_matrix, (void**)B);
-
-  // char buffer[100];
-  // sprintf(buffer, "A_async_%d.txt", my_grid);
-  // DMEM_PrintParCSRMatrix(*B, buffer);
-
-  // if (my_id == 1){
-  //    for (HYPRE_Int k = 0; k < recvcount; k++){
-  //       printf("%d, %d: %d %d %e\n", my_id, k, recvbuf_i[k], recvbuf_j[k], recvbuf_v[k]);
-  //    }
-  //    printf("%d, %d\n", ilower, iupper);
-
-  //   // for (HYPRE_Int k = 0; k < sendcount; k++){
-  //   //    printf("%d %d %e\n", sendbuf_i[k], sendbuf_j[k], sendbuf_v[k]);
-  //   // }
-  //    
-  //   // for (HYPRE_Int p = 0; p < num_procs; p++){
-  //   //     printf("%d %d\n", sdispls[p], rdispls[p]);
-  //   // }
-  // }
-
-   free(sendbuf_i);
-   free(sendbuf_j);
-   free(sendbuf_v);
-  // free(recvbuf_j);
-  // free(recvbuf_i);
-  // free(recvbuf_v);
-}
-
 void ConstructVectors(DMEM_AllData *dmem_all_data,
                       hypre_ParCSRMatrix *A,
                       DMEM_VectorData *vector,
@@ -2028,7 +1690,7 @@ void ComputeWork(DMEM_AllData *dmem_all_data)
 
 }
 
-void BuildMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVector *rhs, MPI_Comm comm)
+void SetupMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVector *rhs, MPI_Comm comm)
 {
    if (dmem_all_data->input.test_problem == MFEM_ELAST ||
        dmem_all_data->input.test_problem == MFEM_ELAST_AMR){
@@ -2036,6 +1698,9 @@ void BuildMatrix(DMEM_AllData *dmem_all_data, HYPRE_ParCSRMatrix *A, HYPRE_ParVe
                            A,
                            rhs,
                            comm);
+   }
+   else if (dmem_all_data->input.test_problem == MATRIX_FROM_FILE){
+      DMEM_MatrixFromFile(dmem_all_data->input.mat_file_str, A, comm);
    }
    else {
       DMEM_BuildHypreMatrix(dmem_all_data,

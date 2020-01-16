@@ -1,10 +1,27 @@
 #include "Main.hpp"
 #include "DMEM_Main.hpp"
 #include "Misc.hpp"
+#include "DMEM_Misc.hpp"
+#include "DMEM_BuildMatrix.hpp"
 #include "_hypre_utilities.h"
 
 using namespace std;
 using namespace mfem;
+
+void List_to_Metis(MetisGraph *G,
+                   Triplet *T,
+                   std::vector<std::list<int>> col_list,
+                   std::vector<std::list<double>> elem_list);
+void ReorderTriplet(Triplet T, CSR *A, OrderingData *P);
+void ReadBinary_fread_metis(FILE *mat_file,
+                            MetisGraph *G,
+                            Triplet *T,
+                            int symm_flag);
+void Reorder(OrderingData *P, Triplet *T, CSR *A);
+void CSRtoParHypreCSRMatrix(CSR B,
+                            hypre_ParCSRMatrix **A_ptr,
+                            OrderingData P,
+                            MPI_Comm comm);
 
 static inline HYPRE_Int sign_double(HYPRE_Real a)
 {
@@ -560,4 +577,701 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
    //   delete fec;
    //}
    //delete pmesh; 
+}
+
+void DMEM_DistributeHypreParCSRMatrix_FineToGridk(DMEM_AllData *dmem_all_data,
+                                                  hypre_ParCSRMatrix *A,
+                                                  hypre_ParCSRMatrix **B)
+{
+   int num_procs, my_id;
+   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
+   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+
+   MPI_Comm my_comm = dmem_all_data->grid.my_comm;
+
+   HYPRE_Int loc_num_procs, loc_my_id;
+   MPI_Comm_rank(my_comm, &loc_my_id);
+   MPI_Comm_size(my_comm, &loc_num_procs);
+
+   HYPRE_Int my_grid = dmem_all_data->grid.my_grid;
+   HYPRE_Int num_levels = dmem_all_data->grid.num_levels;
+   
+   HYPRE_Int num_procs_level, rest, **ps, **pe;
+   ps = (HYPRE_Int **)malloc(num_levels * sizeof(HYPRE_Int *));
+   pe = (HYPRE_Int **)malloc(num_levels * sizeof(HYPRE_Int *));
+   //printf("%d, %d, %d\n", num_procs, num_my_procs, rest);
+
+   int finest_level;
+   if (dmem_all_data->input.res_compute_type == GLOBAL_RES){
+      finest_level = dmem_all_data->input.coarsest_mult_level + 1;
+   }
+   else{
+      finest_level = dmem_all_data->input.coarsest_mult_level;
+   }
+   for (int level = finest_level; level < num_levels; level++){
+      ps[level] = (HYPRE_Int *)calloc(dmem_all_data->grid.num_procs_level[level], sizeof(HYPRE_Int));
+      pe[level] = (HYPRE_Int *)calloc(dmem_all_data->grid.num_procs_level[level], sizeof(HYPRE_Int));
+
+      num_procs_level = num_procs/dmem_all_data->grid.num_procs_level[level];
+      rest = num_procs - num_procs_level*dmem_all_data->grid.num_procs_level[level];
+      for (int p = 0; p < dmem_all_data->grid.num_procs_level[level]; p++){
+         if (p < rest){
+            ps[level][p] = p*num_procs_level + p;
+            pe[level][p] = (p + 1)*num_procs_level + p + 1;
+         }
+         else {
+            ps[level][p] = p*num_procs_level + rest;
+            pe[level][p] = (p + 1)*num_procs_level + rest;
+         }
+      }
+   }
+
+  // printf("(%d,%d,%d): %d, %d\n", loc_my_id, my_grid, num_my_procs, ps, pe)
+
+   double *recvbuf_v, *sendbuf_v;
+   int *recvbuf_i, *sendbuf_i;
+   int *recvbuf_j, *sendbuf_j;
+   int *recvbuf, *sendbuf;
+   int *rdispls, *recvcounts;
+   int *sdispls, *sendcounts;
+   int sendcount, recvcount;
+
+   recvcounts = (int *)calloc(num_procs, sizeof(int));
+   rdispls = (int *)calloc(num_procs, sizeof(int));
+   sendcounts = (int *)calloc(num_procs, sizeof(int));
+   sdispls = (int *)calloc(num_procs, sizeof(int));
+
+   hypre_CSRMatrix *diag = hypre_ParCSRMatrixDiag(A);
+   hypre_CSRMatrix *offd = hypre_ParCSRMatrixOffd(A);
+
+   HYPRE_Int *diag_j = hypre_CSRMatrixJ(diag);
+   HYPRE_Int *diag_i = hypre_CSRMatrixI(diag);
+   HYPRE_Real *diag_data = hypre_CSRMatrixData(diag);
+
+   HYPRE_Int *offd_j = hypre_CSRMatrixJ(offd);
+   HYPRE_Int *offd_i = hypre_CSRMatrixI(offd);
+   HYPRE_Real *offd_data = hypre_CSRMatrixData(offd);
+
+   /* indicate to other processes that I need their diag and offd */
+   recvbuf = (int *)calloc(num_procs, sizeof(int));
+   sendbuf = (int *)calloc(num_procs, sizeof(int));
+
+   HYPRE_Int *recv_flags = (HYPRE_Int *)calloc(num_procs, sizeof(HYPRE_Int));
+   for (HYPRE_Int p = 0; p < num_procs; p++){
+      if (p >= ps[my_grid][loc_my_id] && p < pe[my_grid][loc_my_id]){
+         sendbuf[p] = 1;
+         recv_flags[p] = 1;
+      }
+   }
+  
+   MPI_Alltoall(sendbuf,
+                1,
+                MPI_INT,
+                recvbuf,
+                1,
+                MPI_INT,
+                MPI_COMM_WORLD);
+
+   /* send nnz */
+   HYPRE_Int nnz = hypre_CSRMatrixNumNonzeros(diag) + hypre_CSRMatrixNumNonzeros(offd);
+   int *send_flags = (int *)calloc(num_procs, sizeof(int));
+   sendcount = 0;
+   for (int p = 0; p < num_procs; p++){
+      sendbuf[p] = 0;
+      if (recvbuf[p] == 1){
+         send_flags[p] = 1;
+         sendbuf[p] = nnz;
+      }
+      /* we need sdispls and sendcount later when we send I,J,V */
+      if (p > 0){
+         sdispls[p] = sdispls[p-1] + sendbuf[p-1];
+      }
+      sendcounts[p] = sendbuf[p];
+      sendcount += sendbuf[p];
+   }
+
+   MPI_Alltoall(sendbuf,
+                1,
+                MPI_INT,
+                recvbuf,
+                1,
+                MPI_INT,
+                MPI_COMM_WORLD);
+
+ 
+   /* send I,J,V */
+   recvcount = 0;
+   for (HYPRE_Int p = 0; p < num_procs; p++){
+      if (p > 0){
+         rdispls[p] = rdispls[p-1] + recvbuf[p-1];
+      }
+      recvcounts[p] = recvbuf[p];
+      recvcount += recvbuf[p];
+   }
+
+   free(sendbuf);
+   free(recvbuf);
+
+   recvbuf_i = (int *)calloc(recvcount, sizeof(int));
+   recvbuf_j = (int *)calloc(recvcount, sizeof(int));
+   recvbuf_v = (double *)calloc(recvcount, sizeof(double));
+
+   sendbuf_j = (int *)calloc(sendcount, sizeof(int));
+   sendbuf_i = (int *)calloc(sendcount, sizeof(int));
+   sendbuf_v = (double *)calloc(sendcount, sizeof(double));
+
+  // HYPRE_Int *I = (HYPRE_Int *)calloc(recvcount, sizeof(HYPRE_Int));
+  // HYPRE_Int *J = (HYPRE_Int *)calloc(recvcount, sizeof(HYPRE_Int));
+  // HYPRE_Real *V = (HYPRE_Real *)calloc(recvcount, sizeof(HYPRE_Real));
+
+ 
+   HYPRE_Int k = 0;
+   for (HYPRE_Int p = 0; p < num_procs; p++){
+      if (send_flags[p] == 1){
+
+         HYPRE_Int first_row_index = hypre_ParCSRMatrixFirstRowIndex(A);
+         HYPRE_Int first_col_diag = hypre_ParCSRMatrixFirstColDiag(A);
+         HYPRE_Int num_rows = hypre_CSRMatrixNumRows(diag);
+         HYPRE_Int *col_map_offd = hypre_ParCSRMatrixColMapOffd(A);
+
+         for (HYPRE_Int i = 0; i < num_rows; i++){
+            for (HYPRE_Int jj = diag_i[i]; jj < diag_i[i+1]; jj++){
+               HYPRE_Int ii = diag_j[jj];
+
+               sendbuf_i[k] = first_row_index+i;
+               sendbuf_j[k] = first_col_diag+ii;
+               sendbuf_v[k] = diag_data[jj];
+
+               k++;
+            }
+         }
+
+         for (HYPRE_Int i = 0; i < num_rows; i++){
+            for (HYPRE_Int jj = offd_i[i]; jj < offd_i[i+1]; jj++){
+               HYPRE_Int ii = offd_j[jj];
+
+               sendbuf_i[k] = first_row_index+i;
+               sendbuf_j[k] = col_map_offd[ii];
+               sendbuf_v[k] = offd_data[jj];
+
+               k++;
+            }
+         }
+      }
+   }
+ 
+   MPI_Alltoallv(sendbuf_i,
+                 sendcounts,
+                 sdispls,
+                 MPI_INT,
+                 recvbuf_i,
+                 recvcounts,
+                 rdispls,
+                 MPI_INT,
+                 MPI_COMM_WORLD);
+
+   MPI_Alltoallv(sendbuf_j,
+                 sendcounts,
+                 sdispls,
+                 MPI_INT,
+                 recvbuf_j,
+                 recvcounts,
+                 rdispls,
+                 MPI_INT,
+                 MPI_COMM_WORLD);
+
+   MPI_Alltoallv(sendbuf_v,
+                 sendcounts,
+                 sdispls,
+                 MPI_DOUBLE,
+                 recvbuf_v,
+                 recvcounts,
+                 rdispls,
+                 MPI_DOUBLE,
+                 MPI_COMM_WORLD);
+
+   
+   HYPRE_IJMatrix ij_matrix;
+   int ilower = MinInt(recvbuf_i, recvcount);
+   int iupper = MaxInt(recvbuf_i, recvcount);
+   int jlower = MinInt(recvbuf_j, recvcount);
+   int jupper = MaxInt(recvbuf_j, recvcount);
+
+   recvbuf = (int *)calloc(4*num_procs, sizeof(int));
+   sendbuf = (int *)calloc(4*num_procs, sizeof(int));
+
+   for (int p = 0; p < num_procs; p++){
+      if (send_flags[p] == 1){
+         int first_row_index = hypre_ParCSRMatrixFirstRowIndex(A);
+         int last_row_index = hypre_ParCSRMatrixLastRowIndex(A);
+         int first_col_diag = hypre_ParCSRMatrixFirstColDiag(A);
+         int last_col_diag = hypre_ParCSRMatrixLastColDiag(A);
+
+         sendbuf[4*p] =   first_row_index;
+         sendbuf[4*p+1] = last_row_index;
+         sendbuf[4*p+2] = first_col_diag;
+         sendbuf[4*p+3] = last_col_diag;
+      }
+   }
+   
+  // printf("%d: interp %d %d\n", my_id, iupper, jupper);
+
+   MPI_Alltoall(sendbuf,
+                4,
+                MPI_INT,
+                recvbuf,
+                4,
+                MPI_INT,
+                MPI_COMM_WORLD);
+
+   ilower = jlower = INT_MAX;//max(hypre_ParCSRMatrixGlobalNumRows(A), hypre_ParCSRMatrixGlobalNumCols(A))+1;
+   iupper = jupper = INT_MIN;
+   for (int p = 0; p < num_procs; p++){
+      if (recv_flags[p] == 1){
+         if (ilower > recvbuf[4*p]){
+            ilower = recvbuf[4*p];
+         }
+         if (iupper < recvbuf[4*p+1]){
+            iupper = recvbuf[4*p+1];
+         }
+         if (jlower > recvbuf[4*p+2]){
+            jlower = recvbuf[4*p+2];
+         }
+         if (jupper < recvbuf[4*p+3]){
+            jupper = recvbuf[4*p+3];
+         }
+      }
+   }
+   
+   free(sendbuf);
+   free(recvbuf);
+   
+
+   HYPRE_IJMatrixCreate(my_comm, ilower, iupper, jlower, jupper, &ij_matrix);
+   HYPRE_IJMatrixSetObjectType(ij_matrix, HYPRE_PARCSR);
+   HYPRE_IJMatrixInitialize(ij_matrix);
+
+
+  // printf("%d, %d\n", ilower, iupper);
+
+   HYPRE_Int num_rows = iupper-ilower+1;
+   vector<vector<int>> col_vec(num_rows, vector<int>(0));
+   vector<vector<double>> val_vec(num_rows, vector<double>(0));
+   for (HYPRE_Int k = 0; k < recvcount; k++){
+      HYPRE_Int row_ind = recvbuf_i[k]-ilower;
+      col_vec[row_ind].push_back(recvbuf_j[k]);
+      val_vec[row_ind].push_back(recvbuf_v[k]);
+   }
+   for (HYPRE_Int i = 0; i < num_rows; i++){
+      int ncols = col_vec[i].size(); 
+      int *cols = (int *)calloc(ncols, sizeof(int));
+      double *values = (double *)calloc(ncols, sizeof(double));
+      for (HYPRE_Int j = 0; j < ncols; j++){
+         cols[j] = col_vec[i].back();
+         values[j] = val_vec[i].back();
+         col_vec[i].pop_back();
+         val_vec[i].pop_back();
+      }
+      int I = ilower+i;
+      HYPRE_IJMatrixSetValues(ij_matrix, 1, &ncols, &I, cols, values);
+      free(cols);
+      free(values);
+   }
+
+   HYPRE_IJMatrixAssemble(ij_matrix);
+   HYPRE_IJMatrixGetObject(ij_matrix, (void**)B);
+
+  // char buffer[100];
+  // sprintf(buffer, "A_async_%d.txt", my_grid);
+  // DMEM_PrintParCSRMatrix(*B, buffer);
+
+  // if (my_id == 1){
+  //    for (HYPRE_Int k = 0; k < recvcount; k++){
+  //       printf("%d, %d: %d %d %e\n", my_id, k, recvbuf_i[k], recvbuf_j[k], recvbuf_v[k]);
+  //    }
+  //    printf("%d, %d\n", ilower, iupper);
+
+  //   // for (HYPRE_Int k = 0; k < sendcount; k++){
+  //   //    printf("%d %d %e\n", sendbuf_i[k], sendbuf_j[k], sendbuf_v[k]);
+  //   // }
+  //    
+  //   // for (HYPRE_Int p = 0; p < num_procs; p++){
+  //   //     printf("%d %d\n", sdispls[p], rdispls[p]);
+  //   // }
+  // }
+
+   free(sendbuf_i);
+   free(sendbuf_j);
+   free(sendbuf_v);
+  // free(recvbuf_j);
+  // free(recvbuf_i);
+  // free(recvbuf_v);
+}
+
+void DMEM_MatrixFromFile(char *mat_file_str, hypre_ParCSRMatrix **A_ptr, MPI_Comm comm)
+{
+   int num_procs, my_id;
+   MPI_Comm_rank(comm, &my_id);
+   MPI_Comm_size(comm, &num_procs);
+
+   idx_t ncon = 1, objval, n;
+   int flag = METIS_OK;
+   int imbalance = 0;
+   int point;
+   MetisGraph G;
+   Triplet T;
+   CSR A, B;
+   OrderingData P;
+
+   P.nparts = num_procs;
+
+   if (my_id == 0){
+      idx_t nparts = (idx_t)num_procs;
+      idx_t options[METIS_NOPTIONS];
+      FILE *mat_file = fopen(mat_file_str, "rb");
+      ReadBinary_fread_metis(mat_file, &G, &T, 1);
+      fclose(mat_file);
+      A.n = B.n_glob = G.n;
+      A.nnz = G.nnz;
+      METIS_SetDefaultOptions(options);
+      options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+      idx_t *perm = (idx_t *)calloc(A.n, sizeof(idx_t));
+      if (num_procs > 1){
+         flag =  METIS_PartGraphKway(&(G.n), &ncon, G.xadj, G.adjncy, NULL, 
+                                     NULL, NULL, &nparts, NULL, NULL, 
+                                     options, &objval, perm);
+         if (flag != METIS_OK){
+            printf("****WARNING****: METIS returned error with code %d.\n", flag);
+         }
+      }
+      else {
+         for (int i = 0; i < A.n; i++) perm[i] = 0;
+      }
+      FreeMetis(&G);
+
+      P.perm = (int *)calloc(A.n, sizeof(int));
+      P.part = (int *)calloc(P.nparts, sizeof(int));
+      for (int i = 0; i < A.n; i++){
+         P.perm[i] = perm[i];
+         P.part[P.perm[i]]++;
+      }
+      free(perm);
+      P.disp = (int *)malloc((P.nparts+1) * sizeof(int));
+      P.disp[0] = 0;
+      for (int i = 0; i < P.nparts; i++){
+         P.disp[i+1] = P.disp[i] + P.part[i];
+      }
+      Reorder(&P, &T, &A);
+      //WriteCSR(A, "metis_matrix_matlab.txt", 1);
+   }
+   DMEM_DistributeCSR_RootToFine(A, &B, &P, comm);
+   if (my_id == 0){
+      FreeTriplet(&T);
+      FreeCSR(&A);
+   }
+  // DMEM_WriteCSR(B, "metis_matrix_matlab.txt", 1, P, comm);
+   CSRtoParHypreCSRMatrix(B, A_ptr, P, comm);
+   FreeOrdering(&P);
+   FreeCSR(&B);
+}
+
+void DMEM_DistributeCSR_RootToFine(CSR A,
+                                   CSR *B,
+                                   OrderingData *P,
+                                   MPI_Comm comm)
+{
+   int num_procs, my_id;
+   MPI_Comm_rank(comm, &my_id);
+   MPI_Comm_size(comm, &num_procs);
+
+   MPI_Bcast(&(B->n_glob), 1, MPI_INT, 0, comm);
+
+   int j_ptr_disp;
+   P->dispv = (int *)malloc(P->nparts * sizeof(int));
+   int *j_ptr_extra = (int *)malloc(P->nparts * sizeof(int));
+   if (my_id == 0){
+      for (int i = 0; i < P->nparts; i++){ 
+         P->dispv[i] = P->disp[i];
+         j_ptr_extra[i] = A.j_ptr[P->disp[i+1]];
+      }
+   }
+   else {
+      P->part = (int *)malloc(P->nparts * sizeof(int));
+      P->disp = (int *)malloc((P->nparts+1) * sizeof(int));
+   }
+   
+   MPI_Bcast(P->part, P->nparts, MPI_INT, 0, comm);
+   MPI_Bcast(P->disp, P->nparts+1, MPI_INT, 0, comm);
+   MPI_Bcast(P->dispv, P->nparts, MPI_INT, 0, comm);
+
+   B->n = P->part[my_id];
+
+   B->j_ptr = (int *)calloc(B->n+1, sizeof(int));
+   MPI_Scatterv(A.j_ptr, 
+                P->part, 
+                P->dispv, 
+                MPI_INT, 
+                B->j_ptr, 
+                B->n, 
+                MPI_INT, 
+                0, 
+                comm);
+   MPI_Scatter(j_ptr_extra, 
+               1, 
+               MPI_INT, 
+               &(B->j_ptr[B->n]), 
+               1, 
+               MPI_INT,
+               0, 
+               comm);
+
+   j_ptr_disp = B->j_ptr[0];
+   for (int i = 0; i < B->n+1; i++){
+      B->j_ptr[i] -= j_ptr_disp; 
+   }
+  
+   int *part_nnz = (int *)malloc(P->nparts * sizeof(int)); 
+   int *dispv_nnz = (int *)malloc(P->nparts * sizeof(int)); 
+   int count_nnz;
+   if (my_id == 0){
+      dispv_nnz[0] = 0;
+      for (int i = 0; i < P->nparts; i++){
+         count_nnz = 0;
+         for (int j = P->disp[i]; j < P->disp[i+1]; j++){
+            count_nnz += (A.j_ptr[j+1] - A.j_ptr[j]);
+         }
+         if (i < P->nparts-1) dispv_nnz[i+1] = dispv_nnz[i] + count_nnz;
+         part_nnz[i] = count_nnz;
+      }
+   }
+
+   MPI_Bcast(part_nnz, P->nparts, MPI_INT, 0, comm);
+   MPI_Bcast(dispv_nnz, P->nparts, MPI_INT, 0, comm);
+
+   B->nnz = part_nnz[my_id];
+   B->i = (int *)calloc(B->nnz, sizeof(int));
+   B->val = (double *)calloc(B->nnz, sizeof(double));
+ 
+   MPI_Scatterv(A.i, part_nnz, dispv_nnz, MPI_INT,
+                B->i, B->nnz, MPI_INT, 0, comm);
+   MPI_Scatterv(A.val, part_nnz, dispv_nnz, MPI_DOUBLE,
+                B->val, B->nnz, MPI_DOUBLE, 0, comm);
+
+   free(part_nnz);
+   free(dispv_nnz);
+   free(j_ptr_extra);
+}
+
+void ReadBinary_fread_metis(FILE *mat_file,
+                            MetisGraph *G,
+                            Triplet *T,
+                            int symm_flag)
+{
+   using namespace std;
+   size_t size;
+   int temp_size;
+   int k, q;
+   int row, col;
+   double elem;
+   Triplet_AOS *buffer;
+
+   fseek(mat_file, 0, SEEK_END);
+   size = ftell(mat_file);
+   rewind(mat_file);
+   buffer = (Triplet_AOS *)malloc(sizeof(Triplet_AOS) * size);
+   fread(buffer, sizeof(Triplet_AOS), size, mat_file);
+
+   int file_lines = size/sizeof(Triplet_AOS);
+   int max_row = 0;
+   T->nnz = 0;
+   for (int k = 0; k < file_lines; k++){
+      row = buffer[k].i;
+      col = buffer[k].j;
+      elem = buffer[k].val;
+
+      if (fabs(elem) > 0){
+         if (row > max_row){
+            max_row = row;
+         }
+         T->nnz += 1;
+         if (symm_flag == 1 && row != col){
+            T->nnz += 1;
+         }
+      }
+   }
+   G->nnz = T->nnz;
+   G->n = T->n = max_row;
+
+   vector<list<int>> col_list(T->n);
+   vector<list<double>> elem_list(T->n);
+   for (int k = 0; k < file_lines; k++){
+      row = buffer[k].i;
+      col = buffer[k].j;
+      elem = buffer[k].val;
+
+      if (fabs(elem) > 0){
+         col_list[row-1].push_back(col-1);
+         elem_list[row-1].push_back(elem);
+         if (symm_flag == 1 && row != col){
+            col_list[col-1].push_back(row-1);
+            elem_list[col-1].push_back(elem);
+         }
+      }
+   }
+
+   G->xadj = (idx_t *)malloc(((int)G->n+1) * sizeof(idx_t));
+   G->adjncy = (idx_t *)malloc((int)G->nnz * sizeof(idx_t));
+   G->adjwgt = (real_t *)malloc((int)G->nnz * sizeof(real_t));
+
+   T->i = (int *)malloc(T->nnz * sizeof(int));
+   T->j = (int *)malloc(T->nnz * sizeof(int));
+   T->val = (double *)malloc(T->nnz * sizeof(double));
+
+   List_to_Metis(G, T, col_list, elem_list);
+   free(buffer);
+}
+
+void ReorderTriplet(Triplet T, CSR *A, OrderingData *P)
+{
+   int row, col;
+   int s, q, k, map_i, p;
+   double elem;
+
+   int n = A->n;
+   int nnz = A->nnz;
+   int **col_list = (int **)malloc(n * sizeof(int *));
+   double **elem_list = (double **)malloc(n * sizeof(double *));
+   int *len = (int *)calloc(n, sizeof(int));
+   int *col_flag = (int *)calloc(n, sizeof(int));
+   int *p_count = (int *)calloc(P->nparts, sizeof(int));
+   A->j_ptr = (int *)calloc(n+1, sizeof(int));
+   P->map = (int *)calloc(n, sizeof(int));
+   for (int i = 0; i < nnz; i++){
+      col = T.j[i];
+      row = T.i[i];
+      elem = T.val[i];
+      p = P->perm[col];
+      k = p_count[p];
+      if (!col_flag[col]){
+         P->map[col] = k + P->disp[p];
+         col_flag[col] = 1;
+         p_count[p]++;
+      }
+      map_i = P->map[col];
+      len[map_i]++;
+   }
+   for (int i = 0; i < n; i++){
+      col_list[i] = (int *)calloc(len[i], sizeof(int));
+      elem_list[i] = (double *)calloc(len[i], sizeof(double));
+      len[i] = 0;
+   }
+   for (int i = 0; i < nnz; i++){
+      col = T.j[i];
+      row = T.i[i];
+      elem = T.val[i];
+      p = P->perm[col];
+      map_i = P->map[col];
+      q = len[map_i];
+      col_list[map_i][q] = row;
+      elem_list[map_i][q] = elem;
+      len[map_i]++;
+   }
+   A->i = (int *)calloc(nnz,  sizeof(int));
+   A->val = (double *)calloc(nnz,  sizeof(double));
+   k = 0;
+   A->j_ptr[0] = 0;
+   for (int i = 0; i < n; i++){
+       A->j_ptr[i+1] = A->j_ptr[i] + len[i];
+       for (int j = 0; j < len[i]; j++){
+          A->i[k] = col_list[i][j];
+          A->val[k] = elem_list[i][j];
+          k++;
+       }
+   }
+   for (int i = 0; i < n; i++){
+      for (int j = A->j_ptr[i]; j < A->j_ptr[i+1]; j++){
+         A->i[j] = P->map[A->i[j]];
+      }
+   }
+   for (int i = 0; i < n; i++){
+      free(col_list[i]);
+      free(elem_list[i]);
+   }
+   free(col_list);
+   free(elem_list);
+   free(p_count);
+   free(col_flag);
+   free(len);
+}
+
+void Reorder(OrderingData *P, 
+             Triplet *T,
+             CSR *A)
+{
+   ReorderTriplet(*T, A, P);
+}
+
+void List_to_Metis(MetisGraph *G,
+                   Triplet *T,
+                   std::vector<std::list<int>> col_list,
+                   std::vector<std::list<double>> elem_list)
+{
+   int temp_size;
+   int k = 0;
+   G->xadj[0] = 0;
+   for (int i = 0; i < G->n; i++){
+      col_list[i].begin();
+      elem_list[i].begin();
+      temp_size = col_list[i].size();
+      G->xadj[i+1] = G->xadj[i] + (idx_t)temp_size;
+      for (int j = 0; j < temp_size; j++){
+         G->adjncy[k] = col_list[i].front();
+         col_list[i].pop_front();
+         G->adjwgt[k] = elem_list[i].front();
+         elem_list[i].pop_front();
+
+         T->j[k] = i;
+         T->i[k] = G->adjncy[k];
+         T->val[k] = G->adjwgt[k];
+
+         k++;
+      }
+   }
+}
+
+void CSRtoParHypreCSRMatrix(CSR B,
+                            hypre_ParCSRMatrix **A_ptr,
+                            OrderingData P,
+                            MPI_Comm comm)
+{
+   int num_procs, my_id;
+   MPI_Comm_rank(comm, &my_id);
+   MPI_Comm_size(comm, &num_procs);
+
+   HYPRE_IJMatrix Aij;
+   HYPRE_IJMatrixCreate(comm, P.disp[my_id], P.disp[my_id+1]-1, P.disp[my_id], P.disp[my_id+1]-1, &Aij);
+   HYPRE_IJMatrixSetObjectType(Aij, HYPRE_PARCSR);
+   HYPRE_IJMatrixInitialize(Aij);
+
+   for (int i = 0; i < B.n; i++){
+      int nnz = B.j_ptr[i+1] - B.j_ptr[i];
+      double *values = (double *)malloc(nnz * sizeof(double));
+      int *cols = (int *)malloc(nnz * sizeof(int));
+
+      int jj = 0;
+      for (int j = B.j_ptr[i]; j < B.j_ptr[i+1]; j++){
+         cols[jj] = B.i[j];
+         values[jj] = B.val[j];
+         jj++;
+      }
+
+      int row_glob = P.disp[my_id]+i;
+      /* Set the values for row i */
+      HYPRE_IJMatrixSetValues(Aij, 1, &nnz, &row_glob, cols, values);
+   }
+
+   HYPRE_IJMatrixAssemble(Aij);
+   void *object;
+   HYPRE_IJMatrixGetObject(Aij, &object);
+   *A_ptr = (hypre_ParCSRMatrix *)object;
 }

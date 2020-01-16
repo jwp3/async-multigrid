@@ -19,4 +19,15 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
                           hypre_ParVector **b_ptr,
                           MPI_Comm comm);
 
+void DMEM_MatrixFromFile(char *mat_file_str, hypre_ParCSRMatrix **A_ptr, MPI_Comm comm);
+
+void DMEM_DistributeHypreParCSRMatrix_FineToGridk(DMEM_AllData *dmem_all_data,
+                                                  hypre_ParCSRMatrix *A,
+                                                  hypre_ParCSRMatrix **B);
+
+void DMEM_DistributeCSR_RootToFine(CSR A,
+                                   CSR *B,
+                                   OrderingData *P,
+                                   MPI_Comm comm);
+
 #endif
