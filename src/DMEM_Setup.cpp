@@ -46,6 +46,14 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
 
    start = omp_get_wtime();
    SetupMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.b), MPI_COMM_WORLD);
+   
+   if ((dmem_all_data->input.smoother == JACOBI ||
+        dmem_all_data->input.smoother == ASYNC_JACOBI) &&
+        dmem_all_data->input.optimal_jacobi_weight_flag == 1){
+      HYPRE_Real max_eig, min_eig;
+      hypre_ParCSRMaxEigEstimateCG(dmem_all_data->matrix.A_fine, 1, dmem_all_data->input.eig_CG_max_iter, &max_eig, &min_eig);
+      dmem_all_data->input.smooth_weight = 1.0/max_eig;
+   }
   // char buffer[100];
   // sprintf(buffer, "A_%d.txt", num_procs);
   // DMEM_PrintParCSRMatrix(dmem_all_data->matrix.A_fine, buffer);

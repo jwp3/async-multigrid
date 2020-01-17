@@ -113,7 +113,9 @@ typedef struct{
    double sps_alpha;
    int hypre_memory;
    int async_comm_save_divisor;
+   int optimal_jacobi_weight_flag;
    char mat_file_str[1024];
+   int eig_CG_max_iter;
 }DMEM_InputData;
 
 typedef struct{

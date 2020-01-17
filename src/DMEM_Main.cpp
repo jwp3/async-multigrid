@@ -113,6 +113,8 @@ int main (int argc, char *argv[])
    dmem_all_data.input.sps_alpha = 1.0;
    dmem_all_data.input.simple_jacobi_flag = 0;
    dmem_all_data.input.async_comm_save_divisor = 1;
+   dmem_all_data.input.optimal_jacobi_weight_flag = 0;
+   dmem_all_data.input.eig_CG_max_iter = 20;
 
 //#ifdef HYPRE_USING_UNIFIED_MEMORY
 //   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
@@ -556,6 +558,13 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-mfem_test_error") == 0){
          dmem_all_data.input.mfem_test_error_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-optimal_jacobi_weight") == 0){
+         dmem_all_data.input.optimal_jacobi_weight_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-eig_cg_max_iter") == 0){
+         arg_index++;
+         dmem_all_data.input.eig_CG_max_iter = atoi(argv[arg_index]);
       }
       arg_index++;
    }
