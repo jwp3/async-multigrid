@@ -968,6 +968,8 @@ void DMEM_MatrixFromFile(char *mat_file_str, hypre_ParCSRMatrix **A_ptr, MPI_Com
    if (my_id == 0){
       FreeTriplet(&T);
       FreeCSR(&A);
+      free(P.perm);
+      free(P.map);
    }
   // DMEM_WriteCSR(B, "metis_matrix_matlab.txt", 1, P, comm);
    CSRtoParHypreCSRMatrix(B, A_ptr, P, comm);

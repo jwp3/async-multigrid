@@ -1,29 +1,3 @@
-#include ./mfem_lassen/hypre_amg-setup/src/config/Makefile.config
-#
-#CINCLUDES = ${INCLUDES} ${MPIINCLUDE}
-#
-#CDEFS = -DHYPRE_TIMING -DHYPRE_FORTRAN
-#
-#C_COMPILE_FLAGS = \
-# -I$(srcdir)\
-# -I$(srcdir)/..\
-# -I${HYPRE_BUILD_DIR}/include\
-# ${CINCLUDES}\
-# ${CDEFS}
-#
-#MPILIBFLAGS = ${MPILIBDIRS} ${MPILIBS} ${MPIFLAGS}
-#LIBFLAGS = ${LDFLAGS} ${LIBS}
-#
-#XLINK = -Xlinker=-rpath,${HYPRE_BUILD_DIR}/lib
-#
-#LFLAGS =\
-# -L${HYPRE_BUILD_DIR}/lib -lHYPRE\
-# ${XLINK}\
-# ${MPILIBFLAGS}\
-# ${LAPACKLIBFLAGS}\
-# ${BLASLIBFLAGS}\
-# ${LIBFLAGS}
-#
 SRC_DIR=src/
 
 SMEM_CPP_FILES = $(SRC_DIR)Laplacian.cpp \
@@ -75,6 +49,7 @@ INCLUDE_LASSEN = \
  -I/usr/tce/packages/cuda/cuda-10.1.243/include \
  -I./mfem_lassen/hypre_amg-setup/src/hypre/include \
  -I./mfem_lassen/mfem-4.0 \
+ -I./mfem_lassen/metis-5.1.0/include \
 
 INCLUDE=$(INCLUDE_QUARTZ)
 COMPILE=$(COMPILE_QUARTZ)
@@ -89,7 +64,7 @@ LIBS_LASSEN = \
  -lmfem \
  -L./mfem_lassen/hypre_amg-setup/src/hypre/lib \
  -lHYPRE \
- -L./mfem_lassen/metis-4.0 \
+ -L./mfem_lassen/metis-5.1.0/lib \
  -lmetis \
  -lrt \
  -lcusparse \
@@ -108,7 +83,7 @@ DMEM_Main_lassen: $(SRC_DIR)DMEM_Main.cpp
 	$(COMPILE_LASSEN) $(INCLUDE_LASSEN) $(DMEM_CPP_FILES) $(SRC_DIR)DMEM_Main.cpp -o DMEM_Main_lassen $(LIBS_LASSEN)
 
 DMEM_Main_quartz: $(SRC_DIR)DMEM_Main.cpp
-	$(COMPILE_QUARTZ) $(SRC_DIR)DMEM_Main.cpp $(DMEM_CPP_FILES) $(VARS) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o DMEM_Main_quartz
+	$(COMPILE_QUARTZ) $(SRC_DIR)DMEM_Main.cpp $(DMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o DMEM_Main_quartz
 
 TextToBin: $(SRC_DIR)TextToBin.cpp
 	$(COMPILE_QUARTZ) $(SRC_DIR)TextToBin.cpp -o TextToBin

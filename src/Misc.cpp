@@ -581,8 +581,6 @@ void FreeOrdering(OrderingData *P)
    free(P->dispv);
    free(P->disp);
    free(P->part);
-   free(P->perm);
-   free(P->map);
 }
 
 void FreeMetis(MetisGraph *G)
