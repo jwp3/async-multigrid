@@ -35,7 +35,7 @@ MPICXX_COMPILE =  mpicxx -g -fopenmp -std=c++0x -O3 #-Wall
 
 COMPILE_CORI = CC -qopenmp -std=c++11 -O3 -mkl
 COMPILE_QUARTZ =  mpicxx -g -fopenmp -std=c++0x -O3
-COMPILE_LASSEN = nvcc -O3 -std=c++11 -x=cu --expt-extended-lambda -arch=sm_70 -ccbin mpicxx
+COMPILE_LASSEN = nvcc -g -O3 -std=c++11 -x=cu --expt-extended-lambda -arch=sm_70 -ccbin mpicxx
 
 INCLUDE_CORI = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
 INCLUDE_GOTHAM = -I/home/jwp3local/async-multigrid/mfem/mfem-3.4 -I/home/jwp3local/async-multigrid/mfem/hypre-2.11.2/src/hypre/include
@@ -47,7 +47,7 @@ INCLUDE_QUARTZ = \
 
 INCLUDE_LASSEN = \
  -I/usr/tce/packages/cuda/cuda-10.1.243/include \
- -I./mfem_lassen/hypre_amg-setup/src/hypre/include \
+ -I./mfem_lassen/hypre/src/hypre/include \
  -I./mfem_lassen/mfem-4.0 \
  -I./mfem_lassen/metis-5.1.0/include \
 
@@ -62,7 +62,7 @@ LIBS_QUARTZ = \
 LIBS_LASSEN = \
  -L./mfem_lassen/mfem-4.0 \
  -lmfem \
- -L./mfem_lassen/hypre_amg-setup/src/hypre/lib \
+ -L./mfem_lassen/hypre/src/hypre/lib \
  -lHYPRE \
  -L./mfem_lassen/metis-5.1.0/lib \
  -lmetis \

@@ -18,6 +18,10 @@
 #include <functional>
 #include <omp.h>
 #include<bits/stdc++.h>
+#include <numeric>
+#include <iterator>
+
+
 //#include <mkl.h>
 
 #include "_hypre_utilities.h"

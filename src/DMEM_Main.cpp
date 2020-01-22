@@ -115,11 +115,13 @@ int main (int argc, char *argv[])
    dmem_all_data.input.async_comm_save_divisor = 1;
    dmem_all_data.input.optimal_jacobi_weight_flag = 1;
    dmem_all_data.input.eig_CG_max_iter = 20;
+   dmem_all_data.input.only_setup_flag = 0;
+   dmem_all_data.input.only_build_matrix_flag = 0;
 
 //#ifdef HYPRE_USING_UNIFIED_MEMORY
 //   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
 //#else
-   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
+   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_HOST;
 //#endif
 
    /* Parse command line */
@@ -567,6 +569,13 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.input.eig_CG_max_iter = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-only_setup") == 0){
+         dmem_all_data.input.only_setup_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-only_build_matrix") == 0){
+         dmem_all_data.input.only_build_matrix_flag = 1;
+         dmem_all_data.input.only_setup_flag = 1;
+      }
       arg_index++;
    }
 
@@ -616,14 +625,18 @@ int main (int argc, char *argv[])
 
    start = omp_get_wtime(); 
    DMEM_Setup(&dmem_all_data);
-  // MPI_Finalize();
-  // return 0;
+   if (dmem_all_data.input.only_setup_flag == 1){
+      MPI_Finalize();
+      return 0;
+   }
    dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
    for (int s = 0; s < num_solvers; s++){
       dmem_all_data.input.solver = solvers[s];
       for (int run = 0; run < num_runs; run++){
          DMEM_ResetData(&dmem_all_data);
+        // MPI_Finalize();
+        // return 0;
 
          if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
             printf("\nSOLVER: ");
@@ -728,7 +741,6 @@ int main (int argc, char *argv[])
   //    }
   // }
 
-   MPI_Barrier(MPI_COMM_WORLD);
    MPI_Finalize();
    return 0;
 }

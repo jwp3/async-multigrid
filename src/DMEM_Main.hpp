@@ -116,6 +116,8 @@ typedef struct{
    int optimal_jacobi_weight_flag;
    char mat_file_str[1024];
    int eig_CG_max_iter;
+   int only_setup_flag;
+   int only_build_matrix_flag;
 }DMEM_InputData;
 
 typedef struct{

@@ -16,7 +16,8 @@ void ReorderTriplet(Triplet T, CSR *A, OrderingData *P);
 void ReadBinary_fread_metis(FILE *mat_file,
                             MetisGraph *G,
                             Triplet *T,
-                            int symm_flag);
+                            int symm_flag,
+                            int include_disconnected_points_flag);
 void Reorder(OrderingData *P, Triplet *T, CSR *A);
 void CSRtoParHypreCSRMatrix(CSR B,
                             hypre_ParCSRMatrix **A_ptr,
@@ -929,7 +930,7 @@ void DMEM_MatrixFromFile(char *mat_file_str, hypre_ParCSRMatrix **A_ptr, MPI_Com
       idx_t nparts = (idx_t)num_procs;
       idx_t options[METIS_NOPTIONS];
       FILE *mat_file = fopen(mat_file_str, "rb");
-      ReadBinary_fread_metis(mat_file, &G, &T, 1);
+      ReadBinary_fread_metis(mat_file, &G, &T, 1, 1);
       fclose(mat_file);
       A.n = B.n_glob = G.n;
       A.nnz = G.nnz;
@@ -1067,7 +1068,8 @@ void DMEM_DistributeCSR_RootToFine(CSR A,
 void ReadBinary_fread_metis(FILE *mat_file,
                             MetisGraph *G,
                             Triplet *T,
-                            int symm_flag)
+                            int symm_flag,
+                            int include_disconnected_points_flag)
 {
    using namespace std;
    size_t size;
@@ -1084,34 +1086,66 @@ void ReadBinary_fread_metis(FILE *mat_file,
    fread(buffer, sizeof(Triplet_AOS), size, mat_file);
 
    int file_lines = size/sizeof(Triplet_AOS);
-   int max_row = 0;
-   T->nnz = 0;
-   for (int k = 0; k < file_lines; k++){
+   int num_rows = (int)buffer[k].i;
+   int nnz = 0;
+
+   vector<int> row_count(num_rows, 0);
+   vector<int> line_flag(file_lines, 0);
+
+   for (int k = 1; k < file_lines; k++){
       row = buffer[k].i;
       col = buffer[k].j;
       elem = buffer[k].val;
 
       if (fabs(elem) > 0){
-         if (row > max_row){
-            max_row = row;
-         }
-         T->nnz += 1;
+         row_count[row-1]++;
+         line_flag[k] = 1;
+         nnz++;
          if (symm_flag == 1 && row != col){
-            T->nnz += 1;
+            nnz++;
          }
       }
    }
-   G->nnz = T->nnz;
-   G->n = T->n = max_row;
 
-   vector<list<int>> col_list(T->n);
-   vector<list<double>> elem_list(T->n);
-   for (int k = 0; k < file_lines; k++){
-      row = buffer[k].i;
-      col = buffer[k].j;
-      elem = buffer[k].val;
+   vector<int> flags_prefix_sum(num_rows, 0);
+   if (include_disconnected_points_flag == 1){
+      vector<int> disconnected_point_flag(num_rows, 0);
+      int num_disconnected_points = 0;
+      for (int k = 1; k < file_lines; k++){
+         row = buffer[k].i;
+         col = buffer[k].j;
+         elem = buffer[k].val;
 
-      if (fabs(elem) > 0){
+         if (line_flag[k] == 1){
+            if (row_count[row-1] <= 1){
+               line_flag[k] = 0;
+               disconnected_point_flag[row-1] = 1;
+               num_disconnected_points++;
+               num_rows--;
+               nnz--;
+            }
+            if (row_count[col-1] <= 1){
+               line_flag[k] = 0;
+            }
+         }
+      }
+      partial_sum(disconnected_point_flag.begin(), disconnected_point_flag.end(), flags_prefix_sum.begin(), plus<int>());
+   }
+  
+   G->n = T->n = num_rows;
+   G->nnz = T->nnz = nnz;
+
+   vector<list<int>> col_list(G->n);
+   vector<list<double>> elem_list(G->n);
+   for (int k = 1; k < file_lines; k++){
+      if (line_flag[k] == 1){
+         row = buffer[k].i;
+         col = buffer[k].j;
+         elem = buffer[k].val;
+
+         row -= flags_prefix_sum[row-1];
+         col -= flags_prefix_sum[col-1];
+
          col_list[row-1].push_back(col-1);
          elem_list[row-1].push_back(elem);
          if (symm_flag == 1 && row != col){

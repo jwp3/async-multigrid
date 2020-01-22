@@ -36,7 +36,6 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
    hypre_ParAMGData *amg_data;
    hypre_ParAMGData *amg_data_fine, *amg_data_gridk;
    hypre_ParCSRMatrix **A_array, **P_array, **R_array;
-   double start;
    int my_id, num_procs;
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -44,8 +43,10 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
    amg_data_fine = (hypre_ParAMGData *)dmem_all_data->hypre.solver;
    amg_data_gridk = (hypre_ParAMGData *)dmem_all_data->hypre.solver_gridk;
 
-   start = omp_get_wtime();
    SetupMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.b), MPI_COMM_WORLD);
+   if (dmem_all_data->input.only_build_matrix_flag == 1){
+      return;
+   }
    
    if ((dmem_all_data->input.smoother == JACOBI ||
         dmem_all_data->input.smoother == ASYNC_JACOBI) &&
