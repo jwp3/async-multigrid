@@ -6,6 +6,8 @@
 #include "DMEM_Add.hpp"
 #include "DMEM_Mult.hpp"
 
+HYPRE_Int vecop_machine;
+
 int main (int argc, char *argv[])
 {
    int my_id, num_procs;
@@ -118,11 +120,14 @@ int main (int argc, char *argv[])
    dmem_all_data.input.only_setup_flag = 0;
    dmem_all_data.input.only_build_matrix_flag = 0;
 
-//#ifdef HYPRE_USING_UNIFIED_MEMORY
-//   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
-//#else
+#if defined(HYPRE_USING_CUDA) || defined(HYPRE_USING_UNIFIED_MEMORY)
+   hypre_SetExecPolicy(HYPRE_EXEC_HOST);
    dmem_all_data.input.hypre_memory = HYPRE_MEMORY_HOST;
-//#endif
+   vecop_machine = HYPRE_MEMORY_HOST;
+#else
+   dmem_all_data.input.hypre_memory = HYPRE_MEMORY_HOST;
+   vecop_machine = HYPRE_MEMORY_HOST;
+#endif
 
    /* Parse command line */
    int arg_index = 0;
@@ -249,7 +254,7 @@ int main (int argc, char *argv[])
             dmem_all_data.input.async_smoother_flag = 1;
          }
          else if (strcmp(argv[arg_index], "async_sps") == 0){
-            dmem_all_data.input.smoother = ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL;
+            dmem_all_data.input.smoother = ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI;
             dmem_all_data.input.smooth_interp_type = JACOBI;
             dmem_all_data.input.async_smoother_flag = 1;
          }
@@ -351,6 +356,24 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "scalar") == 0){
             dmem_all_data.input.assign_procs_type = ASSIGN_PROCS_SCALAR;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-hypre_mem") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "host") == 0){
+            dmem_all_data.input.hypre_memory = HYPRE_MEMORY_HOST;
+         }
+         else if (strcmp(argv[arg_index], "shared") == 0){
+            dmem_all_data.input.hypre_memory = HYPRE_MEMORY_SHARED;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-vecop") == 0){
+         arg_index++;
+         if (strcmp(argv[arg_index], "host") == 0){
+            vecop_machine = HYPRE_MEMORY_HOST;
+         }
+         else if (strcmp(argv[arg_index], "device") == 0){
+            vecop_machine = HYPRE_MEMORY_SHARED;
          }
       }
       else if (strcmp(argv[arg_index], "-assign_procs_scalar") == 0){
@@ -593,12 +616,18 @@ int main (int argc, char *argv[])
       num_solvers = 1;
    }
 
-   if ((dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL || dmem_all_data.input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL || dmem_all_data.input.smoother == ASYNC_JACOBI) &&
+   if ((dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI ||
+        dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_GAUSS_SEIDEL || 
+        dmem_all_data.input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL || 
+        dmem_all_data.input.smoother == ASYNC_JACOBI) &&
        dmem_all_data.input.async_flag == 0){
       dmem_all_data.input.smoother = JACOBI;
    }
-   else if ((dmem_all_data.input.solver == SYNC_AFACX || dmem_all_data.input.solver == SYNC_MULTADD || dmem_all_data.input.solver == MULT) &&
-            dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
+   else if ((dmem_all_data.input.solver == SYNC_AFACX ||
+             dmem_all_data.input.solver == SYNC_MULTADD || 
+             dmem_all_data.input.solver == MULT) &&
+            (dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI ||
+             dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_GAUSS_SEIDEL)){
       dmem_all_data.input.smoother = JACOBI;
    }
 
@@ -623,13 +652,13 @@ int main (int argc, char *argv[])
   // srand(0);
   // mkl_set_num_threads(1);
 
-   start = omp_get_wtime(); 
+   start = MPI_Wtime(); 
    DMEM_Setup(&dmem_all_data);
+   dmem_all_data.output.setup_wtime = MPI_Wtime() - start;
    if (dmem_all_data.input.only_setup_flag == 1){
       MPI_Finalize();
       return 0;
    }
-   dmem_all_data.output.setup_wtime = omp_get_wtime() - start;
 
    for (int s = 0; s < num_solvers; s++){
       dmem_all_data.input.solver = solvers[s];

@@ -20,7 +20,7 @@ HYPRE_Real InnerProdFlag(hypre_Vector *x_local,
                          HYPRE_Real my_flag,
                          HYPRE_Real *sum_flags);
 
-void DMEM_HypreParVector_VecAxpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex *scale, HYPRE_Int size);
+void DMEM_HypreParVector_Ivaxpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex *scale, HYPRE_Int size);
 
 void DMEM_HypreParVector_Axpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex alpha, HYPRE_Int size);
 

@@ -44,8 +44,9 @@
 #define L1_JACOBI 6
 #define ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL 7
 #define ASYNC_JACOBI 8
-#define ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL 9
+#define ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_GAUSS_SEIDEL 9
 #define ASYNC_L1_JACOBI 10
+#define ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI 11
 
 #define MULT 0
 #define AFACX 1
@@ -154,6 +155,7 @@ typedef struct{
    int global_conv_flag;
    double smooth_weight;
    int smoother;
+   int block_smoother;
    int solver;
    int async_flag;
    int async_type;

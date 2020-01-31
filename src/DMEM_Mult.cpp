@@ -32,7 +32,7 @@ void DMEM_Mult(DMEM_AllData *dmem_all_data)
   
    dmem_all_data->iter.cycle = 0;
    
-   double begin = MPI_Wtime();
+   double solve_begin = MPI_Wtime();
    while (1){
       MultCycle(dmem_all_data, dmem_all_data->iter.cycle);
 
@@ -54,7 +54,7 @@ void DMEM_Mult(DMEM_AllData *dmem_all_data)
       dmem_all_data->iter.cycle += 1;
       if (res_norm/dmem_all_data->output.r0_norm2 < dmem_all_data->input.tol || dmem_all_data->iter.cycle == dmem_all_data->input.num_cycles) break;
    }
-   dmem_all_data->output.solve_wtime = MPI_Wtime() - begin;
+   dmem_all_data->output.solve_wtime = MPI_Wtime() - solve_begin;
    DMEM_HypreParVector_Copy(dmem_all_data->vector_fine.x, U_array[0], num_rows);
    hypre_ParCSRMatrixMatvecOutOfPlace(1.0,
                                       dmem_all_data->matrix.A_fine,
@@ -121,23 +121,13 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       }
       else {
          DMEM_HypreParVector_Copy(Vtemp, F_array[fine_grid], num_rows);
-        // DMEM_HypreParVector_Set(U_array[fine_grid], 0.0, num_rows);
+         DMEM_HypreParVector_Set(U_array[fine_grid], 0.0, num_rows);
       }
-      dmem_all_data->output.vecop_wtime = MPI_Wtime() - vecop_begin;
+      dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 
       if (dmem_all_data->input.smoother == L1_JACOBI){
          vecop_begin = MPI_Wtime();
-        // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
-         if (level == 0){
-            for (int i = 0; i < num_rows; i++){
-               u_local_data[i] += v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
-            }
-         }
-         else {
-            for (int i = 0; i < num_rows; i++){
-               u_local_data[i] = v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
-            }
-         }
+         DMEM_HypreParVector_Ivaxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
          dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
       }
       else if (dmem_all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
@@ -156,18 +146,8 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       }
       else {
          vecop_begin = MPI_Wtime();
-         if (level == 0){
-            for (int i = 0; i < num_rows; i++){
-               u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
-            }
-         }
-         else {
-            for (int i = 0; i < num_rows; i++){
-               u_local_data[i] = dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
-            }
-         }
+         DMEM_HypreParVector_Ivaxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
          dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
-        // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
       }
 
       vecop_begin = MPI_Wtime(); 
@@ -261,10 +241,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
 
       if (dmem_all_data->input.smoother == L1_JACOBI){
          vecop_begin = MPI_Wtime();
-        // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
-         for (int i = 0; i < num_rows; i++){
-            u_local_data[i] += v_local_data[i] / dmem_all_data->matrix.L1_row_norm_fine[fine_grid][i];
-         }
+         DMEM_HypreParVector_Ivaxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.L1_row_norm_fine[fine_grid], num_rows);
          dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
       }
       else if (dmem_all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
@@ -283,10 +260,7 @@ void MultCycle(DMEM_AllData *dmem_all_data,
       }
       else {
          vecop_begin = MPI_Wtime();
-        // DMEM_HypreParVector_VecAxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
-         for (int i = 0; i < num_rows; i++){
-            u_local_data[i] += dmem_all_data->input.smooth_weight * v_local_data[i] / A_data[A_i[i]];
-         }
+         DMEM_HypreParVector_Ivaxpy(U_array[fine_grid], Vtemp, dmem_all_data->matrix.wJacobi_scale_fine[fine_grid], num_rows);
          dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
       }
       dmem_all_data->output.smooth_wtime += MPI_Wtime() - smooth_begin;

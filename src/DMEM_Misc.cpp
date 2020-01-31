@@ -2,6 +2,8 @@
 #include "DMEM_Misc.hpp"
 #include "_hypre_utilities.h"
 
+extern HYPRE_Int hypre_memory;
+
 void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
 {
    int my_id, num_procs;
@@ -29,8 +31,9 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    double min_mpiwait_wtime, max_mpiwait_wtime, mean_mpiwait_wtime;
    double min_mpitest_wtime, max_mpitest_wtime, mean_mpitest_wtime;
    
-   double solve_wtime, residual_wtime, residual_norm_wtime, prolong_wtime, restrict_wtime, vecop_wtime, matvec_wtime, smooth_wtime, coarsest_solve_wtime, comm_wtime, start_wtime, end_wtime;
+   int sum_num_messages, min_num_messages, max_num_messages;
 
+   double solve_wtime, residual_wtime, residual_norm_wtime, prolong_wtime, restrict_wtime, vecop_wtime, matvec_wtime, smooth_wtime, coarsest_solve_wtime, comm_wtime, start_wtime, end_wtime;
 
   // if (dmem_all_data->input.solver == MULTADD){
   //    int my_id_local, num_procs_local;
@@ -61,7 +64,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.restrict_wtime),       &mean_restrict_wtime,       1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.prolong_wtime),        &mean_prolong_wtime,        1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.matvec_wtime),         &mean_matvec_wtime,         1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.vecop_wtime),          &mean_vecop_wtime,         1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.vecop_wtime),          &mean_vecop_wtime,          1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.smooth_wtime),         &mean_smooth_wtime,         1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   // MPI_Reduce(&(dmem_all_data->output.coarsest_solve_wtime), &mean_coarsest_solve_wtime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.comm_wtime),           &mean_comm_wtime,           1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -72,7 +75,9 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &mean_mpitest_wtime,        1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &mean_mpiwait_wtime,        1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->iter.cycle),                  &sum_cycles,                1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->iter.relax),                  &sum_relax,                1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->iter.relax),                  &sum_relax,                 1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.num_messages),         &sum_num_messages,          1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
+   
 
    mean_solve_wtime /= (double)num_procs;
    mean_residual_wtime /= (double)num_procs;
@@ -112,7 +117,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.restrict_wtime),       &min_restrict_wtime,        1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.prolong_wtime),        &min_prolong_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.matvec_wtime),         &min_matvec_wtime,          1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.vecop_wtime),          &min_vecop_wtime,          1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.vecop_wtime),          &min_vecop_wtime,           1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.smooth_wtime),         &min_smooth_wtime,          1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
   // MPI_Reduce(&(dmem_all_data->output.coarsest_solve_wtime), &min_coarsest_solve_wtime,  1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.comm_wtime),           &min_comm_wtime,            1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
@@ -123,6 +128,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &min_mpitest_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &min_mpiwait_wtime,         1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->iter.cycle),                  &min_cycles,                1, MPI_INT,    MPI_MIN, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.num_messages),         &min_num_messages,          1, MPI_INT,    MPI_MIN, 0, MPI_COMM_WORLD);
 
    if ((dmem_all_data->input.solver == MULTADD ||
         dmem_all_data->input.solver == BPX) && 
@@ -137,7 +143,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.restrict_wtime),       &max_restrict_wtime,        1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.prolong_wtime),        &max_prolong_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.matvec_wtime),         &max_matvec_wtime,          1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->output.vecop_wtime),          &max_vecop_wtime,          1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.vecop_wtime),          &max_vecop_wtime,           1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.smooth_wtime),         &max_smooth_wtime,          1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.comm_wtime),           &max_comm_wtime,            1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.start_wtime),          &max_start_wtime,           1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
@@ -147,6 +153,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &max_mpitest_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &max_mpiwait_wtime,         1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->iter.cycle),                  &max_cycles,                1, MPI_INT,    MPI_MAX, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&(dmem_all_data->output.num_messages),         &max_num_messages,          1, MPI_INT,    MPI_MAX, 0, MPI_COMM_WORLD);
 
 
   // if (dmem_all_data->input.solver == MULT){
@@ -177,7 +184,8 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    if (my_id == 0){
       char print_str[1000];
       if (dmem_all_data->input.oneline_output_flag == 0){
-        // printf("Initial Residual 2-norm = %e\n", dmem_all_data->output.r0_norm2);
+         printf("Setup time = %e, build matrix time = %e\n\n", 
+                dmem_all_data->output.setup_wtime, dmem_all_data->output.build_matrix_wtime);
          strcpy(print_str, "Relative Residual 2-norm = %e\n"
                            "Relative Error A-norm (only for rhs==0) = %e\n\n"
                            //"Setup stats\n\n"
@@ -199,6 +207,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
                            "MPI_Irecv time       \t%.2e\t%.2e\t%.2e\n"
                            "MPI_Test time        \t%.2e\t%.2e\t%.2e\n"
                            "MPI_Wait time        \t%.2e\t%.2e\t%.2e\n"
+                           "num messages         \t%.2d\t\t%.2d\t\t%.2d\n"
                            );
       }
       else {
@@ -218,7 +227,8 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
                            "%e %e %e "
                            "%e %e %e "
                            "%e %e %e "
-                           "%e %e %e\n");
+                           "%e %e %e "
+                           "%d %d %d\n");
       }
       printf(print_str,
              dmem_all_data->output.r_norm2/dmem_all_data->output.r0_norm2,
@@ -238,7 +248,8 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
              mean_mpiisend_wtime, max_mpiisend_wtime, min_mpiisend_wtime,
              mean_mpiirecv_wtime, max_mpiirecv_wtime, min_mpiirecv_wtime,
              mean_mpitest_wtime, max_mpitest_wtime, min_mpitest_wtime,
-             mean_mpiwait_wtime, max_mpiwait_wtime, min_mpiwait_wtime);
+             mean_mpiwait_wtime, max_mpiwait_wtime, min_mpiwait_wtime,
+             sum_num_messages, max_num_messages, min_num_messages);
    }
 }
 
@@ -384,12 +395,16 @@ HYPRE_Real InnerProdFlag(hypre_Vector *x_local,
 }
 
 /* y = y + x ./ scale */
-void DMEM_HypreParVector_VecAxpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex *scale, HYPRE_Int size)
+void DMEM_HypreParVector_Ivaxpy(hypre_ParVector *y, hypre_ParVector *x, HYPRE_Complex *scale, HYPRE_Int size)
 {
-   HYPRE_Real *y_local_data = hypre_VectorData(hypre_ParVectorLocalVector(y));
-   HYPRE_Real *x_local_data = hypre_VectorData(hypre_ParVectorLocalVector(x));
+   hypre_Vector *y_local = hypre_ParVectorLocalVector(y);
+   hypre_Vector *x_local = hypre_ParVectorLocalVector(x);
+   HYPRE_Real *y_local_data = hypre_VectorData(y_local);
+   HYPRE_Real *x_local_data = hypre_VectorData(x_local);
 
 #if defined(HYPRE_USING_CUDA)
+   hypre_SeqVectorPrefetch(y_local, HYPRE_MEMORY_DEVICE);
+   hypre_SeqVectorPrefetch(x_local, HYPRE_MEMORY_DEVICE);
    hypreDevice_IVAXPY(size, scale, x_local_data, y_local_data);
 #else
    for (int i = 0; i < size; i++){
@@ -422,81 +437,84 @@ void DMEM_HypreParVector_Scale(hypre_ParVector *y, HYPRE_Complex alpha, HYPRE_In
    hypre_ParVectorScale(alpha, y);
 }
 
+// TODO: turn the DMEM_HypreRealArray functions into hypre_SeqVector calls
+void DMEM_HypreRealArray_Prefetch(HYPRE_Real *y, HYPRE_Int size, HYPRE_Int to_location)
+{
+   hypre_TMemcpy(y, y, HYPRE_Real, size, to_location, HYPRE_MEMORY_SHARED);   
+}
+
 void DMEM_HypreRealArray_Copy(HYPRE_Real *y, HYPRE_Real *x, HYPRE_Int size)
 {
-   if (size == 0){
-      return;
+   if (vecop_machine == HYPRE_MEMORY_SHARED){
+      #if defined(HYPRE_USING_CUDA)
+         DMEM_HypreRealArray_Prefetch(x, size, HYPRE_MEMORY_DEVICE);
+         DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
+         #if defined(HYPRE_USING_CUBLAS)
+            HYPRE_CUBLAS_CALL( cublasDcopy(hypre_HandleCublasHandle(hypre_handle), size, x, 1, y, 1) );
+         #else
+            HYPRE_THRUST_CALL( copy_n, x, size, y );
+         #endif
+         hypre_SyncCudaComputeStream(hypre_handle);
+      #else
+         for (int i = 0; i < size; i++){
+            y[i] = x[i];
+         }
+      #endif
    }
-
-#if defined(HYPRE_USING_CUDA)
-   DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
-   DMEM_HypreRealArray_Prefetch(x, size, HYPRE_MEMORY_DEVICE);
-#if defined(HYPRE_USING_CUBLAS)
-   HYPRE_CUBLAS_CALL(cublasDcopy(hypre_HandleCublasHandle(hypre_handle), size, x, 1, y, 1));
-#else
-   HYPRE_THRUST_CALL(copy_n, x, size, y);
-#endif
-#else
-   for (int i = 0; i < size; i++){
-      y[i] = x[i];
+   else {
+      for (int i = 0; i < size; i++){
+         y[i] = x[i];
+      }
    }
-#endif
-
-#if defined(HYPRE_USING_CUDA)
-   hypre_SyncCudaComputeStream(hypre_handle);
-#endif
 }
 
 void DMEM_HypreRealArray_Axpy(HYPRE_Real *y, HYPRE_Real *x, HYPRE_Real alpha, HYPRE_Int size)
 {
-   if (size == 0){
-      return;
+   if (vecop_machine == HYPRE_MEMORY_SHARED){
+      #if defined(HYPRE_USING_CUDA)
+         DMEM_HypreRealArray_Prefetch(x, size, HYPRE_MEMORY_DEVICE);
+         DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
+         #if defined(HYPRE_USING_CUBLAS)
+            HYPRE_CUBLAS_CALL( cublasDaxpy(hypre_HandleCublasHandle(hypre_handle), size, &alpha, x, 1, y, 1) );
+         #else
+            HYPRE_THRUST_CALL( transform, x, x + size, y, y, alpha * _1 + _2 );
+         #endif
+         hypre_SyncCudaComputeStream(hypre_handle);
+      #else
+         for (int i = 0; i < size; i++){
+            y[i] += alpha * x[i];
+         }  
+      #endif
    }
-
-#if defined(HYPRE_USING_CUDA)
-   DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
-   DMEM_HypreRealArray_Prefetch(x, size, HYPRE_MEMORY_DEVICE);
-#if defined(HYPRE_USING_CUBLAS)
-   HYPRE_CUBLAS_CALL(cublasDaxpy(hypre_HandleCublasHandle(hypre_handle), size, &alpha, x, 1, y, 1));
-#else
-   HYPRE_THRUST_CALL(transform, x, x+size, y, y, alpha * _1 + _2);
-#endif
-#else
-   for (int i = 0; i < size; i++){
-      y[i] += alpha * x[i];
+   else {
+      for (int i = 0; i < size; i++){
+         y[i] += alpha * x[i];
+      }
    }
-#endif
-
-#if defined(HYPRE_USING_CUDA)
-   hypre_SyncCudaComputeStream(hypre_handle);
-#endif
 }
 
 void DMEM_HypreRealArray_Set(HYPRE_Real *y, HYPRE_Real alpha, HYPRE_Int size)
 {
-   if (size == 0){
-      return;
+   if (vecop_machine == HYPRE_MEMORY_SHARED){
+      #if defined(HYPRE_USING_CUDA)
+         DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
+         #if defined(HYPRE_USING_CUBLAS)
+            HYPRE_CUBLAS_CALL( cublasDscal(hypre_HandleCublasHandle(hypre_handle), size, &alpha, y_data, 1) );
+         #else
+            HYPRE_THRUST_CALL( transform, y, y + size, y, alpha * _1 );
+         #endif
+         hypre_SyncCudaComputeStream(hypre_handle);
+      #else
+         for (int i = 0; i < size; i++){
+            y[i] = alpha;
+         }
+      #endif
    }
-
-#if defined(HYPRE_USING_CUDA)
-   DMEM_HypreRealArray_Prefetch(y, size, HYPRE_MEMORY_DEVICE);
-   HYPRE_THRUST_CALL(fill_n, y, size, alpha);
-#else
-   for (int i = 0; i < size; i++){
-      y[i] = alpha;
+   else {
+      for (int i = 0; i < size; i++){
+         y[i] = alpha;
+      }
    }
-#endif
-
-#if defined(HYPRE_USING_CUDA)
-   hypre_SyncCudaComputeStream(hypre_handle);
-#endif
-}
-
-void DMEM_HypreRealArray_Prefetch(HYPRE_Real *y, HYPRE_Int size, HYPRE_Int to_location)
-{
-#ifdef HYPRE_USING_UNIFIED_MEMORY
-   hypre_TMemcpy(y, y, HYPRE_Real, size, to_location, HYPRE_MEMORY_SHARED);
-#endif
 }
 
 void DMEM_WriteCSR(CSR A, char *out_str, int base, OrderingData P, MPI_Comm comm)

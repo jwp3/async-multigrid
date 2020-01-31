@@ -925,45 +925,56 @@ void DMEM_MatrixFromFile(char *mat_file_str, hypre_ParCSRMatrix **A_ptr, MPI_Com
    OrderingData P;
 
    P.nparts = num_procs;
-
+   int file_err = 0;
    if (my_id == 0){
       idx_t nparts = (idx_t)num_procs;
       idx_t options[METIS_NOPTIONS];
       FILE *mat_file = fopen(mat_file_str, "rb");
-      ReadBinary_fread_metis(mat_file, &G, &T, 1, 1);
-      fclose(mat_file);
-      A.n = B.n_glob = G.n;
-      A.nnz = G.nnz;
-      METIS_SetDefaultOptions(options);
-      options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
-      idx_t *perm = (idx_t *)calloc(A.n, sizeof(idx_t));
-      if (num_procs > 1){
-         flag =  METIS_PartGraphKway(&(G.n), &ncon, G.xadj, G.adjncy, NULL, 
-                                     NULL, NULL, &nparts, NULL, NULL, 
-                                     options, &objval, perm);
-         if (flag != METIS_OK){
-            printf("****WARNING****: METIS returned error with code %d.\n", flag);
+      if (mat_file != NULL){
+         ReadBinary_fread_metis(mat_file, &G, &T, 1, 1);
+         fclose(mat_file);
+         A.n = B.n_glob = G.n;
+         A.nnz = G.nnz;
+         METIS_SetDefaultOptions(options);
+         options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+         idx_t *perm = (idx_t *)calloc(A.n, sizeof(idx_t));
+         if (num_procs > 1){
+            flag =  METIS_PartGraphKway(&(G.n), &ncon, G.xadj, G.adjncy, NULL, 
+                                        NULL, NULL, &nparts, NULL, NULL, 
+                                        options, &objval, perm);
+            if (flag != METIS_OK){
+               printf("****WARNING****: METIS returned error with code %d.\n", flag);
+            }
          }
+         else {
+            for (int i = 0; i < A.n; i++) perm[i] = 0;
+         }
+         FreeMetis(&G);
+
+         P.perm = (int *)calloc(A.n, sizeof(int));
+         P.part = (int *)calloc(P.nparts, sizeof(int));
+         for (int i = 0; i < A.n; i++){
+            P.perm[i] = perm[i];
+            P.part[P.perm[i]]++;
+         }
+         free(perm);
+         P.disp = (int *)malloc((P.nparts+1) * sizeof(int));
+         P.disp[0] = 0;
+         for (int i = 0; i < P.nparts; i++){
+            P.disp[i+1] = P.disp[i] + P.part[i];
+         }
+         Reorder(&P, &T, &A);
+         //WriteCSR(A, "metis_matrix_matlab.txt", 1);
       }
       else {
-         for (int i = 0; i < A.n; i++) perm[i] = 0;
+         file_err = 1;
       }
-      FreeMetis(&G);
-
-      P.perm = (int *)calloc(A.n, sizeof(int));
-      P.part = (int *)calloc(P.nparts, sizeof(int));
-      for (int i = 0; i < A.n; i++){
-         P.perm[i] = perm[i];
-         P.part[P.perm[i]]++;
-      }
-      free(perm);
-      P.disp = (int *)malloc((P.nparts+1) * sizeof(int));
-      P.disp[0] = 0;
-      for (int i = 0; i < P.nparts; i++){
-         P.disp[i+1] = P.disp[i] + P.part[i];
-      }
-      Reorder(&P, &T, &A);
-      //WriteCSR(A, "metis_matrix_matlab.txt", 1);
+   }
+   MPI_Bcast(&file_err, 1, MPI_INT, 0, MPI_COMM_WORLD);
+   if (file_err == 1){ 
+      printf("ERROR: incorrect matrix file \"%s\"\n", mat_file_str);
+      MPI_Finalize();
+      exit(1);
    }
    DMEM_DistributeCSR_RootToFine(A, &B, &P, comm);
    if (my_id == 0){

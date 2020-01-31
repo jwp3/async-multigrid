@@ -84,7 +84,8 @@ void DMEM_Add(DMEM_AllData *dmem_all_data)
       if (dmem_all_data->input.smoother == ASYNC_JACOBI ||
           dmem_all_data->input.smoother == ASYNC_L1_JACOBI ||
           dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL ||
-          dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
+          dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI ||
+          dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_GAUSS_SEIDEL){
          DMEM_HypreParVector_Copy(dmem_all_data->vector_gridk.r, F_array_gridk[finest_level], num_rows_gridk);
          DMEM_AsyncSmooth(dmem_all_data, finest_level);
         // if (dmem_all_data->input.async_flag == 0){
@@ -785,10 +786,6 @@ void DMEM_AddCheckComm(DMEM_AllData *dmem_all_data)
                         &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv),
                         e_local_data,
                         ACCUMULATE);
-  // recv_flag = SendRecv(dmem_all_data,
-  //                      &(dmem_all_data->comm.gridjToGridk_Correct_insideRecv),
-  //                      e_local_data,
-  //                      ACCUMULATE);
    dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
    if (recv_flag){
       vecop_begin = MPI_Wtime();
@@ -799,9 +796,6 @@ void DMEM_AddCheckComm(DMEM_AllData *dmem_all_data)
    for (int i = 0; i < dmem_all_data->comm.gridjToGridk_Correct_outsideSend.procs.size(); i++){
       CheckInFlight(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), i);
    }
-  // for (int i = 0; i < dmem_all_data->comm.gridjToGridk_Correct_insideSend.procs.size(); i++){
-  //    CheckInFlight(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), i);
-  // }
    dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
 }
 

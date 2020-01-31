@@ -39,6 +39,7 @@ using namespace mfem;
 typedef struct{
    vector<double> level_wtime;
    double setup_wtime;
+   double build_matrix_wtime;
    double solve_wtime;
    double smooth_wtime;
    double residual_wtime;
@@ -64,6 +65,7 @@ typedef struct{
    double e_Anorm;
    double hypre_e_norm2;
    double mfem_e_norm2;
+   int num_messages;
 }DMEM_OutputData;
 
 typedef struct{
@@ -312,5 +314,7 @@ typedef struct{
    DMEM_MfemData mfem;
    DMEM_IterData iter;
 }DMEM_AllData;
+
+extern HYPRE_Int vecop_machine;
 
 #endif

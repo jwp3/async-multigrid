@@ -37,23 +37,30 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
    hypre_ParAMGData *amg_data_fine, *amg_data_gridk;
    hypre_ParCSRMatrix **A_array, **P_array, **R_array;
    int my_id, num_procs;
+   double build_matrix_start;
+ 
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     
    amg_data_fine = (hypre_ParAMGData *)dmem_all_data->hypre.solver;
    amg_data_gridk = (hypre_ParAMGData *)dmem_all_data->hypre.solver_gridk;
 
+   build_matrix_start = MPI_Wtime();
    SetupMatrix(dmem_all_data, &(dmem_all_data->matrix.A_fine), &(dmem_all_data->vector_fine.b), MPI_COMM_WORLD);
+   dmem_all_data->output.build_matrix_wtime = MPI_Wtime() - build_matrix_start;
+
    if (dmem_all_data->input.only_build_matrix_flag == 1){
       return;
    }
    
    if ((dmem_all_data->input.smoother == JACOBI ||
-        dmem_all_data->input.smoother == ASYNC_JACOBI) &&
+        dmem_all_data->input.smoother == ASYNC_JACOBI ||
+        dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI) &&
         dmem_all_data->input.optimal_jacobi_weight_flag == 1){
       HYPRE_Real max_eig, min_eig;
       hypre_ParCSRMaxEigEstimateCG(dmem_all_data->matrix.A_fine, 1, dmem_all_data->input.eig_CG_max_iter, &max_eig, &min_eig);
-      dmem_all_data->input.smooth_weight = 2.0/(max_eig + min_eig);//1.0/max_eig;
+     // dmem_all_data->input.smooth_weight = 2.0/(max_eig + min_eig);
+      dmem_all_data->input.smooth_weight = 1.0/max_eig;
    }
   // char buffer[100];
   // sprintf(buffer, "A_%d.txt", num_procs);
@@ -270,14 +277,23 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
           dmem_all_data->input.solver == MULT_MULTADD ||
           dmem_all_data->input.solver == AFACX){
          dmem_all_data->matrix.L1_row_norm_gridk = hypre_CTAlloc(HYPRE_Real *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
+         dmem_all_data->matrix.symmL1_row_norm_gridk = hypre_CTAlloc(HYPRE_Real *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
          A_array = hypre_ParAMGDataAArray(amg_data_gridk);
          for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
             hypre_ParCSRComputeL1Norms(A_array[level], 1, NULL, &(dmem_all_data->matrix.L1_row_norm_gridk[level]));
          }
+         for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+            int num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A_array[level]));
+            dmem_all_data->matrix.symmL1_row_norm_gridk[level] = hypre_CTAlloc(HYPRE_Real, num_rows, dmem_all_data->input.hypre_memory);
+            for (int i = 0; i < num_rows; i++){
+               dmem_all_data->matrix.symmL1_row_norm_gridk[level][i] = -dmem_all_data->matrix.L1_row_norm_gridk[level][i];
+            }
+         }
       }
    }
    else if (dmem_all_data->input.smoother == JACOBI ||
-            dmem_all_data->input.smoother == ASYNC_JACOBI){
+            dmem_all_data->input.smoother == ASYNC_JACOBI ||
+            dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI){
       if (dmem_all_data->input.solver == MULT_MULTADD ||
           dmem_all_data->input.solver == MULT ||
           dmem_all_data->input.solver == SYNC_MULTADD ||
@@ -309,7 +325,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
             dmem_all_data->matrix.symmwJacobi_scale_gridk[level] = hypre_CTAlloc(HYPRE_Real, num_rows, dmem_all_data->input.hypre_memory);
             for (int i = 0; i < num_rows; i++){
                dmem_all_data->matrix.wJacobi_scale_gridk[level][i] = A_data[A_i[i]] / dmem_all_data->input.smooth_weight;
-               dmem_all_data->matrix.symmwJacobi_scale_gridk[level][i] = -2.0 * dmem_all_data->matrix.wJacobi_scale_gridk[level][i];
+               dmem_all_data->matrix.symmwJacobi_scale_gridk[level][i] = -dmem_all_data->matrix.wJacobi_scale_gridk[level][i];
             }
          }
       }
@@ -411,7 +427,8 @@ void AllocCommVars(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data)
    
    comm_data->requests = (MPI_Request *)malloc(comm_data->procs.size() * sizeof(MPI_Request));
 
-   if (dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL &&
+   if ((dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI ||
+       dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_GAUSS_SEIDEL) &&
        comm_data->type == FINE_INTRA_OUTSIDE_RECV &&
        dmem_all_data->grid.my_grid == 0){
       comm_data->r_norm.resize(comm_data->procs.size(), 0.0);
@@ -1288,6 +1305,7 @@ void ResetOutputData(DMEM_AllData *dmem_all_data)
    dmem_all_data->output.mpiirecv_wtime = 0.0;
    dmem_all_data->output.mpitest_wtime = 0.0;
    dmem_all_data->output.mpiwait_wtime = 0.0;
+   dmem_all_data->output.num_messages = 0;
 }
 
 void ResetCommData(DMEM_CommData *comm_data)
@@ -1629,7 +1647,8 @@ void ComputeWork(DMEM_AllData *dmem_all_data)
          if (level == 0 && dmem_all_data->input.solver == MULTADD && 
              (dmem_all_data->input.smoother == ASYNC_JACOBI ||
               dmem_all_data->input.smoother == ASYNC_HYBRID_JACOBI_GAUSS_SEIDEL ||
-              dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL)){
+              dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI ||
+              dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_GAUSS_SEIDEL)){
            // dmem_all_data->grid.level_work[level] += (double)hypre_ParCSRMatrixGlobalNumRows(A_array[fine_grid]);
             dmem_all_data->grid.level_work[level] += (double)(hypre_ParCSRMatrixNumNonzeros(A_array[fine_grid]) + 2.0*(double)hypre_ParCSRMatrixGlobalNumRows(A_array[fine_grid]));
          }
