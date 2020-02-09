@@ -261,7 +261,7 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                             &(comm_data->requests[i]));
             dmem_all_data->output.mpiisend_wtime += MPI_Wtime() - mpiisend_begin;
             comm_data->message_count[i]++;
-            dmem_all_data->output.num_messages++;
+           // dmem_all_data->output.num_messages++;
             return_flag = 1;
          }
       }

@@ -168,7 +168,7 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
          vecop_begin = MPI_Wtime();
          DMEM_HypreParVector_Set(dmem_all_data->vector_gridk.e, 0.0, num_rows);
          dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
-         if (update_flag == 1 || send_gridk_flag == 0){
+         if (update_flag == 1/* || send_gridk_flag == 0*/){
             comm_begin = MPI_Wtime();
             send_gridk_flag = SendRecv(dmem_all_data,
                                        &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend),
@@ -200,14 +200,12 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
          /* if jacobi, send to intra now s.t. there is comm-comp overlap*/
          if (dmem_all_data->input.smoother == ASYNC_JACOBI ||
              dmem_all_data->input.smoother == ASYNC_L1_JACOBI){
-            if (update_flag == 1 || send_intra_flag == 0){
-               comm_begin = MPI_Wtime();
-               send_intra_flag = SendRecv(dmem_all_data,
-                                          &(dmem_all_data->comm.finestIntra_outsideSend),
-                                          e_local_data,
-                                          ACCUMULATE);
-               dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
-            }
+            comm_begin = MPI_Wtime();
+            send_intra_flag = SendRecv(dmem_all_data,
+                                       &(dmem_all_data->comm.finestIntra_outsideSend),
+                                       e_local_data,
+                                       ACCUMULATE);
+            dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
          }
 
          /* update diag residual */
@@ -511,9 +509,11 @@ void AsyncSmoothEnd(DMEM_AllData *dmem_all_data)
 double StochasticParallelSouthwellUpdateProbability(DMEM_AllData *dmem_all_data)
 {
    double x = 0.0;
-   for (int i = 0; i < dmem_all_data->comm.finestIntra_outsideRecv.procs.size(); i++){
-      if (dmem_all_data->iter.r_L1norm_local < dmem_all_data->comm.finestIntra_outsideRecv.r_norm[i]){
-         x++;
+   if (dmem_all_data->input.sps_probability_type != SPS_PROBABILITY_RANDOM){
+      for (int i = 0; i < dmem_all_data->comm.finestIntra_outsideRecv.procs.size(); i++){
+         if (dmem_all_data->iter.r_L1norm_local < dmem_all_data->comm.finestIntra_outsideRecv.r_norm[i]){
+            x++;
+         }
       }
    }
    
@@ -522,8 +522,11 @@ double StochasticParallelSouthwellUpdateProbability(DMEM_AllData *dmem_all_data)
    if (dmem_all_data->input.sps_probability_type == SPS_PROBABILITY_INVERSE){ 
       p = (1.0/x)*(1.0/alpha);
    }
-   else {
+   else if (dmem_all_data->input.sps_probability_type == SPS_PROBABILITY_EXPONENTIAL){
       p = exp(-x*alpha);
+   }
+   else {
+      p = dmem_all_data->input.sps_alpha;
    }
 
    return p;

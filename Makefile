@@ -25,6 +25,7 @@ DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 		 $(SRC_DIR)DMEM_Mult.cpp \
 		 $(SRC_DIR)DMEM_Test.cpp \
 		 $(SRC_DIR)DMEM_Smooth.cpp \
+		 $(SRC_DIR)DMEM_Eig.cpp \
 
 #nvcc -O2 -ccbin=mpixlC -gencode arch=compute_60,"code=sm_60" -expt-extended-lambda -dc --std=c++11 -Xcompiler -Wno-deprecated-register --x cu -Xcompiler "-O2 " -DHAVE_CONFIG_H
 

@@ -113,13 +113,17 @@ typedef struct{
    int simple_jacobi_flag;
    int sps_probability_type;
    double sps_alpha;
+   double sps_min_prob;
    int hypre_memory;
    int async_comm_save_divisor;
    int optimal_jacobi_weight_flag;
    char mat_file_str[1024];
-   int eig_CG_max_iter;
+   int eig_CG_max_iters;
    int only_setup_flag;
    int only_build_matrix_flag;
+   int include_disconnected_points_flag;
+   int eig_power_max_iters;
+   int accel_type;
 }DMEM_InputData;
 
 typedef struct{
@@ -136,6 +140,8 @@ typedef struct{
 typedef struct{
    HYPRE_Solver solver;
    HYPRE_Solver solver_gridk;
+   HYPRE_Solver solver_afacj;
+   HYPRE_Solver solver_afacj_gridk;
    HYPRE_Int print_level;
    HYPRE_Int interp_type;
    HYPRE_Int coarsen_type;
@@ -303,6 +309,16 @@ typedef struct{
 }DMEM_IterData;
 
 typedef struct{
+   double alpha;
+   double beta;
+   double mu;
+   double delta;
+   double c_prev;
+   double c;
+   double c_next;
+}DMEM_ChebyData;
+
+typedef struct{
    DMEM_AllCommData comm;
    DMEM_HypreData hypre;
    DMEM_MatrixData matrix;
@@ -313,6 +329,7 @@ typedef struct{
    DMEM_GridData grid;
    DMEM_MfemData mfem;
    DMEM_IterData iter;
+   DMEM_ChebyData cheby;
 }DMEM_AllData;
 
 extern HYPRE_Int vecop_machine;

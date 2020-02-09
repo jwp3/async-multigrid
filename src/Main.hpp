@@ -60,6 +60,9 @@
 #define SYNC_MULTADD 9
 #define SYNC_AFACX 10
 
+#define NO_ACCEL 0
+#define CHEBY_ACCEL 1
+
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1
 
@@ -87,8 +90,8 @@
 #define READ_SOL 0
 #define READ_RES 1
 
-#define SMOOTH_INTERP_ALL_LEVELS 0
-#define SMOOTH_INTERP_MY_GRID 1
+#define SMOOTH_INTERP_MULTADD 0
+#define SMOOTH_INTERP_AFACJ 1
 
 #define RHS_ZEROS 0
 #define RHS_ONES 1
@@ -107,6 +110,7 @@
 
 #define SPS_PROBABILITY_EXPONENTIAL 0
 #define SPS_PROBABILITY_INVERSE 1
+#define SPS_PROBABILITY_RANDOM 2
 
 using namespace std;
 using namespace mfem;

@@ -5,6 +5,7 @@
 #include "DMEM_Misc.hpp"
 #include "DMEM_Add.hpp"
 #include "DMEM_Mult.hpp"
+#include "DMEM_Eig.hpp"
 
 HYPRE_Int vecop_machine;
 
@@ -45,7 +46,7 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
    dmem_all_data.hypre.num_functions = 1;
-   dmem_all_data.hypre.P_max_elmts = 3;
+   dmem_all_data.hypre.P_max_elmts = 5;
    dmem_all_data.hypre.add_P_max_elmts = 0;
    dmem_all_data.hypre.add_trunc_factor = 0.0;
 
@@ -104,21 +105,25 @@ int main (int argc, char *argv[])
    dmem_all_data.input.start_cycle = 1;
    dmem_all_data.input.coarsest_mult_level = 0;
    dmem_all_data.input.check_res_flag = 1;
-   dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
+   dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MULTADD;
    dmem_all_data.input.max_inflight = 1;
    dmem_all_data.input.rhs_type = RHS_RAND;
    dmem_all_data.input.init_guess_type = INITGUESS_RAND;
-   dmem_all_data.input.afacj_level = 0;
+   dmem_all_data.input.afacj_level = 1;
    dmem_all_data.input.num_interpolants = NUMLEVELS_INTERPOLANTS;
    dmem_all_data.input.res_update_type = RES_RECOMPUTE;
    dmem_all_data.input.sps_probability_type = SPS_PROBABILITY_EXPONENTIAL;
    dmem_all_data.input.sps_alpha = 1.0;
+   dmem_all_data.input.sps_min_prob = 0;
    dmem_all_data.input.simple_jacobi_flag = 0;
    dmem_all_data.input.async_comm_save_divisor = 1;
    dmem_all_data.input.optimal_jacobi_weight_flag = 1;
-   dmem_all_data.input.eig_CG_max_iter = 20;
+   dmem_all_data.input.eig_CG_max_iters = 20;
    dmem_all_data.input.only_setup_flag = 0;
    dmem_all_data.input.only_build_matrix_flag = 0;
+   dmem_all_data.input.include_disconnected_points_flag = 0;
+   dmem_all_data.input.eig_power_max_iters = 20;
+   dmem_all_data.input.accel_type = NO_ACCEL;
 
 #if defined(HYPRE_USING_CUDA) || defined(HYPRE_USING_UNIFIED_MEMORY)
    hypre_SetExecPolicy(HYPRE_EXEC_HOST);
@@ -238,6 +243,7 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "hjgs") == 0){
             dmem_all_data.input.smoother = HYBRID_JACOBI_GAUSS_SEIDEL;
+            dmem_all_data.input.smooth_interp_type = JACOBI;
          }
          else if (strcmp(argv[arg_index], "L1j") == 0){
             dmem_all_data.input.smoother = L1_JACOBI;
@@ -282,12 +288,12 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "afacj") == 0){
             dmem_all_data.input.solver = MULTADD;
-            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
+            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_AFACJ;
             dmem_all_data.input.async_flag = 0;
          }
          else if (strcmp(argv[arg_index], "async_afacj") == 0){
             dmem_all_data.input.solver = MULTADD;
-            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
+            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_AFACJ;
             dmem_all_data.input.async_flag = 1;
          }
          else if (strcmp(argv[arg_index], "afacx") == 0){
@@ -312,15 +318,6 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-simple_jacobi") == 0){
          dmem_all_data.input.simple_jacobi_flag = 1;
-      }
-      else if (strcmp(argv[arg_index], "-multadd_smooth_interp_level") == 0){
-         arg_index++;
-         if (strcmp(argv[arg_index], "all") == 0){
-            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_ALL_LEVELS;
-         }
-         else if (strcmp(argv[arg_index], "grid") == 0){
-            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MY_GRID;
-         }
       }
       else if (strcmp(argv[arg_index], "-rhs") == 0){
          arg_index++;
@@ -393,7 +390,7 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-afacj_level") == 0){
          arg_index++;
-         dmem_all_data.input.afacj_level = atoi(argv[arg_index]);
+         dmem_all_data.input.afacj_level = max(1, atoi(argv[arg_index]));
       }
       else if (strcmp(argv[arg_index], "-smooth_weight") == 0){
          arg_index++;
@@ -403,6 +400,15 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-sps_alpha") == 0){
          arg_index++;
          dmem_all_data.input.sps_alpha = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-sps_min_prob") == 0){
+         arg_index++;
+         dmem_all_data.input.sps_min_prob = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-sps_rand") == 0){
+         arg_index++;
+         dmem_all_data.input.sps_alpha = atof(argv[arg_index]);
+         dmem_all_data.input.sps_probability_type = SPS_PROBABILITY_RANDOM;
       }
       else if (strcmp(argv[arg_index], "-th") == 0){
          arg_index++;
@@ -588,9 +594,13 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-optimal_jacobi_weight") == 0){
          dmem_all_data.input.optimal_jacobi_weight_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-eig_CG_max_iter") == 0){
+      else if (strcmp(argv[arg_index], "-eig_CG_max_iters") == 0){
          arg_index++;
-         dmem_all_data.input.eig_CG_max_iter = atoi(argv[arg_index]);
+         dmem_all_data.input.eig_CG_max_iters = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-eig_power_max_iters") == 0){
+         arg_index++;
+         dmem_all_data.input.eig_power_max_iters = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-only_setup") == 0){
          dmem_all_data.input.only_setup_flag = 1;
@@ -598,6 +608,12 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-only_build_matrix") == 0){
          dmem_all_data.input.only_build_matrix_flag = 1;
          dmem_all_data.input.only_setup_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-include_disconnected_points") == 0){
+         dmem_all_data.input.include_disconnected_points_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-cheby") == 0){
+         dmem_all_data.input.accel_type = CHEBY_ACCEL;
       }
       arg_index++;
    }
@@ -664,8 +680,6 @@ int main (int argc, char *argv[])
       dmem_all_data.input.solver = solvers[s];
       for (int run = 0; run < num_runs; run++){
          DMEM_ResetData(&dmem_all_data);
-        // MPI_Finalize();
-        // return 0;
 
          if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
             printf("\nSOLVER: ");
@@ -707,7 +721,7 @@ int main (int argc, char *argv[])
                   printf("AFACx\n\n\n");
                }
                else {
-                  if (dmem_all_data.input.multadd_smooth_interp_level_type == SMOOTH_INTERP_MY_GRID){
+                  if (dmem_all_data.input.multadd_smooth_interp_level_type == SMOOTH_INTERP_AFACJ){
                      printf("AFACj\n\n\n");
                   }
                   else {

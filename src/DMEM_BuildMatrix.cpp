@@ -909,7 +909,10 @@ void DMEM_DistributeHypreParCSRMatrix_FineToGridk(DMEM_AllData *dmem_all_data,
   // free(recvbuf_v);
 }
 
-void DMEM_MatrixFromFile(char *mat_file_str, hypre_ParCSRMatrix **A_ptr, MPI_Comm comm)
+void DMEM_MatrixFromFile(char *mat_file_str,
+                         hypre_ParCSRMatrix **A_ptr,
+                         MPI_Comm comm,
+                         int include_disconnected_points_flag)
 {
    int num_procs, my_id;
    MPI_Comm_rank(comm, &my_id);
@@ -931,7 +934,7 @@ void DMEM_MatrixFromFile(char *mat_file_str, hypre_ParCSRMatrix **A_ptr, MPI_Com
       idx_t options[METIS_NOPTIONS];
       FILE *mat_file = fopen(mat_file_str, "rb");
       if (mat_file != NULL){
-         ReadBinary_fread_metis(mat_file, &G, &T, 1, 1);
+         ReadBinary_fread_metis(mat_file, &G, &T, 1, include_disconnected_points_flag);
          fclose(mat_file);
          A.n = B.n_glob = G.n;
          A.nnz = G.nnz;
