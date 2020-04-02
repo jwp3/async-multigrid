@@ -1,21 +1,3 @@
-/*
-   Example 5
-
-   Interface:    Linear-Algebraic (IJ)
-
-   Compile with: make ex5
-
-   Sample run:   mpirun -np 4 ex5
-
-   Description:  This example solves the 2-D Laplacian problem with zero boundary
-                 conditions on an n x n grid.  The number of unknowns is N=n^2.
-                 The standard 5-point stencil is used, and we solve for the
-                 interior nodes only.
-
-                 This example solves the same problem as Example 3.  Available
-                 solvers are AMG, PCG, and PCG with AMG or Parasails
-                 preconditioners.  */
-
 #include "Main.hpp"
 #include "Laplacian.hpp"
 #include "Elasticity.hpp"
@@ -24,48 +6,44 @@
 #include "SEQ_AMG.hpp"
 #include "SMEM_Setup.hpp"
 #include "SMEM_Solve.hpp"
+#include "SMEM_ExtendedSystem.hpp"
 #include "Misc.hpp"
 
 
 int main (int argc, char *argv[])
 {
+   AllData all_data;
    int myid, num_procs;
 
    double start;
    int num_runs = 1;
    int time_barrier_flag = 0;
 
-   HYPRE_IJMatrix A;
-   HYPRE_ParCSRMatrix parcsr_A;
-   HYPRE_IJVector b;
-   HYPRE_ParVector par_b;
-   HYPRE_IJVector x;
-   HYPRE_ParVector par_x;
-
-   HYPRE_Solver solver;
-
    /* Initialize MPI */
    MPI_Init(&argc, &argv);
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
-   int n = 10;
-   int nx = n, ny = n, nz = n;
+   all_data.matrix.n = 10;
+   all_data.matrix.nx = all_data.matrix.n;
+   all_data.matrix.ny = all_data.matrix.n;
+   all_data.matrix.nz = all_data.matrix.n;
    /* Hypre parameters */
-   int max_levels = 20;
+   all_data.hypre.max_levels = 20;
+   all_data.hypre.agg_num_levels = 0;
+   all_data.hypre.coarsen_type = 10;
+   all_data.hypre.interp_type = 6;
+   all_data.hypre.print_level = 0;
+   all_data.hypre.strong_threshold = .25;
+   all_data.hypre.num_functions = 1;
+   all_data.hypre.P_max_elmts = 0;
    int solver_id = 0;
-   HYPRE_Int agg_num_levels = 0;
-   HYPRE_Int coarsen_type = 10;
-   HYPRE_Int interp_type = 6;
-   int hypre_print_level = 0;
    int hypre_solve_flag = 0;
-   double strong_threshold = .25;
 
-   AllData all_data;
    /* mfem parameters */
    all_data.mfem.ref_levels = 4;
    all_data.mfem.order = 1;
-   strcpy(all_data.mfem.mesh_file, "./mfem/data/ball-nurbs.mesh");
+   strcpy(all_data.mfem.mesh_file, "./mfem_quartz/mfem-4.0/data/beam-hex.mesh");
    all_data.mfem.amr_refs = 0;
 
    all_data.input.test_problem = LAPLACE_2D5PT;
@@ -98,11 +76,16 @@ int main (int argc, char *argv[])
    all_data.input.print_level_stats_flag = 0;
    all_data.input.print_reshist_flag = 0;
    all_data.input.read_type = READ_SOL;
+   all_data.input.eig_power_max_iters = 1000;
+   all_data.input.cheby_flag = 0;
+   all_data.input.delay_usec = 0;
+   all_data.input.delay_flag = 0;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
    int c = 1;
-   int warmup = 1;
+   int warmup = 0;
+   int only_setup_flag = 0;
 
    /* Parse command line */
    int arg_index = 0;
@@ -113,23 +96,23 @@ int main (int argc, char *argv[])
       if (strcmp(argv[arg_index], "-n") == 0)
       {
          arg_index++;
-	 n = atoi(argv[arg_index]);
-         nx = ny = nz = n;
+	 all_data.matrix.n = atoi(argv[arg_index]);
+         all_data.matrix.nx = all_data.matrix.ny = all_data.matrix.nz = all_data.matrix.n;
       }
       else if (strcmp(argv[arg_index], "-nx") == 0)
       {
          arg_index++;
-         nx = atoi(argv[arg_index]);
+         all_data.matrix.nx = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-ny") == 0)
       {
          arg_index++;
-         ny = atoi(argv[arg_index]);
+         all_data.matrix.ny = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-nz") == 0)
       {
          arg_index++;
-         nz = atoi(argv[arg_index]);
+         all_data.matrix.nz = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-problem") == 0)
       {
@@ -198,6 +181,13 @@ int main (int argc, char *argv[])
             all_data.input.solver = ASYNC_AFACX;
             all_data.input.async_flag = 1;
          }
+         else if (strcmp(argv[arg_index], "ebpx") == 0){
+            all_data.input.solver = EXTENDED_SYSTEM_MULTIGRID;
+         }
+         else if (strcmp(argv[arg_index], "async_ebpx") == 0){
+            all_data.input.solver = EXTENDED_SYSTEM_MULTIGRID; 
+            all_data.input.async_flag = 1;
+         }
       }
       else if (strcmp(argv[arg_index], "-smooth_interp") == 0)
       {
@@ -217,7 +207,7 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-th") == 0)
       {
          arg_index++;
-         strong_threshold = atof(argv[arg_index]);
+         all_data.hypre.strong_threshold = atof(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-num_cycles") == 0)
       {
@@ -260,22 +250,26 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-mxl") == 0)
       {
          arg_index++;
-         max_levels = atoi(argv[arg_index]);
+         all_data.hypre.max_levels = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-agg_nl") == 0)
       {
          arg_index++;
-         agg_num_levels = atoi(argv[arg_index]);
+         all_data.hypre.agg_num_levels = atoi(argv[arg_index]);
       }
+      else if ( strcmp(argv[arg_index], "-Pmx") == 0 ){
+         arg_index++;
+         all_data.hypre.P_max_elmts = atoi(argv[arg_index]);
+      } 
       else if (strcmp(argv[arg_index], "-coarsen_type") == 0)
       {
          arg_index++;
-         coarsen_type = atoi(argv[arg_index]);
+         all_data.hypre.coarsen_type = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-interp_type") == 0)
       {
          arg_index++;
-         interp_type = atoi(argv[arg_index]);
+         all_data.hypre.interp_type = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-mfem_ref_levels") == 0)
       {
@@ -387,7 +381,7 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-print_hypre") == 0)
       {
-         hypre_print_level = 3;
+         all_data.hypre.print_level = 3;
       }
       else if (strcmp(argv[arg_index], "-print_grid_wait") == 0)
       {
@@ -409,6 +403,28 @@ int main (int argc, char *argv[])
       {
          time_barrier_flag = 1;
       }
+      else if (strcmp(argv[arg_index], "-cheby") == 0)
+      {
+         all_data.input.cheby_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-only_setup") == 0)
+      {
+         only_setup_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-eig_power_max_iters") == 0)
+      {
+         arg_index++;
+         all_data.input.eig_power_max_iters = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-warmup") == 0)
+      {
+         warmup = 1;
+      }
+      else if (strcmp(argv[arg_index], "-delay") == 0){
+         arg_index++;
+         all_data.input.delay_usec = atoi(argv[arg_index]);
+         all_data.input.delay_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-help") == 0)
       {
          print_usage = 1;
@@ -417,7 +433,8 @@ int main (int argc, char *argv[])
       arg_index++;
    }
 
-   if (all_data.input.solver == MULT){
+   if (all_data.input.solver == MULT ||
+       all_data.input.solver == EXTENDED_SYSTEM_MULTIGRID){
       all_data.input.thread_part_type = ONE_LEVEL;
    }
    else{
@@ -432,7 +449,7 @@ int main (int argc, char *argv[])
    
    srand(0);
    omp_set_num_threads(1);
-   mkl_set_num_threads(1);
+  // mkl_set_num_threads(1);
 
    if ((print_usage) && (myid == 0))
    {
@@ -450,110 +467,66 @@ int main (int argc, char *argv[])
       MPI_Finalize();
       return 0;
    }
- 
-   start = omp_get_wtime(); 
-   if (all_data.input.test_problem == LAPLACE_2D5PT){
-      Laplacian_2D_5pt(&A, n);
-      HYPRE_IJMatrixAssemble(A);
-      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
-   }
-   else if (all_data.input.test_problem == LAPLACE_3D27PT){
-      Laplacian_3D_27pt(&parcsr_A, nx, ny, nz);
-   }
-   else if (all_data.input.test_problem == LAPLACE_3D7PT){
-      Laplacian_3D_7pt(&parcsr_A, nx, ny, nz);
-   }
-   else if (all_data.input.test_problem == MFEM_LAPLACE){
-      MFEM_Laplacian(&all_data, &A);
-      HYPRE_IJMatrixAssemble(A);
-      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
-   }
-   else if (all_data.input.test_problem == MFEM_ELAST){
-      MFEM_Elasticity(&all_data, &A);
-      HYPRE_IJMatrixAssemble(A);
-      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
-   }
-   else if (all_data.input.test_problem == MFEM_MAXWELL){
-      MFEM_Maxwell(&all_data, &A);
-      HYPRE_IJMatrixAssemble(A);
-      HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
-   }
-   else{
-      return 1;
-   }
-   all_data.output.prob_setup_wtime = omp_get_wtime() - start;
-
-   start = omp_get_wtime();
-   HYPRE_BoomerAMGCreate(&solver);
-
-   HYPRE_BoomerAMGSetPrintLevel(solver, hypre_print_level);
-   HYPRE_BoomerAMGSetOldDefault(solver);
-
-   HYPRE_BoomerAMGSetPostInterpType(solver, 0);
-   HYPRE_BoomerAMGSetInterpType(solver, interp_type);
-   HYPRE_BoomerAMGSetRestriction(solver, 0);
-   HYPRE_BoomerAMGSetCoarsenType(solver, coarsen_type);
-   HYPRE_BoomerAMGSetMaxLevels(solver, max_levels);
-   HYPRE_BoomerAMGSetAggNumLevels(solver, agg_num_levels);
-
-   HYPRE_BoomerAMGSetup(solver, parcsr_A, par_b, par_x);
-   all_data.output.hypre_setup_wtime = omp_get_wtime() - start;
 
    start = omp_get_wtime();
    omp_set_num_threads(all_data.input.num_threads);
-   SMEM_Setup(solver, &all_data);
+   SMEM_Setup(&all_data);
    all_data.output.setup_wtime = omp_get_wtime() - start; 
-
-   if (all_data.input.hypre_test_error_flag == 1){
-      int relax_type;
-      if (all_data.input.smoother == L1_JACOBI){
-         relax_type = 16;
-      }
-      else if (all_data.input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
-	       all_data.input.smoother == GAUSS_SEIDEL){
-         relax_type = 3;
-      }
-      else{
-         relax_type = 0;
-      }
-      HYPRE_ParCSRHybridSetStrongThreshold(solver, strong_threshold);
-      HYPRE_BoomerAMGSetRelaxType(solver, 0);
-      HYPRE_BoomerAMGSetRelaxWt(solver, all_data.input.smooth_weight);
-      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &b);
-      HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
-      HYPRE_IJVectorInitialize(b);
-
-      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &x);
-      HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
-      HYPRE_IJVectorInitialize(x);
-
-      double *rhs_values, *x_values;
-      int    *rows;
-
-      rhs_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
-      x_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
-      rows = (int*) calloc(all_data.grid.n[0], sizeof(int));
-
-      for (int i = 0; i < all_data.grid.n[0]; i++){
-         rhs_values[i] = 1.0;
-         x_values[i] = 0.0;
-         rows[i] = i;
-      }
-
-      HYPRE_IJVectorSetValues(b, all_data.grid.n[0], rows, rhs_values);
-      HYPRE_IJVectorSetValues(x, all_data.grid.n[0], rows, x_values);
-
-      free(x_values);
-      free(rhs_values);
-      free(rows);
-
-      HYPRE_IJVectorAssemble(b);
-      HYPRE_IJVectorGetObject(b, (void **)&par_b);
-      HYPRE_IJVectorAssemble(x);
-      HYPRE_IJVectorGetObject(x, (void **)&par_x);
-
-      HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
+   if (only_setup_flag == 1){
+      MPI_Finalize();
+      return 0;
    }
+
+//   if (all_data.input.hypre_test_error_flag == 1){
+//      int relax_type;
+//      if (all_data.input.smoother == L1_JACOBI){
+//         relax_type = 16;
+//      }
+//      else if (all_data.input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
+//	       all_data.input.smoother == GAUSS_SEIDEL){
+//         relax_type = 3;
+//      }
+//      else{
+//         relax_type = 0;
+//      }
+//      HYPRE_ParCSRHybridSetStrongThreshold(solver, strong_threshold);
+//      HYPRE_BoomerAMGSetRelaxType(solver, 0);
+//      HYPRE_BoomerAMGSetRelaxWt(solver, all_data.input.smooth_weight);
+//      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &b);
+//      HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
+//      HYPRE_IJVectorInitialize(b);
+//
+//      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &x);
+//      HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
+//      HYPRE_IJVectorInitialize(x);
+//
+//      double *rhs_values, *x_values;
+//      int    *rows;
+//
+//      rhs_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
+//      x_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
+//      rows = (int*) calloc(all_data.grid.n[0], sizeof(int));
+//
+//      for (int i = 0; i < all_data.grid.n[0]; i++){
+//         rhs_values[i] = 1.0;
+//         x_values[i] = 0.0;
+//         rows[i] = i;
+//      }
+//
+//      HYPRE_IJVectorSetValues(b, all_data.grid.n[0], rows, rhs_values);
+//      HYPRE_IJVectorSetValues(x, all_data.grid.n[0], rows, x_values);
+//
+//      free(x_values);
+//      free(rhs_values);
+//      free(rows);
+//
+//      HYPRE_IJVectorAssemble(b);
+//      HYPRE_IJVectorGetObject(b, (void **)&par_b);
+//      HYPRE_IJVectorAssemble(x);
+//      HYPRE_IJVectorGetObject(x, (void **)&par_x);
+//
+//      HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
+//   }
 
   // if (time_barrier_flag == 1 && all_data.input.thread_part_type == ONE_LEVEL){
   //    double start, barrier_wtime;
@@ -591,30 +564,35 @@ int main (int argc, char *argv[])
       all_data.input.num_cycles = cycle;
       for (int run = 1; run <= num_runs; run++){
          InitSolve(&all_data);
-         SMEM_Solve(&all_data);
-         if (all_data.input.mfem_test_error_flag == 1){
-            for (int i = 0; i < all_data.grid.n[0]; i++){
-               all_data.output.mfem_e_norm2 += pow(all_data.mfem.u[i] - all_data.vector.u[0][i], 2.0);
-	      // printf("%e, %e, %e, %e\n",
-              //        all_data.mfem.u[i], par_x->local_vector->data[i], all_data.vector.u[0][i],
-              //        all_data.mfem.u[i] - par_x->local_vector->data[i]);
-            }
+         if (all_data.input.solver == EXTENDED_SYSTEM_MULTIGRID){
+            SMEM_ExtendedSystemSolve(&all_data);
          }
-         if (all_data.input.hypre_test_error_flag == 1){
-            for (int i = 0; i < all_data.grid.n[0]; i++){
-               all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
-            }
-         }
-	 if (warmup == 1){
-	    if (all_data.input.print_output_flag == 1 && run > 1){
-               PrintOutput(all_data);
-            }
-	 }
-	 else {
-	    if (all_data.input.print_output_flag == 1){
-	       PrintOutput(all_data);
+         else {
+            SMEM_Solve(&all_data);
+           // if (all_data.input.mfem_test_error_flag == 1){
+           //    for (int i = 0; i < all_data.grid.n[0]; i++){
+           //       all_data.output.mfem_e_norm2 += pow(all_data.mfem.u[i] - all_data.vector.u[0][i], 2.0);
+           //      // printf("%e, %e, %e, %e\n",
+           //      //        all_data.mfem.u[i], par_x->local_vector->data[i], all_data.vector.u[0][i],
+           //      //        all_data.mfem.u[i] - par_x->local_vector->data[i]);
+           //    }
+           // }
+           // if (all_data.input.hypre_test_error_flag == 1){
+           //    for (int i = 0; i < all_data.grid.n[0]; i++){
+           //       all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
+           //    }
+           // }
+	    if (warmup == 1){
+	       if (all_data.input.print_output_flag == 1 && run > 1){
+                  PrintOutput(all_data);
+               }
 	    }
+	    else {
+	       if (all_data.input.print_output_flag == 1){
+	          PrintOutput(all_data);
+	       }
 	 }
+         }
       }
    }
 

@@ -9,8 +9,11 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    int my_id, num_procs;
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+
+   int my_id_gridk, num_procs_gridk;
  
-   int sum_cycles, min_cycles, max_cycles;
+   int min_cycles, max_cycles;
+   double sum_cycles;
    int sum_relax, min_relax, max_relax;
    double mean_cycles;
    double mean_level_wtime;
@@ -35,21 +38,24 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
 
    double solve_wtime, residual_wtime, residual_norm_wtime, prolong_wtime, restrict_wtime, vecop_wtime, matvec_wtime, smooth_wtime, coarsest_solve_wtime, comm_wtime, start_wtime, end_wtime;
 
-  // if (dmem_all_data->input.solver == MULTADD){
-  //    int my_id_local, num_procs_local;
-  //    MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
-  //    MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
-  //    for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
-  //       if (level == dmem_all_data->grid.my_grid){
-  //          if (my_id_local == 0){
-  //         // if (level == 0){
-  //             printf("level %d num cycles %d smooth %e work %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.smooth_wtime, dmem_all_data->grid.level_work[level]);
-  //          }
-  //       }
-  //       MPI_Barrier(MPI_COMM_WORLD);
-  //    }
-  //    MPI_Barrier(MPI_COMM_WORLD);
-  // }
+   if (dmem_all_data->input.solver == MULTADD){
+      int my_id_local, num_procs_local;
+      MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
+      MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
+      for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+         if (level == dmem_all_data->grid.my_grid){
+            if (my_id_local == 0){
+           // if (level == 0){
+               printf("level %d num cycles %d wtime %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.solve_wtime);
+            }
+         }
+         MPI_Barrier(MPI_COMM_WORLD);
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+
+      MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_gridk);
+      MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_gridk);
+   }
 
    hypre_ParVector *r = dmem_all_data->vector_fine.r;
    dmem_all_data->output.r_norm2 = sqrt(hypre_ParVectorInnerProd(r, r));
@@ -57,6 +63,14 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    hypre_ParVector *Ax = dmem_all_data->vector_fine.e;
    hypre_ParVector *x = dmem_all_data->vector_fine.x;
    dmem_all_data->output.e_Anorm = sqrt(hypre_ParVectorInnerProd(Ax, x));
+
+   double scaled_cycles;
+   if (dmem_all_data->input.solver == MULT){
+      scaled_cycles = (double)dmem_all_data->iter.cycle/(double)num_procs;
+   }
+   else {
+      scaled_cycles = (double)dmem_all_data->iter.cycle/(double)num_procs_gridk;
+   }
 
    MPI_Reduce(&(dmem_all_data->output.solve_wtime),          &mean_solve_wtime,          1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.residual_wtime),       &mean_residual_wtime,       1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -74,7 +88,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    MPI_Reduce(&(dmem_all_data->output.mpiirecv_wtime),       &mean_mpiirecv_wtime,       1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.mpitest_wtime),        &mean_mpitest_wtime,        1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.mpiwait_wtime),        &mean_mpiwait_wtime,        1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&(dmem_all_data->iter.cycle),                  &sum_cycles,                1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
+   MPI_Reduce(&scaled_cycles,                                &sum_cycles,                1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->iter.relax),                  &sum_relax,                 1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
    MPI_Reduce(&(dmem_all_data->output.num_messages),         &sum_num_messages,          1, MPI_INT,    MPI_SUM, 0, MPI_COMM_WORLD);
    
@@ -102,7 +116,13 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    mean_mpiirecv_wtime /= (double)num_procs;
    mean_mpitest_wtime /= (double)num_procs;
    mean_mpiwait_wtime /= (double)num_procs;
-   mean_cycles = (double)sum_cycles/(double)num_procs;
+
+   if (dmem_all_data->input.solver == MULT){
+      mean_cycles = sum_cycles;
+   }
+   else {
+      mean_cycles = sum_cycles/(double)(dmem_all_data->grid.num_levels);
+   }
 
    if ((dmem_all_data->input.solver == MULTADD ||
        dmem_all_data->input.solver == BPX) &&
@@ -253,7 +273,7 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    }
 }
 
-void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename)
+void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename, int par_file, int bin_file)
 {
    int my_id, num_procs;
    MPI_Comm comm = hypre_ParCSRMatrixComm(A);
@@ -262,67 +282,59 @@ void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename)
    HYPRE_Real *A_data;
    HYPRE_Int *A_i, *A_j;
    FILE *file_ptr;
+   char buffer[100];
 
-   for (HYPRE_Int p = 0; p < num_procs; p++){
-      if (my_id == p){
-         if (p == 0){
-            file_ptr = fopen(filename, "w");
-         }
-         else {
-            file_ptr = fopen(filename, "a");
-         }
+   int num_rows = hypre_ParCSRMatrixGlobalNumRows(A);
+   int num_cols = hypre_ParCSRMatrixGlobalNumCols(A);
+   hypre_ParCSRMatrixSetNumNonzeros(A);
+   int nnz = hypre_ParCSRMatrixNumNonzeros(A);
 
-         HYPRE_Int first_row_index = hypre_ParCSRMatrixFirstRowIndex(A);
-         HYPRE_Int first_col_diag = hypre_ParCSRMatrixFirstColDiag(A);
-         HYPRE_Int num_rows = hypre_CSRMatrixNumRows(hypre_ParCSRMatrixDiag(A));
-         HYPRE_Int *col_map_offd = hypre_ParCSRMatrixColMapOffd(A);
-   
-        // printf("%d: %d %d\n", my_id, first_row_index, first_col_diag);
-
-         A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A));
-         A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A));
-         A_j = hypre_CSRMatrixJ(hypre_ParCSRMatrixDiag(A));
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            for (HYPRE_Int jj = A_i[i]; jj < A_i[i+1]; jj++){
-               HYPRE_Int ii = A_j[jj];
-               fprintf(file_ptr, "%d %d %.16e\n", first_row_index+i+1, first_col_diag+ii+1, A_data[jj]);
-            }
-         }
-        
-
-         A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixOffd(A));
-         A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixOffd(A));
-         A_j = hypre_CSRMatrixJ(hypre_ParCSRMatrixOffd(A));
-         for (HYPRE_Int i = 0; i < num_rows; i++){
-            for (HYPRE_Int jj = A_i[i]; jj < A_i[i+1]; jj++){
-               HYPRE_Int ii = A_j[jj];
-               fprintf(file_ptr, "%d %d %e\n", first_row_index+i+1, col_map_offd[ii]+1, A_data[jj]);
-            }
-         }
-
-         fclose(file_ptr);
-      }
-      MPI_Barrier(comm);
+   if (par_file == 1){
+      sprintf(buffer, "%s_%d_%d", filename, num_procs, my_id);
    }
-}
+   else {
+      sprintf(buffer, "%s", filename);
+   }
 
-
-void DMEM_Gridk_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename)
-{
-   int my_id, num_procs;
-   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
-   MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-   HYPRE_Real *A_data;
-   HYPRE_Int *A_i, *A_j;
-   FILE *file_ptr;
-
-   for (HYPRE_Int p = 0; p < num_procs; p++){
-      if (my_id == p){
-         if (p == 0){
-            file_ptr = fopen(filename, "w");
+   if (par_file == 1){
+      num_rows = hypre_ParCSRMatrixNumRows(A);
+      double num_rows_dbl = (double)num_rows;
+      if (bin_file){
+         file_ptr = fopen(buffer, "wb");
+         fwrite(&num_rows, sizeof(int), 1, file_ptr);
+         fwrite(&num_rows, sizeof(int), 1, file_ptr);
+         fwrite(&num_rows_dbl, sizeof(double), 1, file_ptr);
+      }
+      else {
+         file_ptr = fopen(buffer, "w");
+         fprintf(file_ptr, "%d %d %d\n", num_rows, num_rows, num_rows);
+      }
+   }
+   else {
+      if (my_id == 0){
+         if (bin_file){
+            file_ptr = fopen(buffer, "wb");
+            fwrite(&num_rows, sizeof(int), 1, file_ptr);
+            fwrite(&num_cols, sizeof(int), 1, file_ptr);
+            fwrite(&nnz, sizeof(double), 1, file_ptr);
          }
          else {
-            file_ptr = fopen(filename, "a");
+            file_ptr = fopen(buffer, "w");
+            fprintf(file_ptr, "%d %d %d\n", num_rows, num_cols, nnz);
+         }
+         fclose(file_ptr);
+      }
+   }
+
+   for (int p = 0; p < num_procs; p++){
+      if (my_id == p){
+         if (par_file == 0){
+            if (bin_file){
+               file_ptr = fopen(buffer, "ab");
+            }
+            else {
+               file_ptr = fopen(buffer, "a");
+            }
          }
 
          HYPRE_Int first_row_index = hypre_ParCSRMatrixFirstRowIndex(A);
@@ -336,10 +348,19 @@ void DMEM_Gridk_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename)
          for (HYPRE_Int i = 0; i < num_rows; i++){
             for (HYPRE_Int jj = A_i[i]; jj < A_i[i+1]; jj++){
                HYPRE_Int ii = A_j[jj];
-               fprintf(file_ptr, "%d %d %.16e\n", first_row_index+i+1, first_col_diag+ii+1, A_data[jj]);
+               int row = first_row_index+i+1;
+               int col = first_col_diag+ii+1;
+               double elem = A_data[jj];
+               if (bin_file == 1){
+                  fwrite(&row, sizeof(int), 1, file_ptr);
+                  fwrite(&col, sizeof(int), 1, file_ptr);
+                  fwrite(&elem, sizeof(double), 1, file_ptr);
+               }
+               else {
+                  fprintf(file_ptr, "%d %d %.16e\n", row, col, elem);
+               }
             }
          }
-        
 
          A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixOffd(A));
          A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixOffd(A));
@@ -347,13 +368,25 @@ void DMEM_Gridk_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename)
          for (HYPRE_Int i = 0; i < num_rows; i++){
             for (HYPRE_Int jj = A_i[i]; jj < A_i[i+1]; jj++){
                HYPRE_Int ii = A_j[jj];
-               fprintf(file_ptr, "%d %d %e\n", first_row_index+i+1, col_map_offd[ii]+1, A_data[jj]);
+               int row = first_row_index+i+1;
+               int col = col_map_offd[ii]+1;
+               double elem = A_data[jj];
+               if (bin_file == 1){
+                  fwrite(&row, sizeof(int), 1, file_ptr);
+                  fwrite(&col, sizeof(int), 1, file_ptr);
+                  fwrite(&elem, sizeof(double), 1, file_ptr);
+               }
+               else {
+                  fprintf(file_ptr, "%d %d %.16e\n", row, col, elem);
+               }
             }
          }
 
          fclose(file_ptr);
       }
-      MPI_Barrier(MPI_COMM_WORLD);
+      if (par_file == 0){
+         MPI_Barrier(comm);
+      }
    }
 }
 
@@ -392,6 +425,32 @@ HYPRE_Real InnerProdFlag(hypre_Vector *x_local,
                        comm);
    *sum_flags = recvbuf[1];
    return recvbuf[0];
+}
+
+HYPRE_Real *InnerProdFlagV(hypre_Vector *x_local,
+                           hypre_Vector *y_local,
+                           MPI_Comm comm,
+                           HYPRE_Real *my_flags,
+                           HYPRE_Int num_flags)
+{
+   HYPRE_Real inner_prod;
+   HYPRE_Real local_inner_prod = hypre_SeqVectorInnerProd(x_local, y_local);
+
+   HYPRE_Real *sendbuf = (HYPRE_Real *)malloc((num_flags+1) * sizeof(HYPRE_Real));
+   sendbuf[0] = local_inner_prod;
+   for (int i = 0; i < num_flags; i++){
+      sendbuf[i+1] = my_flags[i];
+   }
+   HYPRE_Real *recvbuf = (HYPRE_Real *)malloc((num_flags+1) * sizeof(HYPRE_Real));
+   hypre_MPI_Allreduce(sendbuf,
+                       recvbuf,
+                       num_flags+1,
+                       HYPRE_MPI_REAL,
+                       hypre_MPI_SUM,
+                       comm);
+   
+   free(sendbuf);
+   return recvbuf;
 }
 
 /* y = y + x ./ scale */
@@ -525,22 +584,96 @@ void DMEM_WriteCSR(CSR A, char *out_str, int base, OrderingData P, MPI_Comm comm
 
    int row, col, k;
    double elem;
-   FILE *out_file;
+   FILE *file_ptr;
    if (my_id == 0) remove(out_str);
 
    for (int p = 0; p < num_procs; p++){
       if (p == my_id){
-         out_file = fopen(out_str, "a");
+         file_ptr = fopen(out_str, "a");
          for (int i = 0; i < A.n; i++){
             for (int j = A.j_ptr[i]; j < A.j_ptr[i+1]; j++){
                row = P.disp[my_id] + i;
                col = A.i[j];
                elem = A.val[j];
-               fprintf(out_file, "%d   %d   %e\n", row+base, col+base, elem);
+               fprintf(file_ptr, "%d   %d   %e\n", row+base, col+base, elem);
             }
          }
-         fclose(out_file);
+         fclose(file_ptr);
       }
       MPI_Barrier(comm);
+   }
+}
+
+void DMEM_ChebyUpdate(DMEM_AllData *dmem_all_data,
+                      hypre_ParVector *d,
+                      hypre_ParVector *u,
+                      int num_rows)
+{
+   int my_id;
+   MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
+
+   HYPRE_Real *d_local_data = hypre_VectorData(hypre_ParVectorLocalVector(d));
+   HYPRE_Real *u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(u));
+   
+   double vecop_begin;
+   double mu = dmem_all_data->cheby.mu;
+   double delta = dmem_all_data->cheby.delta;
+
+   if (dmem_all_data->iter.cycle == 0){
+      vecop_begin = MPI_Wtime();
+      DMEM_HypreParVector_Copy(d, u, num_rows);
+      dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
+   }
+   else {
+      double omega;
+      if (dmem_all_data->input.accel_type == RICHARD_ACCEL){
+         omega = 2.0 / (1.0 + sqrt(1.0 - pow(mu, -2.0)));
+      }
+      else {
+         double c_temp = dmem_all_data->cheby.c;
+         dmem_all_data->cheby.c = 2.0 * mu * dmem_all_data->cheby.c - dmem_all_data->cheby.c_prev;
+         dmem_all_data->cheby.c_prev = c_temp;
+         omega = 2.0 * mu * dmem_all_data->cheby.c_prev / dmem_all_data->cheby.c;
+      }
+
+      vecop_begin = MPI_Wtime();
+      if (dmem_all_data->input.solver == MULT || dmem_all_data->input.async_flag == 0){
+         for (int i = 0; i < num_rows; i++){
+            d_local_data[i] = (omega - 1.0) * d_local_data[i] + omega * delta * u_local_data[i];
+         }
+      }
+      else { 
+         if (dmem_all_data->grid.my_grid == dmem_all_data->input.cheby_grid){
+            for (int i = 0; i < num_rows; i++){
+               double d_prev = d_local_data[i];
+               d_local_data[i] = (omega - 1.0) * d_local_data[i] + omega * delta * u_local_data[i];
+               u_local_data[i] = (omega - 1.0) * d_prev          + omega * delta * u_local_data[i];
+            }
+         }
+         else {
+            for (int i = 0; i < num_rows; i++){
+               u_local_data[i] = omega * delta * u_local_data[i];
+            }
+         }
+      }
+      dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
+   }
+}
+
+void DMEM_DelayProc(DMEM_AllData *dmem_all_data)
+{
+   if (dmem_all_data->input.delay_flag == 1){
+      int my_id;
+      hypre_MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
+     // if (dmem_all_data->input.solver == MULT){
+     //    if (my_id == dmem_all_data->input.delay_id){
+            usleep(dmem_all_data->input.delay_usec);
+     //    }
+     // }
+     // else { 
+     //    if (dmem_all_data->grid.my_grid > 0){
+     //       usleep(dmem_all_data->input.delay_usec);
+     //    }
+     // }
    }
 }

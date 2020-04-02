@@ -124,6 +124,18 @@ int main (int argc, char *argv[])
    dmem_all_data.input.include_disconnected_points_flag = 0;
    dmem_all_data.input.eig_power_max_iters = 20;
    dmem_all_data.input.accel_type = NO_ACCEL;
+   dmem_all_data.input.print_matrix_flag = 0;
+   dmem_all_data.input.par_file_flag = 0;
+   dmem_all_data.input.imbal = 1.0;
+   dmem_all_data.input.async_type = FULL_ASYNC;
+   dmem_all_data.input.eig_power_MG_max_iters  = 1;
+   dmem_all_data.input.eig_shift = 0.0;
+   dmem_all_data.input.b_eig_shift = 0.0;
+   dmem_all_data.input.a_eig_shift = 0.0;
+   dmem_all_data.input.delay_usec = 0;
+   dmem_all_data.input.delay_flag = 0;
+   dmem_all_data.input.delay_id = num_procs-1;
+   dmem_all_data.input.cheby_grid = 0;
 
 #if defined(HYPRE_USING_CUDA) || defined(HYPRE_USING_UNIFIED_MEMORY)
    hypre_SetExecPolicy(HYPRE_EXEC_HOST);
@@ -146,7 +158,6 @@ int main (int argc, char *argv[])
       if (strcmp(argv[arg_index], "-n") == 0){
          arg_index++;
 	 n = atoi(argv[arg_index]);
-         dmem_all_data.mfem.max_amr_dofs = n;
 	 dmem_all_data.matrix.nx = n;
          dmem_all_data.matrix.ny = n;
          dmem_all_data.matrix.nz = n;
@@ -296,8 +307,13 @@ int main (int argc, char *argv[])
             dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_AFACJ;
             dmem_all_data.input.async_flag = 1;
          }
+        // else if (strcmp(argv[arg_index], "afacx") == 0){
+        //    dmem_all_data.input.solver = AFACX;
+        //    dmem_all_data.input.async_flag = 0;
+        // }
          else if (strcmp(argv[arg_index], "afacx") == 0){
-            dmem_all_data.input.solver = AFACX;
+            dmem_all_data.input.solver = MULTADD;
+            dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_AFACX;
             dmem_all_data.input.async_flag = 0;
          }
          else if (strcmp(argv[arg_index], "mult_multadd") == 0){
@@ -377,8 +393,9 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.input.assign_procs_scalar = atof(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-async") == 0){
-         dmem_all_data.input.async_flag = 1;
+      else if (strcmp(argv[arg_index], "-async_flag") == 0){
+         arg_index++;
+         dmem_all_data.input.async_flag = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-max_inflight") == 0){
          arg_index++;
@@ -585,6 +602,9 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-print_level_stats") == 0){
          dmem_all_data.input.print_level_stats_flag = 1;
       }
+      else if (strcmp(argv[arg_index], "-print_matrix") == 0){
+         dmem_all_data.input.print_matrix_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-hypre_test_error") == 0){
          dmem_all_data.input.hypre_test_error_flag = 1;
       }
@@ -602,6 +622,10 @@ int main (int argc, char *argv[])
          arg_index++;
          dmem_all_data.input.eig_power_max_iters = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-eig_power_MG_max_iters") == 0){
+         arg_index++;
+         dmem_all_data.input.eig_power_MG_max_iters = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-only_setup") == 0){
          dmem_all_data.input.only_setup_flag = 1;
       }
@@ -614,6 +638,41 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-cheby") == 0){
          dmem_all_data.input.accel_type = CHEBY_ACCEL;
+      }
+      else if (strcmp(argv[arg_index], "-richard") == 0){
+         dmem_all_data.input.accel_type = RICHARD_ACCEL;
+      }
+      else if (strcmp(argv[arg_index], "-par_file") == 0){
+         dmem_all_data.input.par_file_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-num_funcs") == 0){
+         arg_index++;
+         dmem_all_data.hypre.num_functions = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-imbal") == 0){
+         arg_index++;
+         dmem_all_data.input.imbal = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-delay") == 0){
+         arg_index++;
+         dmem_all_data.input.delay_usec = atoi(argv[arg_index]);
+         dmem_all_data.input.delay_flag = 1;
+      } 
+      else if (strcmp(argv[arg_index], "-eig_shift") == 0){
+         arg_index++;
+         dmem_all_data.input.b_eig_shift = dmem_all_data.input.a_eig_shift = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-b_eig_shift") == 0){
+         arg_index++;
+         dmem_all_data.input.b_eig_shift = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-a_eig_shift") == 0){
+         arg_index++;
+         dmem_all_data.input.a_eig_shift = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-cheby_grid") == 0){
+         arg_index++;
+         dmem_all_data.input.cheby_grid = atoi(argv[arg_index]);
       }
       arg_index++;
    }
@@ -657,6 +716,10 @@ int main (int argc, char *argv[])
           dmem_all_data.input.test_problem != MFEM_ELAST_AMR){
          dmem_all_data.input.rhs_type = RHS_RAND;
       }
+   }
+
+   if (dmem_all_data.input.test_problem == MFEM_ELAST_AMR){
+      dmem_all_data.mfem.max_amr_dofs = dmem_all_data.matrix.nx * dmem_all_data.matrix.ny * dmem_all_data.matrix.nz;
    }
 
   // if (dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){

@@ -10,7 +10,6 @@
 int AsyncSmoothCheckConverge(DMEM_AllData *dmem_all_data);
 int AsyncSmoothAddCorrect_LocalRes(DMEM_AllData *dmem_all_data);
 void AsyncSmoothRecvCleanup(DMEM_AllData *dmem_all_data);
-void AsyncSmoothEnd(DMEM_AllData *dmem_all_data);
 double StochasticParallelSouthwellUpdateProbability(DMEM_AllData *dmem_all_data);
 int AsyncSmoothCheckComm(DMEM_AllData *dmem_all_data);
 
@@ -104,9 +103,12 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
                DMEM_HypreParVector_Ivaxpy(U_array[level], dmem_all_data->vector_gridk.r, dmem_all_data->matrix.L1_row_norm_gridk[level], num_rows);
             }
             else {
-              DMEM_HypreParVector_Ivaxpy(U_array[level], dmem_all_data->vector_gridk.r, dmem_all_data->matrix.wJacobi_scale_gridk[level], num_rows);
+               DMEM_HypreParVector_Ivaxpy(U_array[level], dmem_all_data->vector_gridk.r, dmem_all_data->matrix.wJacobi_scale_gridk[level], num_rows);
             }
             dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
+         }
+         if (dmem_all_data->input.accel_type == CHEBY_ACCEL || dmem_all_data->input.accel_type == RICHARD_ACCEL){
+            DMEM_ChebyUpdate(dmem_all_data, dmem_all_data->vector_gridk.d, U_array[0], num_rows);
          }
          dmem_all_data->iter.relax += 1;
       }
@@ -168,7 +170,7 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
          vecop_begin = MPI_Wtime();
          DMEM_HypreParVector_Set(dmem_all_data->vector_gridk.e, 0.0, num_rows);
          dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
-         if (update_flag == 1/* || send_gridk_flag == 0*/){
+         if (update_flag == 1 || send_gridk_flag == 0){
             comm_begin = MPI_Wtime();
             send_gridk_flag = SendRecv(dmem_all_data,
                                        &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend),
@@ -194,6 +196,9 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
              (update_flag == 1 || recv_gridk_flag == 1)){
             vecop_begin = MPI_Wtime();
             DMEM_HypreParVector_Axpy(Vtemp, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+            if (dmem_all_data->input.accel_type == CHEBY_ACCEL || dmem_all_data->input.accel_type == RICHARD_ACCEL){
+               DMEM_HypreParVector_Axpy(dmem_all_data->vector_gridk.d, dmem_all_data->vector_gridk.e, 1.0, num_rows);
+            }
             dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
          }
 
@@ -296,15 +301,15 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
       }
    }
    
-   double end_begin = MPI_Wtime();
-   if (dmem_all_data->input.async_flag == 1){
-      AsyncSmoothEnd(dmem_all_data);
-   }
-   //printf("%d %d\n", my_id, dmem_all_data->iter.relax);
-   dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
-  // printf("%d %e\n", my_id, MPI_Wtime()-begin);
-  // hypre_ParVectorCopy(dmem_all_data->vector_gridk.r, F_array[level]);
-   dmem_all_data->comm.is_async_smoothing_flag = 0;
+//   double end_begin = MPI_Wtime();
+//   if (dmem_all_data->input.async_flag == 1){
+//      DMEM_AsyncSmoothEnd(dmem_all_data);
+//   }
+//   //printf("%d %d\n", my_id, dmem_all_data->iter.relax);
+//   dmem_all_data->output.end_wtime += MPI_Wtime() - end_begin;
+//  // printf("%d %e\n", my_id, MPI_Wtime()-begin);
+//  // hypre_ParVectorCopy(dmem_all_data->vector_gridk.r, F_array[level]);
+//   dmem_all_data->comm.is_async_smoothing_flag = 0;
 }
 
 int AsyncSmoothCheckConverge(DMEM_AllData *dmem_all_data)
@@ -495,7 +500,7 @@ void AsyncSmoothRecvCleanup(DMEM_AllData *dmem_all_data)
   // }
 }
 
-void AsyncSmoothEnd(DMEM_AllData *dmem_all_data)
+void DMEM_AsyncSmoothEnd(DMEM_AllData *dmem_all_data)
 {
    for (int i = 0; i < dmem_all_data->comm.gridjToGridk_Correct_insideRecv.procs.size(); i++){
       dmem_all_data->comm.gridjToGridk_Correct_insideRecv.done_flags[i] = 2;
@@ -587,12 +592,11 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
       dmem_all_data->output.matvec_wtime += MPI_Wtime() - matvec_begin;
 
       vecop_begin = MPI_Wtime();
+      DMEM_HypreParVector_Scale(U_array[coarsest_level], 2.0, num_rows);
       if (dmem_all_data->input.smoother == L1_JACOBI){
-         DMEM_HypreParVector_Scale(U_array[coarsest_level], 2.0, num_rows);
          DMEM_HypreParVector_Ivaxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmL1_row_norm_gridk[coarsest_level], num_rows);
       }
       else {
-         DMEM_HypreParVector_Axpy(U_array[coarsest_level], U_array[coarsest_level], 1.0, num_rows);
          DMEM_HypreParVector_Ivaxpy(U_array[coarsest_level], Vtemp, dmem_all_data->matrix.symmwJacobi_scale_gridk[coarsest_level], num_rows);
       }
       dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;

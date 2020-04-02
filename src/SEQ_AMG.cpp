@@ -57,22 +57,22 @@ void SEQ_Vcycle(AllData *all_data)
 
    this_grid = all_data->grid.num_levels-1;
    smooth_start = omp_get_wtime();
-   PARDISO(all_data->pardiso.info.pt,
-           &(all_data->pardiso.info.maxfct),
-           &(all_data->pardiso.info.mnum),
-           &(all_data->pardiso.info.mtype),
-           &(all_data->pardiso.info.phase),
-           &(all_data->pardiso.csr.n),
-           all_data->pardiso.csr.a,
-           all_data->pardiso.csr.ia,
-           all_data->pardiso.csr.ja,
-           &(all_data->pardiso.info.idum),
-           &(all_data->pardiso.info.nrhs),
-           all_data->pardiso.info.iparm,
-           &(all_data->pardiso.info.msglvl),
-           all_data->vector.f[this_grid],
-           all_data->vector.u[this_grid],
-           &(all_data->pardiso.info.error));
+  // PARDISO(all_data->pardiso.info.pt,
+  //         &(all_data->pardiso.info.maxfct),
+  //         &(all_data->pardiso.info.mnum),
+  //         &(all_data->pardiso.info.mtype),
+  //         &(all_data->pardiso.info.phase),
+  //         &(all_data->pardiso.csr.n),
+  //         all_data->pardiso.csr.a,
+  //         all_data->pardiso.csr.ia,
+  //         all_data->pardiso.csr.ja,
+  //         &(all_data->pardiso.info.idum),
+  //         &(all_data->pardiso.info.nrhs),
+  //         all_data->pardiso.info.iparm,
+  //         &(all_data->pardiso.info.msglvl),
+  //         all_data->vector.f[this_grid],
+  //         all_data->vector.u[this_grid],
+  //         &(all_data->pardiso.info.error));
    all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
    all_data->grid.local_num_correct[this_grid]++;
 
@@ -131,22 +131,22 @@ void SEQ_Add_Vcycle(AllData *all_data)
    for (int level = 0; level < all_data->grid.num_levels; level++){
       if (level == all_data->grid.num_levels-1){
          this_grid = all_data->grid.num_levels-1;
-         PARDISO(all_data->pardiso.info.pt,
-                 &(all_data->pardiso.info.maxfct),
-                 &(all_data->pardiso.info.mnum),
-                 &(all_data->pardiso.info.mtype),
-                 &(all_data->pardiso.info.phase),
-                 &(all_data->pardiso.csr.n),
-                 all_data->pardiso.csr.a,
-                 all_data->pardiso.csr.ia,
-                 all_data->pardiso.csr.ja,
-                 &(all_data->pardiso.info.idum),
-                 &(all_data->pardiso.info.nrhs),
-                 all_data->pardiso.info.iparm,
-                 &(all_data->pardiso.info.msglvl),
-                 all_data->vector.r[this_grid],
-                 all_data->vector.u_fine[this_grid],
-                 &(all_data->pardiso.info.error));
+        // PARDISO(all_data->pardiso.info.pt,
+        //         &(all_data->pardiso.info.maxfct),
+        //         &(all_data->pardiso.info.mnum),
+        //         &(all_data->pardiso.info.mtype),
+        //         &(all_data->pardiso.info.phase),
+        //         &(all_data->pardiso.csr.n),
+        //         all_data->pardiso.csr.a,
+        //         all_data->pardiso.csr.ia,
+        //         all_data->pardiso.csr.ja,
+        //         &(all_data->pardiso.info.idum),
+        //         &(all_data->pardiso.info.nrhs),
+        //         all_data->pardiso.info.iparm,
+        //         &(all_data->pardiso.info.msglvl),
+        //         all_data->vector.r[this_grid],
+        //         all_data->vector.u_fine[this_grid],
+        //         &(all_data->pardiso.info.error));
       }
       else {
          fine_grid = level;
@@ -332,22 +332,22 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                smooth_start = omp_get_wtime();
                if (level == all_data->grid.num_levels-1){
                   this_grid = all_data->grid.num_levels-1;
-                  PARDISO(all_data->pardiso.info.pt,
-                          &(all_data->pardiso.info.maxfct),
-                          &(all_data->pardiso.info.mnum),
-                          &(all_data->pardiso.info.mtype),
-                          &(all_data->pardiso.info.phase),
-                          &(all_data->pardiso.csr.n),
-                          all_data->pardiso.csr.a,
-                          all_data->pardiso.csr.ia,
-                          all_data->pardiso.csr.ja,
-                          &(all_data->pardiso.info.idum),
-                          &(all_data->pardiso.info.nrhs),
-                          all_data->pardiso.info.iparm,
-                          &(all_data->pardiso.info.msglvl),
-                          all_data->vector.r[this_grid],
-                          all_data->vector.u_fine[this_grid],
-                          &(all_data->pardiso.info.error));
+                 // PARDISO(all_data->pardiso.info.pt,
+                 //         &(all_data->pardiso.info.maxfct),
+                 //         &(all_data->pardiso.info.mnum),
+                 //         &(all_data->pardiso.info.mtype),
+                 //         &(all_data->pardiso.info.phase),
+                 //         &(all_data->pardiso.csr.n),
+                 //         all_data->pardiso.csr.a,
+                 //         all_data->pardiso.csr.ia,
+                 //         all_data->pardiso.csr.ja,
+                 //         &(all_data->pardiso.info.idum),
+                 //         &(all_data->pardiso.info.nrhs),
+                 //         all_data->pardiso.info.iparm,
+                 //         &(all_data->pardiso.info.msglvl),
+                 //         all_data->vector.r[this_grid],
+                 //         all_data->vector.u_fine[this_grid],
+                 //         &(all_data->pardiso.info.error));
                }
                else {
                   fine_grid = level;
@@ -623,22 +623,22 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
             smooth_start = omp_get_wtime();
             if (level == all_data->grid.num_levels-1){
                this_grid = all_data->grid.num_levels-1;
-               PARDISO(all_data->pardiso.info.pt,
-                       &(all_data->pardiso.info.maxfct),
-                       &(all_data->pardiso.info.mnum),
-                       &(all_data->pardiso.info.mtype),
-                       &(all_data->pardiso.info.phase),
-                       &(all_data->pardiso.csr.n),
-                       all_data->pardiso.csr.a,
-                       all_data->pardiso.csr.ia,
-                       all_data->pardiso.csr.ja,
-                       &(all_data->pardiso.info.idum),
-                       &(all_data->pardiso.info.nrhs),
-                       all_data->pardiso.info.iparm,
-                       &(all_data->pardiso.info.msglvl),
-                       all_data->vector.r[this_grid],
-                       all_data->vector.u_fine[this_grid],
-                       &(all_data->pardiso.info.error));
+              // PARDISO(all_data->pardiso.info.pt,
+              //         &(all_data->pardiso.info.maxfct),
+              //         &(all_data->pardiso.info.mnum),
+              //         &(all_data->pardiso.info.mtype),
+              //         &(all_data->pardiso.info.phase),
+              //         &(all_data->pardiso.csr.n),
+              //         all_data->pardiso.csr.a,
+              //         all_data->pardiso.csr.ia,
+              //         all_data->pardiso.csr.ja,
+              //         &(all_data->pardiso.info.idum),
+              //         &(all_data->pardiso.info.nrhs),
+              //         all_data->pardiso.info.iparm,
+              //         &(all_data->pardiso.info.msglvl),
+              //         all_data->vector.r[this_grid],
+              //         all_data->vector.u_fine[this_grid],
+              //         &(all_data->pardiso.info.error));
             }
             else {
                fine_grid = level;

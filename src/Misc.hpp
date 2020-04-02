@@ -9,6 +9,8 @@ double RandDouble(double low, double high);
 
 double Norm2(double *x, int n);
 
+double Parfor_Norm2(double *x, int n, double sum);
+
 double Parfor_Norm2(double *x, int n);
 
 void Par_Norm2(AllData *all_data,
@@ -58,5 +60,7 @@ void FreeCSR(CSR *A);
 void FreeTriplet(Triplet *T);
 
 void WriteCSR(CSR A, char *out_str, int base);
+
+void PrintCSRMatrix(hypre_CSRMatrix *A, char *filename, int bin_file);
 
 #endif

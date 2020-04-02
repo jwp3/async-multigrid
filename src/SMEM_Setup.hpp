@@ -3,7 +3,10 @@
 
 #include "Main.hpp"
 
-void SMEM_Setup(void *amg_vdata,
-                AllData *all_data);
+void SMEM_Setup(AllData *all_data);
+
+void SMEM_BuildMatrix(AllData *all_data);
+
+void SMEM_SetHypreParameters(AllData *all_data);
 
 #endif

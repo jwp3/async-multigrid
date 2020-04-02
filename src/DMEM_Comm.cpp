@@ -177,14 +177,6 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                   DMEM_HypreRealArray_Set(comm_data->data[i], 0.0, vec_len);
                   dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 
-                  int num_cycles;
-                  if (dmem_all_data->input.solver == MULT_MULTADD){
-                     num_cycles = dmem_all_data->input.num_inner_cycles;
-                  }
-                  else {
-                     num_cycles = dmem_all_data->input.num_cycles;
-                  }
-
                   int my_converge_flag = 0;
                   int all_done_flag;
                   if (dmem_all_data->comm.is_async_smoothing_flag == 1){
@@ -195,8 +187,7 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                   }
                   else {
                      all_done_flag = dmem_all_data->comm.all_done_flag;
-                     if (dmem_all_data->iter.cycle >= num_cycles-2 ||
-                         dmem_all_data->iter.r_L2norm_local_converge_flag == 1){
+                     if (dmem_all_data->iter.grid_done_flag == 1){
                         my_converge_flag = 1;
                      }
                   }
@@ -265,15 +256,16 @@ int SendRecv(DMEM_AllData *dmem_all_data,
             return_flag = 1;
          }
       }
-      /* outisde recv */
+      /* outside recv */
       else if (comm_data->type == GRIDK_OUTSIDE_RECV || comm_data->type == FINE_INTRA_OUTSIDE_RECV){
          /* async outisde recv */
          if (dmem_all_data->input.async_flag == 1){
             if (comm_data->done_flags[i] < 2){
-               while (1) {
+               while (1){
                   flag = 0;
                   hypre_MPI_Test(&(comm_data->requests[i]), &flag, MPI_STATUS_IGNORE);
                   if (flag){
+                     comm_data->message_count[i]++;
                      vecop_begin = MPI_Wtime();
                      if (op == ACCUMULATE){
                         DMEM_HypreRealArray_Axpy(&v[vec_start], comm_data->data[i], 1.0, vec_len);
@@ -307,7 +299,6 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                         else {
                         }
                      }
-                     comm_data->message_count[i]++;
                      mpiirecv_begin = MPI_Wtime();
                      hypre_MPI_Irecv(comm_data->data[i],
                                      recv_len,
@@ -319,6 +310,10 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                      dmem_all_data->output.mpiirecv_wtime += MPI_Wtime() - mpiirecv_begin;
                      comm_data->recv_flags[i] = 1;
                      return_flag = 1;
+                     if (dmem_all_data->input.async_type == SEMI_ASYNC && dmem_all_data->comm.all_done_flag == 0){
+                        comm_data->semi_async_flags[i] = 0;
+                        break;
+                     }
                   }
                   else {
                      break;
@@ -326,7 +321,7 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                }
             }
          }
-         else { /* sync outisde recv */
+         else { /* sync outside recv */
             comm_data->message_count[i]++;
             mpiirecv_begin = MPI_Wtime();
             hypre_MPI_Irecv(comm_data->data[i],

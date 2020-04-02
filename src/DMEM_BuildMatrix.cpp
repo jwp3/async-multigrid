@@ -23,6 +23,10 @@ void CSRtoParHypreCSRMatrix(CSR B,
                             hypre_ParCSRMatrix **A_ptr,
                             OrderingData P,
                             MPI_Comm comm);
+void ParReadBinary_fread(FILE *mat_file,
+                         hypre_ParCSRMatrix **A_ptr,
+                         MPI_Comm comm,
+                         int symm_flag);
 
 static inline HYPRE_Int sign_double(HYPRE_Real a)
 {
@@ -446,7 +450,6 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
         // Vector B, X;
          const int copy_interior = 1;
          a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B, copy_interior);
-         return;
 
          HypreBoomerAMG *amg = new HypreBoomerAMG(A);
          amg->SetSystemsOptions(dim);
@@ -456,8 +459,8 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
          CGSolver pcg(A.GetComm());
          pcg.SetPreconditioner(*amg);
          pcg.SetOperator(A);
-         pcg.SetRelTol(1e-6);
-         pcg.SetMaxIter(500);
+         pcg.SetRelTol(1e-5);
+         pcg.SetMaxIter(10000);
          pcg.SetPrintLevel(0); // set to 3 to print the first and the last iterations only
          pcg.Mult(B, X);
 
@@ -578,6 +581,8 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
    //   delete fec;
    //}
    //delete pmesh; 
+
+
 }
 
 void DMEM_DistributeHypreParCSRMatrix_FineToGridk(DMEM_AllData *dmem_all_data,
@@ -912,11 +917,14 @@ void DMEM_DistributeHypreParCSRMatrix_FineToGridk(DMEM_AllData *dmem_all_data,
 void DMEM_MatrixFromFile(char *mat_file_str,
                          hypre_ParCSRMatrix **A_ptr,
                          MPI_Comm comm,
-                         int include_disconnected_points_flag)
+                         int include_disconnected_points_flag,
+                         int par_file)
 {
    int num_procs, my_id;
    MPI_Comm_rank(comm, &my_id);
    MPI_Comm_size(comm, &num_procs);
+
+   char buffer[100];
 
    idx_t ncon = 1, objval, n;
    int flag = METIS_OK;
@@ -929,67 +937,85 @@ void DMEM_MatrixFromFile(char *mat_file_str,
 
    P.nparts = num_procs;
    int file_err = 0;
-   if (my_id == 0){
-      idx_t nparts = (idx_t)num_procs;
-      idx_t options[METIS_NOPTIONS];
-      FILE *mat_file = fopen(mat_file_str, "rb");
+   if (par_file == 1){
+      sprintf(buffer, "%s_%d_%d", mat_file_str, num_procs, my_id);
+      FILE *mat_file = fopen(buffer, "rb");
       if (mat_file != NULL){
-         ReadBinary_fread_metis(mat_file, &G, &T, 1, include_disconnected_points_flag);
+         ParReadBinary_fread(mat_file, A_ptr, comm, 1);
          fclose(mat_file);
-         A.n = B.n_glob = G.n;
-         A.nnz = G.nnz;
-         METIS_SetDefaultOptions(options);
-         options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
-         idx_t *perm = (idx_t *)calloc(A.n, sizeof(idx_t));
-         if (num_procs > 1){
-            flag =  METIS_PartGraphKway(&(G.n), &ncon, G.xadj, G.adjncy, NULL, 
-                                        NULL, NULL, &nparts, NULL, NULL, 
-                                        options, &objval, perm);
-            if (flag != METIS_OK){
-               printf("****WARNING****: METIS returned error with code %d.\n", flag);
-            }
-         }
-         else {
-            for (int i = 0; i < A.n; i++) perm[i] = 0;
-         }
-         FreeMetis(&G);
-
-         P.perm = (int *)calloc(A.n, sizeof(int));
-         P.part = (int *)calloc(P.nparts, sizeof(int));
-         for (int i = 0; i < A.n; i++){
-            P.perm[i] = perm[i];
-            P.part[P.perm[i]]++;
-         }
-         free(perm);
-         P.disp = (int *)malloc((P.nparts+1) * sizeof(int));
-         P.disp[0] = 0;
-         for (int i = 0; i < P.nparts; i++){
-            P.disp[i+1] = P.disp[i] + P.part[i];
-         }
-         Reorder(&P, &T, &A);
-         //WriteCSR(A, "metis_matrix_matlab.txt", 1);
       }
       else {
          file_err = 1;
       }
+      MPI_Bcast(&file_err, 1, MPI_INT, 0, MPI_COMM_WORLD);
+      if (file_err == 1){
+         printf("ERROR: incorrect matrix file \"%s\"\n", buffer);
+         MPI_Finalize();
+         exit(1);
+      }
    }
-   MPI_Bcast(&file_err, 1, MPI_INT, 0, MPI_COMM_WORLD);
-   if (file_err == 1){ 
-      printf("ERROR: incorrect matrix file \"%s\"\n", mat_file_str);
-      MPI_Finalize();
-      exit(1);
+   else {
+      if (my_id == 0){
+         idx_t nparts = (idx_t)num_procs;
+         idx_t options[METIS_NOPTIONS];
+         FILE *mat_file = fopen(mat_file_str, "rb");
+         if (mat_file != NULL){
+            ReadBinary_fread_metis(mat_file, &G, &T, 1, include_disconnected_points_flag);
+            fclose(mat_file);
+            A.n = B.n_glob = G.n;
+            A.nnz = G.nnz;
+            METIS_SetDefaultOptions(options);
+            options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+            idx_t *perm = (idx_t *)calloc(A.n, sizeof(idx_t));
+            if (num_procs > 1){
+               flag =  METIS_PartGraphKway(&(G.n), &ncon, G.xadj, G.adjncy, NULL, 
+                                           NULL, NULL, &nparts, NULL, NULL, 
+                                           options, &objval, perm);
+               if (flag != METIS_OK){
+                  printf("****WARNING****: METIS returned error with code %d.\n", flag);
+               }
+            }
+            else {
+               for (int i = 0; i < A.n; i++) perm[i] = 0;
+            }
+            FreeMetis(&G);
+
+            P.perm = (int *)calloc(A.n, sizeof(int));
+            P.part = (int *)calloc(P.nparts, sizeof(int));
+            for (int i = 0; i < A.n; i++){
+               P.perm[i] = perm[i];
+               P.part[P.perm[i]]++;
+            }
+            free(perm);
+            P.disp = (int *)malloc((P.nparts+1) * sizeof(int));
+            P.disp[0] = 0;
+            for (int i = 0; i < P.nparts; i++){
+               P.disp[i+1] = P.disp[i] + P.part[i];
+            }
+            Reorder(&P, &T, &A);
+            //WriteCSR(A, "metis_matrix_matlab.txt", 1);
+         }
+         else {
+            file_err = 1;
+         }
+      }
+      MPI_Bcast(&file_err, 1, MPI_INT, 0, MPI_COMM_WORLD);
+      if (file_err == 1){ 
+         printf("ERROR: incorrect matrix file \"%s\"\n", mat_file_str);
+         MPI_Finalize();
+         exit(1);
+      }
+      DMEM_DistributeCSR_RootToFine(A, &B, &P, comm);
+      if (my_id == 0){
+         FreeTriplet(&T);
+         FreeCSR(&A);
+         free(P.perm);
+         free(P.map);
+      }
+      CSRtoParHypreCSRMatrix(B, A_ptr, P, comm);
+      FreeOrdering(&P);
+      FreeCSR(&B);
    }
-   DMEM_DistributeCSR_RootToFine(A, &B, &P, comm);
-   if (my_id == 0){
-      FreeTriplet(&T);
-      FreeCSR(&A);
-      free(P.perm);
-      free(P.map);
-   }
-  // DMEM_WriteCSR(B, "metis_matrix_matlab.txt", 1, P, comm);
-   CSRtoParHypreCSRMatrix(B, A_ptr, P, comm);
-   FreeOrdering(&P);
-   FreeCSR(&B);
 }
 
 void DMEM_DistributeCSR_RootToFine(CSR A,
@@ -1100,7 +1126,7 @@ void ReadBinary_fread_metis(FILE *mat_file,
    fread(buffer, sizeof(Triplet_AOS), size, mat_file);
 
    int file_lines = size/sizeof(Triplet_AOS);
-   int num_rows = (int)buffer[k].i;
+   int num_rows = (int)buffer[0].i;
    int nnz = 0;
 
    vector<int> row_count(num_rows, 0);
@@ -1320,6 +1346,90 @@ void CSRtoParHypreCSRMatrix(CSR B,
       HYPRE_IJMatrixSetValues(Aij, 1, &nnz, &row_glob, cols, values);
    }
 
+   HYPRE_IJMatrixAssemble(Aij);
+   void *object;
+   HYPRE_IJMatrixGetObject(Aij, &object);
+   *A_ptr = (hypre_ParCSRMatrix *)object;
+}
+
+void ParReadBinary_fread(FILE *mat_file,
+                         hypre_ParCSRMatrix **A_ptr,
+                         MPI_Comm comm,
+                         int symm_flag)
+{
+   int my_id, num_procs;
+   MPI_Comm_rank(comm, &my_id);
+   MPI_Comm_size(comm, &num_procs);
+
+   using namespace std;
+   size_t size;
+   int temp_size;
+   int k, q;
+   int row, col;
+   double elem;
+   Triplet_AOS *buffer;
+
+   fseek(mat_file, 0, SEEK_END);
+   size = ftell(mat_file);
+   rewind(mat_file);
+   buffer = (Triplet_AOS *)malloc(sizeof(Triplet_AOS) * size);
+   fread(buffer, sizeof(Triplet_AOS), size, mat_file);
+
+   int file_lines = size/sizeof(Triplet_AOS);
+   int num_rows = (int)buffer[0].i;
+
+   vector<vector<int>> col_vec(num_rows);
+   vector<vector<double>> elem_vec(num_rows);
+
+   int min_row = buffer[1].i, max_row = 0;
+   for (int k = 1; k < file_lines; k++){
+      row = buffer[k].i;
+      col = buffer[k].j;
+      elem = buffer[k].val;
+
+      //if (fabs(elem) > 0){
+         if (row < min_row){
+            min_row = row;
+         }
+         if (row > max_row){
+            max_row = row;
+         }
+      //}
+   }
+   for (int k = 1; k < file_lines; k++){
+      row = buffer[k].i;
+      col = buffer[k].j;
+      elem = buffer[k].val;
+
+      //if (fabs(elem) > 0){
+         col_vec[row-min_row].push_back(col-1);
+         elem_vec[row-min_row].push_back(elem);
+      //}
+   }
+
+   HYPRE_IJMatrix Aij;
+   HYPRE_IJMatrixCreate(comm, min_row-1, max_row-1, min_row-1, max_row-1, &Aij);
+   HYPRE_IJMatrixSetObjectType(Aij, HYPRE_PARCSR);
+   HYPRE_IJMatrixInitialize(Aij);
+
+   for (int i = 0; i < num_rows; i++){
+      int nnz = col_vec[i].size();
+      double *values = (double *)malloc(nnz * sizeof(double));
+      int *cols = (int *)malloc(nnz * sizeof(int));
+
+      for (int j = 0; j < nnz; j++){
+         cols[j] = col_vec[i][j];
+         values[j] = elem_vec[i][j];
+      }
+
+      row = min_row + i - 1;
+
+      HYPRE_IJMatrixSetValues(Aij, 1, &nnz, &row, cols, values);
+
+      free(values);
+      free(cols);
+   }
+   
    HYPRE_IJMatrixAssemble(Aij);
    void *object;
    HYPRE_IJMatrixGetObject(Aij, &object);

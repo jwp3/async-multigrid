@@ -16,8 +16,7 @@ void SMEM_Sync_Parfor_MatVec(AllData *all_data,
    #pragma omp for
    for (int i = 0; i < num_rows; i++){
       Axi = 0.0;
-      for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
-      {
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
          Axi += A_data[jj] * x[A_j[jj]];
       }
       y[i] = Axi;

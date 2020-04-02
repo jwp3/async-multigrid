@@ -22,7 +22,8 @@ void DMEM_BuildMfemMatrix(DMEM_AllData *dmem_all_data,
 void DMEM_MatrixFromFile(char *mat_file_str,
                          hypre_ParCSRMatrix **A_ptr,
                          MPI_Comm comm,
-                         int include_disconnected_points_flag);
+                         int include_disconnected_points_flag,
+                         int par_file);
 
 void DMEM_DistributeHypreParCSRMatrix_FineToGridk(DMEM_AllData *dmem_all_data,
                                                   hypre_ParCSRMatrix *A,

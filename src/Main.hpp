@@ -20,7 +20,7 @@
 #include<bits/stdc++.h>
 #include <numeric>
 #include <iterator>
-
+#include <malloc.h>
 
 //#include <mkl.h>
 
@@ -59,9 +59,11 @@
 #define AFACJ 8
 #define SYNC_MULTADD 9
 #define SYNC_AFACX 10
+#define EXTENDED_SYSTEM_MULTIGRID 11
 
 #define NO_ACCEL 0
 #define CHEBY_ACCEL 1
+#define RICHARD_ACCEL 1
 
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1
@@ -92,6 +94,7 @@
 
 #define SMOOTH_INTERP_MULTADD 0
 #define SMOOTH_INTERP_AFACJ 1
+#define SMOOTH_INTERP_AFACX 2
 
 #define RHS_ZEROS 0
 #define RHS_ONES 1
@@ -138,6 +141,8 @@ typedef struct{
    double hypre_solve_wtime;
    double r_norm2;
    double r0_norm2;
+   double r_norm2_ext_sys;
+   double r0_norm2_ext_sys;
    double hypre_e_norm2;
    double mfem_e_norm2;
    int sim_time_instance;
@@ -177,6 +182,10 @@ typedef struct{
    int print_level_stats_flag;
    int smooth_interp_type;
    int read_type;
+   int eig_power_max_iters;
+   int cheby_flag;
+   unsigned int delay_usec; 
+   int delay_flag;
 }InputData;
 
 typedef struct{
@@ -193,6 +202,13 @@ typedef struct{
    HYPRE_Real **r_coarse;
    HYPRE_Real **e;
    vector<vector<int>> i;
+   HYPRE_Real *xx;
+   HYPRE_Real *xx_prev;
+   HYPRE_Real *yy;
+   HYPRE_Real *zz;
+   HYPRE_Real *ff;
+   HYPRE_Real *bb;
+   HYPRE_Real *rr;
 }VectorData;
 
 //typedef struct{
@@ -237,7 +253,12 @@ typedef struct{
    hypre_CSRMatrix **A;
    hypre_CSRMatrix **P;
    hypre_CSRMatrix **R;
+   hypre_CSRMatrix *AA;
    double **L1_row_norm;
+   int n;
+   int nx;
+   int ny;
+   int nz;
 }MatrixData;
 
 typedef struct{
@@ -256,6 +277,8 @@ typedef struct{
    int **R_ne;
    int **P_ns;
    int **P_ne;
+   int *AA_NS;
+   int *AA_NE;
    int converge_flag;
 }ThreadData;
 
@@ -280,7 +303,40 @@ typedef struct{
    double *frac_level_work;
    int *zero_flags;
    int *global_smooth_flags;
+   int *disp;
 }GridData;
+
+typedef struct{
+   HYPRE_ParCSRMatrix parcsr_A;
+   HYPRE_ParVector par_b;
+   HYPRE_ParVector par_x;
+   HYPRE_Solver solver;
+   HYPRE_Int print_level;
+   HYPRE_Int interp_type;
+   HYPRE_Int coarsen_type;
+   HYPRE_Int max_levels;
+   HYPRE_Int agg_num_levels;
+   HYPRE_Int solver_id;
+   HYPRE_Int solve_flag;
+   HYPRE_Real strong_threshold;
+   HYPRE_Real multadd_trunc_factor;
+   HYPRE_Int start_smooth_level;
+   HYPRE_Int num_functions;
+   HYPRE_Int P_max_elmts;
+   HYPRE_Int add_P_max_elmts;
+   HYPRE_Real add_trunc_factor;
+}HypreData;
+
+typedef struct{
+   double alpha;
+   double beta;
+   double mu;
+   double delta;
+   double *c_prev;
+   double *c;
+   double *c_next;
+   double *omega;
+}ChebyData;
 
 typedef struct{
    BarrierData barrier;
@@ -294,6 +350,8 @@ typedef struct{
    GridData grid;
   // PardisoData pardiso;
    MfemData mfem;
+   HypreData hypre;
+   ChebyData cheby;
 }AllData;
 
 typedef struct{

@@ -296,12 +296,12 @@ void SwapDouble(double *xp, double *yp)
 void BubblesortPair_int_double(int *x, double *y, int n)
 {
    for (int i = 0; i < n-1; i++){
-       for (int j = 0; j < n-i-1; j++){
-           if (x[j] > x[j+1]){
-              SwapInt(&x[j], &x[j+1]);
-              SwapDouble(&y[j], &y[j+1]);
-           }
-       }
+      for (int j = 0; j < n-i-1; j++){
+         if (x[j] > x[j+1]){
+            SwapInt(&x[j], &x[j+1]);
+            SwapDouble(&y[j], &y[j+1]);
+         }
+      }
    }
 }
 
@@ -477,58 +477,63 @@ int SMEM_SRCLevelBarrier(AllData *all_data,
 
 void InitVectors(AllData *all_data)
 {
-   if (all_data->input.thread_part_type == ALL_LEVELS &&
-       all_data->input.num_threads > 1){
-      for (int level = 0; level < all_data->grid.num_levels; level++){
-         for (int inner_level = 0; inner_level < level+2; inner_level++){
-            if (inner_level < all_data->grid.num_levels){
-               int n = all_data->grid.n[inner_level];
+   if (all_data->input.solver != EXTENDED_SYSTEM_MULTIGRID){
+      if (all_data->input.thread_part_type == ALL_LEVELS &&
+          all_data->input.num_threads > 1){
+         for (int level = 0; level < all_data->grid.num_levels; level++){
+            for (int inner_level = 0; inner_level < level+2; inner_level++){
+               if (inner_level < all_data->grid.num_levels){
+                  int n = all_data->grid.n[inner_level];
+                  for (int i = 0; i < n; i++){
+                     all_data->level_vector[level].f[inner_level][i] = 0;
+                     all_data->level_vector[level].u[inner_level][i] = 0;
+                     all_data->level_vector[level].u_prev[inner_level][i] = 0;
+                     all_data->level_vector[level].u_coarse[inner_level][i] = 0;
+                     all_data->level_vector[level].u_coarse_prev[inner_level][i] = 0;
+                     all_data->level_vector[level].u_fine[inner_level][i] = 0;
+                     all_data->level_vector[level].u_fine_prev[inner_level][i] = 0;
+                     all_data->level_vector[level].y[inner_level][i] = 0;
+                     all_data->level_vector[level].r[inner_level][i] = 0;
+                     all_data->level_vector[level].r_coarse[inner_level][i] = 0;
+                     all_data->level_vector[level].r_fine[inner_level][i] = 0;
+                     all_data->level_vector[level].e[inner_level][i] = 0;
+                  }
+               }
+            }
+            if (level == 0){
+               int n = all_data->grid.n[level];
                for (int i = 0; i < n; i++){
-                  all_data->level_vector[level].f[inner_level][i] = 0;
-                  all_data->level_vector[level].u[inner_level][i] = 0;
-                  all_data->level_vector[level].u_prev[inner_level][i] = 0;
-                  all_data->level_vector[level].u_coarse[inner_level][i] = 0;
-                  all_data->level_vector[level].u_coarse_prev[inner_level][i] = 0;
-                  all_data->level_vector[level].u_fine[inner_level][i] = 0;
-                  all_data->level_vector[level].u_fine_prev[inner_level][i] = 0;
-                  all_data->level_vector[level].y[inner_level][i] = 0;
-                  all_data->level_vector[level].r[inner_level][i] = 0;
-                  all_data->level_vector[level].r_coarse[inner_level][i] = 0;
-                  all_data->level_vector[level].r_fine[inner_level][i] = 0;
-                  all_data->level_vector[level].e[inner_level][i] = 0;
+                  all_data->vector.r[level][i] = 0;
+                  all_data->vector.u[level][i] = 0;
+                  all_data->vector.y[level][i] = 0;
                }
             }
          }
-         if (level == 0){
+      }
+      else {
+         for (int level = 0; level < all_data->grid.num_levels; level++){
             int n = all_data->grid.n[level];
             for (int i = 0; i < n; i++){
-               all_data->vector.r[level][i] = 0;
+               if (level > 0){
+                  all_data->vector.f[level][i] = 0;
+               }
                all_data->vector.u[level][i] = 0;
+               all_data->vector.u_prev[level][i] = 0;
+               all_data->vector.u_coarse[level][i] = 0;
+               all_data->vector.u_coarse_prev[level][i] = 0;
+               all_data->vector.u_fine[level][i] = 0;
+               all_data->vector.u_fine_prev[level][i] = 0;
                all_data->vector.y[level][i] = 0;
+               all_data->vector.r[level][i] = 0;
+               all_data->vector.r_coarse[level][i] = 0;
+               all_data->vector.r_fine[level][i] = 0;
+               all_data->vector.e[level][i] = 0;
             }
          }
       }
    }
    else {
-      for (int level = 0; level < all_data->grid.num_levels; level++){
-         int n = all_data->grid.n[level];
-         for (int i = 0; i < n; i++){
-            if (level > 0){
-               all_data->vector.f[level][i] = 0;
-            }
-            all_data->vector.u[level][i] = 0;
-            all_data->vector.u_prev[level][i] = 0;
-            all_data->vector.u_coarse[level][i] = 0;
-            all_data->vector.u_coarse_prev[level][i] = 0;
-            all_data->vector.u_fine[level][i] = 0;
-            all_data->vector.u_fine_prev[level][i] = 0;
-            all_data->vector.y[level][i] = 0;
-            all_data->vector.r[level][i] = 0;
-            all_data->vector.r_coarse[level][i] = 0;
-            all_data->vector.r_fine[level][i] = 0;
-            all_data->vector.e[level][i] = 0;
-         }
-      }
+
    }
 }
 
@@ -539,30 +544,33 @@ void InitSolve(AllData *all_data)
    all_data->output.sim_cycle_time_instance = 0;
    all_data->grid.global_num_correct = 0;
    all_data->grid.global_cycle_num_correct = 0;
-   for (int level = 0; level < all_data->grid.num_levels; level++){
-      all_data->grid.num_smooth_wait[level] = 0;
-      all_data->grid.local_num_res_compute[level] = 0;
-      all_data->grid.local_num_correct[level] = 0;
-      all_data->grid.local_cycle_num_correct[level] = 0;
-      all_data->grid.last_read_correct[level] = 0;
-      all_data->grid.last_read_cycle_correct[level] = 0;
-      all_data->grid.mean_grid_wait[level] = 0;
-      all_data->grid.max_grid_wait[level] = 0;
-      all_data->grid.min_grid_wait[level] = DBL_MAX;
+   
+   if (all_data->input.solver != EXTENDED_SYSTEM_MULTIGRID){
+      for (int level = 0; level < all_data->grid.num_levels; level++){
+         all_data->grid.num_smooth_wait[level] = 0;
+         all_data->grid.local_num_res_compute[level] = 0;
+         all_data->grid.local_num_correct[level] = 0;
+         all_data->grid.local_cycle_num_correct[level] = 0;
+         all_data->grid.last_read_correct[level] = 0;
+         all_data->grid.last_read_cycle_correct[level] = 0;
+         all_data->grid.mean_grid_wait[level] = 0;
+         all_data->grid.max_grid_wait[level] = 0;
+         all_data->grid.min_grid_wait[level] = DBL_MAX;
+      }
+ 
+      all_data->output.solve_wtime = 0;
+      for (int t = 0; t < all_data->input.num_threads; t++){
+         all_data->output.smooth_wtime[t] = 0;
+         all_data->output.residual_wtime[t] = 0;
+         all_data->output.restrict_wtime[t] = 0;
+         all_data->output.prolong_wtime[t] = 0;
+      }
+
+      if (all_data->input.print_grid_wait_flag == 1){
+         all_data->grid.grid_wait_hist.resize(0);
+      }
    }
    all_data->thread.converge_flag = 0;
-
-   all_data->output.solve_wtime = 0;
-   for (int t = 0; t < all_data->input.num_threads; t++){
-      all_data->output.smooth_wtime[t] = 0;
-      all_data->output.residual_wtime[t] = 0;
-      all_data->output.restrict_wtime[t] = 0;
-      all_data->output.prolong_wtime[t] = 0;
-   }
-
-   if (all_data->input.print_grid_wait_flag == 1){
-      all_data->grid.grid_wait_hist.resize(0);
-   }
 }
 
 vector<int> Divisors(int x)
@@ -622,4 +630,51 @@ void WriteCSR(CSR A, char *out_str, int base)
       }
    }
    fclose(out_file);
+}
+
+void PrintCSRMatrix(hypre_CSRMatrix *A, char *filename, int bin_file)
+{
+   HYPRE_Real *A_data;
+   HYPRE_Int *A_i, *A_j;
+   FILE *file_ptr;
+   char buffer[100];
+
+   int num_rows = hypre_CSRMatrixNumRows(A);
+   int num_cols = hypre_CSRMatrixNumCols(A);
+   int nnz = hypre_CSRMatrixNumNonzeros(A);
+
+   sprintf(buffer, "%s", filename);
+
+   if (bin_file){
+      file_ptr = fopen(buffer, "wb");
+      fwrite(&num_rows, sizeof(int), 1, file_ptr);
+      fwrite(&num_cols, sizeof(int), 1, file_ptr);
+      fwrite(&nnz, sizeof(double), 1, file_ptr);
+   }
+   else {
+      file_ptr = fopen(buffer, "w");
+      fprintf(file_ptr, "%d %d %d\n", num_rows, num_cols, nnz);
+   }
+
+
+   A_data = hypre_CSRMatrixData(A);
+   A_i = hypre_CSRMatrixI(A);
+   A_j = hypre_CSRMatrixJ(A);
+   for (HYPRE_Int i = 0; i < num_rows; i++){
+      for (HYPRE_Int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         HYPRE_Int ii = A_j[jj];
+         int row = i+1;
+         int col = ii+1;
+         double elem = A_data[jj];
+         if (bin_file == 1){
+            fwrite(&row, sizeof(int), 1, file_ptr);
+            fwrite(&col, sizeof(int), 1, file_ptr);
+            fwrite(&elem, sizeof(double), 1, file_ptr);
+         }
+         else {
+            fprintf(file_ptr, "%d %d %.16e\n", row, col, elem);
+         }
+      }
+   }
+   fclose(file_ptr);
 }

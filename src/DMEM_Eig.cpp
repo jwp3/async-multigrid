@@ -17,6 +17,7 @@ void DMEM_PowerMult(DMEM_AllData *dmem_all_data)
 
    HYPRE_Real u_norm, y_norm;
 
+  // srand((double)my_id * MPI_Wtime());
    srand((double)my_id);
 
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)dmem_all_data->hypre.solver;
@@ -34,7 +35,7 @@ void DMEM_PowerMult(DMEM_AllData *dmem_all_data)
 
    HYPRE_Real *u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(u));
 
-   HYPRE_BoomerAMGSetMaxIter(dmem_all_data->hypre.solver, 1);
+   HYPRE_BoomerAMGSetMaxIter(dmem_all_data->hypre.solver, dmem_all_data->input.eig_power_MG_max_iters);
    HYPRE_BoomerAMGSetPrintLevel(dmem_all_data->hypre.solver, 0);
 
    for (int i = 0; i < num_rows; i++) u_local_data[i] = RandDouble(0.0, 1.0)-.5;
@@ -44,8 +45,15 @@ void DMEM_PowerMult(DMEM_AllData *dmem_all_data)
       DMEM_HypreParVector_Scale(u, 1.0/u_norm, num_rows);
       DMEM_HypreParVector_Copy(y, u, num_rows);
       hypre_ParCSRMatrixMatvec(1.0, A, u, 0.0, r);
+      DMEM_HypreParVector_Copy(f, r, num_rows);
       DMEM_HypreParVector_Set(u, 0.0, num_rows);
-      HYPRE_BoomerAMGSolve(dmem_all_data->hypre.solver, A, r, u);
+     // if (dmem_all_data->input.solver == MULT){
+         HYPRE_BoomerAMGSolve(dmem_all_data->hypre.solver, A, f, u);
+     // }
+     // else {
+     //    DMEM_SyncAddCycle(dmem_all_data);
+     // }
+
      // DMEM_HypreParVector_Copy(f, r, num_rows);
      // DMEM_MultCycle(dmem_all_data);
 
@@ -63,8 +71,15 @@ void DMEM_PowerMult(DMEM_AllData *dmem_all_data)
       DMEM_HypreParVector_Scale(u, 1.0/u_norm, num_rows);
       DMEM_HypreParVector_Copy(y, u, num_rows);
       hypre_ParCSRMatrixMatvec(1.0, A, u, 0, r);
+      DMEM_HypreParVector_Copy(f, r, num_rows);
       DMEM_HypreParVector_Set(u, 0.0, num_rows);
-      HYPRE_BoomerAMGSolve(dmem_all_data->hypre.solver, A, r, u);
+     // if (dmem_all_data->input.solver == MULT){
+         HYPRE_BoomerAMGSolve(dmem_all_data->hypre.solver, A, f, u);
+     // }
+     // else {
+     //    DMEM_SyncAddCycle(dmem_all_data);
+     // }
+
      // DMEM_HypreParVector_Copy(f, r, num_rows);
      // DMEM_MultCycle(dmem_all_data);
 
@@ -77,11 +92,13 @@ void DMEM_PowerMult(DMEM_AllData *dmem_all_data)
    } 
    eig_min = hypre_ParVectorInnerProd(y, u);
 
-   dmem_all_data->cheby.beta = eig_max;
-   dmem_all_data->cheby.alpha = eig_min;
+   dmem_all_data->cheby.beta = eig_max - dmem_all_data->input.b_eig_shift;
+   dmem_all_data->cheby.alpha = eig_min + dmem_all_data->input.a_eig_shift;
 
    HYPRE_BoomerAMGSetMaxIter(dmem_all_data->hypre.solver, dmem_all_data->input.num_cycles);
    HYPRE_BoomerAMGSetPrintLevel(dmem_all_data->hypre.solver, dmem_all_data->hypre.print_level);
    srand(0);
-   if (my_id == 0) printf("eig max %e, eig min %e\n", eig_max, eig_min);
+   if (my_id == 0 && dmem_all_data->input.oneline_output_flag == 0)
+      printf("CHEBY: power eig max %.16e, eig min %.16e\n",
+             dmem_all_data->cheby.beta,  dmem_all_data->cheby.alpha);
 }

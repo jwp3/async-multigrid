@@ -13,6 +13,8 @@ SMEM_CPP_FILES = $(SRC_DIR)Laplacian.cpp \
            	 $(SRC_DIR)SMEM_Sync_AMG.cpp \
            	 $(SRC_DIR)SMEM_Async_AMG.cpp \
            	 $(SRC_DIR)SMEM_Solve.cpp \
+		 $(SRC_DIR)SMEM_ExtendedSystem.cpp \
+		 $(SRC_DIR)SMEM_Cheby.cpp \
 
 DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 		 $(SRC_DIR)DMEM_Misc.cpp \
@@ -72,19 +74,28 @@ LIBS_LASSEN = \
  -lcurand \
  -lcudart \
 
+SMEM_quartz: clean_smem_quartz SMEM_Main_quartz
+
 DMEM_lassen: clean_lassen DMEM_Main_lassen
 
-DMEM_quartz: clean_quartz DMEM_Main_quartz
+DMEM_lassen2: clean_lassen2 DMEM_Main_lassen2
+
+DMEM_quartz: clean_quartz DMEM_Main_quartz2
 
 SMEM_Main: $(SRC_DIR)SMEM_Main.cpp
 	$(COMPILE) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) -DEIGEN_DONT_VECTORIZE=1 $(LIBS) $(INCLUDE) -o SMEM_Main
-	cp SMEM_Main experiments/SMEM_Main
+
+SMEM_Main_quartz: $(SRC_DIR)SMEM_Main.cpp
+	$(COMPILE_QUARTZ) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o SMEM_Main_quartz
 
 DMEM_Main_lassen: $(SRC_DIR)DMEM_Main.cpp
 	$(COMPILE_LASSEN) $(INCLUDE_LASSEN) $(DMEM_CPP_FILES) $(SRC_DIR)DMEM_Main.cpp -o DMEM_Main_lassen $(LIBS_LASSEN)
 
-DMEM_Main_quartz: $(SRC_DIR)DMEM_Main.cpp
-	$(COMPILE_QUARTZ) $(SRC_DIR)DMEM_Main.cpp $(DMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o DMEM_Main_quartz
+DMEM_Main_lassen2: $(SRC_DIR)DMEM_Main.cpp
+	$(COMPILE_LASSEN) $(INCLUDE_LASSEN) $(DMEM_CPP_FILES) $(SRC_DIR)DMEM_Main.cpp -o DMEM_Main_lassen2 $(LIBS_LASSEN)
+
+DMEM_Main_quartz2: $(SRC_DIR)DMEM_Main.cpp
+	$(COMPILE_QUARTZ) $(SRC_DIR)DMEM_Main.cpp $(DMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o DMEM_Main_quartz2
 
 TextToBin: $(SRC_DIR)TextToBin.cpp
 	$(COMPILE_QUARTZ) $(SRC_DIR)TextToBin.cpp -o TextToBin
@@ -92,5 +103,11 @@ TextToBin: $(SRC_DIR)TextToBin.cpp
 clean_lassen:
 	rm -f DMEM_Main_lassen
 
+clean_lassen2:
+	rm -f DMEM_Main_lassen2
+
 clean_quartz:
-	rm -f DMEM_Main_quartz
+	rm -f DMEM_Main_quartz2
+
+clean_smem_quartz:
+	rm -f SMEM_Main_quartz

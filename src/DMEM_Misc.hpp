@@ -6,7 +6,7 @@
 
 void DMEM_PrintOutput(DMEM_AllData *dmem_all_data);
 
-void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename);
+void DMEM_PrintParCSRMatrix(hypre_ParCSRMatrix *A, char *filename, int par_file, int bin_file);
 
 void DMEM_ResetAllCommData(DMEM_AllData *dmem_all_data);
 
@@ -39,5 +39,12 @@ void DMEM_HypreRealArray_Set(HYPRE_Real *y, HYPRE_Real alpha, HYPRE_Int size);
 void DMEM_HypreRealArray_Prefetch(HYPRE_Real *y, HYPRE_Int size, HYPRE_Int to_location);
 
 void DMEM_WriteCSR(CSR A, char *out_str, int base, OrderingData P, MPI_Comm comm);
+
+void DMEM_ChebyUpdate(DMEM_AllData *dmem_all_data,
+                      hypre_ParVector *d,
+                      hypre_ParVector *u,
+                      int num_rows);
+
+void DMEM_DelayProc(DMEM_AllData *dmem_all_data);
 
 #endif

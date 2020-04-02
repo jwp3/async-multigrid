@@ -123,7 +123,19 @@ typedef struct{
    int only_build_matrix_flag;
    int include_disconnected_points_flag;
    int eig_power_max_iters;
+   int eig_power_MG_max_iters;
    int accel_type;
+   int print_matrix_flag;
+   int par_file_flag;
+   int async_type;
+   double imbal;
+   double eig_shift;
+   double a_eig_shift;
+   double b_eig_shift;
+   unsigned int delay_usec;
+   int delay_id;
+   int delay_flag;
+   int cheby_grid;
 }DMEM_InputData;
 
 typedef struct{
@@ -167,6 +179,7 @@ typedef struct{
    hypre_ParVector *b;
    hypre_ParVector *r;
    hypre_ParVector *e;
+   hypre_ParVector *d;
    hypre_Vector *x_ghost;
    hypre_Vector *x_ghost_prev;
    hypre_Vector *b_ghost;
@@ -214,6 +227,7 @@ typedef struct{
    vector<int> next_inflight;
    vector<int> num_inflight;
    vector<int> max_inflight;
+   vector<int> semi_async_flags;
    vector<HYPRE_Real> r_norm;
    vector<HYPRE_Real> r_norm_boundary;
    vector<HYPRE_Real> r_norm_boundary_prev;
@@ -306,6 +320,7 @@ typedef struct{
    int inner_cycle;
    int relax;
    int converge_flag;
+   int grid_done_flag;
 }DMEM_IterData;
 
 typedef struct{
