@@ -533,7 +533,14 @@ void InitVectors(AllData *all_data)
       }
    }
    else {
-
+      int n = hypre_CSRMatrixNumRows(all_data->matrix.AA);
+      for (int i = 0; i < n; i++){
+         all_data->vector.xx[i] = 0;
+         all_data->vector.yy[i] = 0;
+      }
+      hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
+      hypre_ParVector **U_array = hypre_ParAMGDataUArray(amg_data);
+      hypre_ParVectorSetConstantValues(U_array[0], 0.0);
    }
 }
 
@@ -677,4 +684,121 @@ void PrintCSRMatrix(hypre_CSRMatrix *A, char *filename, int bin_file)
       }
    }
    fclose(file_ptr);
+}
+
+void ReadBinary_fread_HypreParCSR(FILE *mat_file,
+                                  hypre_ParCSRMatrix **A_ptr,
+                                  int symm_flag,
+                                  int include_disconnected_points_flag)
+{
+   using namespace std;
+   size_t size;
+   int temp_size;
+   int k, q;
+   int row, col;
+   double elem;
+   Triplet_AOS *buffer;
+
+   fseek(mat_file, 0, SEEK_END);
+   size = ftell(mat_file);
+   rewind(mat_file);
+   buffer = (Triplet_AOS *)malloc(sizeof(Triplet_AOS) * size);
+   fread(buffer, sizeof(Triplet_AOS), size, mat_file);
+
+   int file_lines = size/sizeof(Triplet_AOS);
+   int num_rows = (int)buffer[0].i;
+   int nnz = 0;
+
+   vector<int> row_count(num_rows, 0);
+   vector<int> col_count(num_rows, 0);
+   vector<int> line_flag(file_lines, 0);
+
+   for (int k = 1; k < file_lines; k++){
+      row = buffer[k].i;
+      col = buffer[k].j;
+      elem = buffer[k].val;
+
+      if (fabs(elem) > 0){
+         col_count[col-1]++;
+         row_count[row-1]++;
+         line_flag[k] = 1;
+         nnz++;
+         if (symm_flag == 1 && row != col){
+            nnz++;
+         }
+      }
+   }
+
+   // TODO: fix this
+   int num_rows_old = num_rows;
+   vector<int> flags_prefix_sum(num_rows, 0);
+   if (include_disconnected_points_flag == 0){
+      vector<int> disconnected_point_flag(num_rows, 0);
+      int num_disconnected_points = 0;
+      for (int k = 1; k < file_lines; k++){
+         row = buffer[k].i;
+         col = buffer[k].j;
+         elem = buffer[k].val;
+
+         if (line_flag[k] == 1){
+            if (col_count[row-1] <= 1){
+               line_flag[k] = 0;
+               disconnected_point_flag[row-1] = 1;
+               num_disconnected_points++;
+               num_rows--;
+               nnz--;
+            }
+           // if (row_count[col-1] <= 1){
+           //    line_flag[k] = 0;
+           // }
+         }
+      }
+      partial_sum(disconnected_point_flag.begin(), disconnected_point_flag.end(), flags_prefix_sum.begin(), plus<int>());
+   }
+
+   vector<vector<int>> col_vec(num_rows);
+   vector<vector<double>> elem_vec(num_rows);
+   for (int k = 1; k < file_lines; k++){
+      if (line_flag[k] == 1){
+         row = buffer[k].i;
+         col = buffer[k].j;
+         elem = buffer[k].val;
+
+         row -= flags_prefix_sum[row-1];
+         col -= flags_prefix_sum[col-1];
+
+         col_vec[row-1].push_back(col-1);
+         elem_vec[row-1].push_back(elem);
+         if (symm_flag == 1 && row != col){
+            col_vec[col-1].push_back(row-1);
+            elem_vec[col-1].push_back(elem);
+         }
+      }
+   }
+
+   HYPRE_IJMatrix Aij;
+   HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, num_rows-1, 0, num_rows-1, &Aij);
+   HYPRE_IJMatrixSetObjectType(Aij, HYPRE_PARCSR);
+   HYPRE_IJMatrixInitialize(Aij);
+
+   for (int i = 0; i < num_rows; i++){
+      int nnz = col_vec[i].size();
+      double *values = (double *)malloc(nnz * sizeof(double));
+      int *cols = (int *)malloc(nnz * sizeof(int));
+
+      for (int j = 0; j < nnz; j++){
+         cols[j] = col_vec[i][j];
+         values[j] = elem_vec[i][j];
+      }
+
+      HYPRE_IJMatrixSetValues(Aij, 1, &nnz, &i, cols, values);
+
+      free(values);
+      free(cols);
+   }
+
+   HYPRE_IJMatrixAssemble(Aij);
+   void *object;
+   HYPRE_IJMatrixGetObject(Aij, &object);
+   *A_ptr = (hypre_ParCSRMatrix *)object;
 }

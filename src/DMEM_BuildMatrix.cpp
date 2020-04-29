@@ -12,13 +12,13 @@ void List_to_Metis(MetisGraph *G,
                    Triplet *T,
                    std::vector<std::list<int>> col_list,
                    std::vector<std::list<double>> elem_list);
-void ReorderTriplet(Triplet T, CSR *A, OrderingData *P);
+void CSR_ReorderTriplet(Triplet T, CSR *A, OrderingData *P);
 void ReadBinary_fread_metis(FILE *mat_file,
                             MetisGraph *G,
                             Triplet *T,
                             int symm_flag,
                             int include_disconnected_points_flag);
-void Reorder(OrderingData *P, Triplet *T, CSR *A);
+void CSR_Reorder(OrderingData *P, Triplet *T, CSR *A);
 void CSRtoParHypreCSRMatrix(CSR B,
                             hypre_ParCSRMatrix **A_ptr,
                             OrderingData P,
@@ -992,7 +992,7 @@ void DMEM_MatrixFromFile(char *mat_file_str,
             for (int i = 0; i < P.nparts; i++){
                P.disp[i+1] = P.disp[i] + P.part[i];
             }
-            Reorder(&P, &T, &A);
+            CSR_Reorder(&P, &T, &A);
             //WriteCSR(A, "metis_matrix_matlab.txt", 1);
          }
          else {
@@ -1207,7 +1207,7 @@ void ReadBinary_fread_metis(FILE *mat_file,
    free(buffer);
 }
 
-void ReorderTriplet(Triplet T, CSR *A, OrderingData *P)
+void CSR_ReorderTriplet(Triplet T, CSR *A, OrderingData *P)
 {
    int row, col;
    int s, q, k, map_i, p;
@@ -1280,11 +1280,11 @@ void ReorderTriplet(Triplet T, CSR *A, OrderingData *P)
    free(len);
 }
 
-void Reorder(OrderingData *P, 
+void CSR_Reorder(OrderingData *P, 
              Triplet *T,
              CSR *A)
 {
-   ReorderTriplet(*T, A, P);
+   CSR_ReorderTriplet(*T, A, P);
 }
 
 void List_to_Metis(MetisGraph *G,
@@ -1367,7 +1367,6 @@ void ParReadBinary_fread(FILE *mat_file,
    int k, q;
    int row, col;
    double elem;
-   Triplet_AOS *buffer;
 
    fseek(mat_file, 0, SEEK_END);
    size = ftell(mat_file);
@@ -1387,24 +1386,24 @@ void ParReadBinary_fread(FILE *mat_file,
       col = buffer[k].j;
       elem = buffer[k].val;
 
-      //if (fabs(elem) > 0){
+      if (fabs(elem) > 0){
          if (row < min_row){
             min_row = row;
          }
          if (row > max_row){
             max_row = row;
          }
-      //}
+      }
    }
    for (int k = 1; k < file_lines; k++){
       row = buffer[k].i;
       col = buffer[k].j;
       elem = buffer[k].val;
 
-      //if (fabs(elem) > 0){
+      if (fabs(elem) > 0){
          col_vec[row-min_row].push_back(col-1);
          elem_vec[row-min_row].push_back(elem);
-      //}
+      }
    }
 
    HYPRE_IJMatrix Aij;
@@ -1429,7 +1428,7 @@ void ParReadBinary_fread(FILE *mat_file,
       free(values);
       free(cols);
    }
-   
+
    HYPRE_IJMatrixAssemble(Aij);
    void *object;
    HYPRE_IJMatrixGetObject(Aij, &object);

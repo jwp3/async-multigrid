@@ -115,6 +115,11 @@
 #define SPS_PROBABILITY_INVERSE 1
 #define SPS_PROBABILITY_RANDOM 2
 
+#define DELAY_NONE 0
+#define DELAY_ONE 1
+#define DELAY_SOME 2
+#define DELAY_ALL 3
+
 using namespace std;
 using namespace mfem;
 
@@ -186,6 +191,9 @@ typedef struct{
    int cheby_flag;
    unsigned int delay_usec; 
    int delay_flag;
+   char mat_file_str[1024];
+   int omp_parfor_flag;
+   double delay_frac;
 }InputData;
 
 typedef struct{
@@ -247,6 +255,7 @@ typedef struct{
    int order;
    char mesh_file[1000];
    double *u;
+   int max_amr_dofs;
 }MfemData;
 
 typedef struct{

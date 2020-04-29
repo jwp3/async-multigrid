@@ -33,11 +33,11 @@ DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 
 CPP_COMPILE = g++ -fopenmp -O3
 ICPC_COMPILE = icpc -qopenmp -std=c++11 -O3 -Wall
-MPIICPC_COMPILE = mpiicpc -qopenmp -std=c++11 -O3 -mkl #-g -w3
+MPIICPC_COMPILE = mpiicpc -qopenmp -std=c++11 -O3 #-mkl -g -w3
 MPICXX_COMPILE =  mpicxx -g -fopenmp -std=c++0x -O3 #-Wall
 
 COMPILE_CORI = CC -qopenmp -std=c++11 -O3 -mkl
-COMPILE_QUARTZ =  mpicxx -g -fopenmp -std=c++0x -O3
+COMPILE_QUARTZ =  mpicxx -fopenmp -std=c++0x -O3
 COMPILE_LASSEN = nvcc -g -O3 -std=c++11 -x=cu --expt-extended-lambda -arch=sm_70 -ccbin mpicxx
 
 INCLUDE_CORI = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
@@ -76,6 +76,8 @@ LIBS_LASSEN = \
 
 SMEM_quartz: clean_smem_quartz SMEM_Main_quartz
 
+SMEM_quartz2: clean_smem_quartz2 SMEM_Main_quartz2
+
 DMEM_lassen: clean_lassen DMEM_Main_lassen
 
 DMEM_lassen2: clean_lassen2 DMEM_Main_lassen2
@@ -87,6 +89,9 @@ SMEM_Main: $(SRC_DIR)SMEM_Main.cpp
 
 SMEM_Main_quartz: $(SRC_DIR)SMEM_Main.cpp
 	$(COMPILE_QUARTZ) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o SMEM_Main_quartz
+
+SMEM_Main_quartz2: $(SRC_DIR)SMEM_Main.cpp
+	$(COMPILE_QUARTZ) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o SMEM_Main_quartz2
 
 DMEM_Main_lassen: $(SRC_DIR)DMEM_Main.cpp
 	$(COMPILE_LASSEN) $(INCLUDE_LASSEN) $(DMEM_CPP_FILES) $(SRC_DIR)DMEM_Main.cpp -o DMEM_Main_lassen $(LIBS_LASSEN)
@@ -111,3 +116,6 @@ clean_quartz:
 
 clean_smem_quartz:
 	rm -f SMEM_Main_quartz
+
+clean_smem_quartz2:
+	rm -f SMEM_Main_quartz2

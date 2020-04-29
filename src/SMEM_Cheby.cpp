@@ -14,8 +14,8 @@ void ChebySetup(AllData *all_data)
    HYPRE_Real u_norm, y_norm;
    int num_threads = all_data->input.num_threads;
 
-  // srand((double)my_id * MPI_Wtime());
-   srand(omp_get_wtime());
+   srand(0);
+  // srand(omp_get_wtime());
 
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
    hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
@@ -37,6 +37,7 @@ void ChebySetup(AllData *all_data)
 
    for (int i = 0; i < num_rows; i++) u_local_data[i] = RandDouble(0.0, 1.0)-.5;
    eig_power_iters = 0;
+   double start = omp_get_wtime();
    while (1){
       u_norm = sqrt(hypre_ParVectorInnerProd(u, u));
       hypre_ParVectorScale(1.0/u_norm, u);
@@ -68,6 +69,7 @@ void ChebySetup(AllData *all_data)
       hypre_ParVectorAxpy(-eig_max, v, u);
    }
    eig_min = hypre_ParVectorInnerProd(v, u);
+   double eig_time = omp_get_wtime() - start;
 
    all_data->cheby.beta = eig_max;// - all_data->input.b_eig_shift;
    all_data->cheby.alpha = eig_min;// + all_data->input.a_eig_shift;
@@ -75,9 +77,10 @@ void ChebySetup(AllData *all_data)
    HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, all_data->input.num_cycles);
    HYPRE_BoomerAMGSetPrintLevel(all_data->hypre.solver, all_data->hypre.print_level);
    srand(0);
-  // if (all_data->input.oneline_output_flag == 0)
-      printf("CHEBY: power eig max %.16e, eig min %.16e\n",
-             all_data->cheby.beta,  all_data->cheby.alpha);
+
+   if (all_data->input.format_output_flag == 0)
+      printf("CHEBY: power eig max %.16e, eig min %.16e, time %e\n",
+             all_data->cheby.beta,  all_data->cheby.alpha, eig_time);
 
    double alpha = all_data->cheby.alpha;
    double beta = all_data->cheby.beta;
@@ -95,9 +98,10 @@ void ChebySetup(AllData *all_data)
       all_data->cheby.omega[t] = omega;
    }
 
+   srand(0);
    for (int i = 0; i < num_rows; i++){
       u_local_data[i] = 0.0;
-      f_local_data[i] = 1.0;
+      f_local_data[i] = RandDouble(0.0, 1.0)-.5;//1.0;
    }  
 }
 

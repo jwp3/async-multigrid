@@ -1,43 +1,10 @@
 #include "Main.hpp"
 
-// Sample runs:  ex2 -m ../data/beam-tri.mesh
-//               ex2 -m ../data/beam-quad.mesh
-//               ex2 -m ../data/beam-tet.mesh
-//               ex2 -m ../data/beam-hex.mesh
-//               ex2 -m ../data/beam-quad.mesh -o 3 -sc
-//               ex2 -m ../data/beam-quad-nurbs.mesh
-//               ex2 -m ../data/beam-hex-nurbs.mesh
-//
-// Description:  This example code solves a simple linear elasticity problem
-//               describing a multi-material cantilever beam.
-//
-//               Specifically, we approximate the weak form of -div(sigma(u))=0
-//               where sigma(u)=lambda*div(u)*I+mu*(grad*u+u*grad) is the stress
-//               tensor corresponding to displacement field u, and lambda and mu
-//               are the material Lame constants. The boundary conditions are
-//               u=0 on the fixed part of the boundary with attribute 1, and
-//               sigma(u).n=f on the remainder with f being a constant pull down
-//               vector on boundary elements with attribute 2, and zero
-//               otherwise. The geometry of the domain is assumed to be as
-//               follows:
-//
-//                                 +----------+----------+
-//                    boundary --->| material | material |<--- boundary
-//                    attribute 1  |    1     |    2     |     attribute 2
-//                    (fixed)      +----------+----------+     (pull down)
-//
-//               The example demonstrates the use of high-order and NURBS vector
-//               finite element spaces with the linear elasticity bilinear form,
-//               meshes with curved elements, and the definition of piece-wise
-//               constant and vector coefficient objects. Static condensation is
-//               also illustrated.
-//
-//               We recommend viewing Example 1 before viewing this example.
-
 void MFEM_Elasticity(AllData *all_data,
                      HYPRE_IJMatrix *Aij)
 {
    bool static_cond = false;
+   int flux_averaging = 0;
 
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
@@ -47,8 +14,7 @@ void MFEM_Elasticity(AllData *all_data,
 
    // 3. Select the order of the finite element discretization space. For NURBS
    //    meshes, we increase the order by degree elevation.
-   if (mesh->NURBSext)
-   {
+   if (mesh->NURBSext){
       mesh->DegreeElevate(all_data->mfem.order, all_data->mfem.order);
    }
 
@@ -61,9 +27,10 @@ void MFEM_Elasticity(AllData *all_data,
    // 4. Define a finite element space on the mesh. Here we use continuous
    //    Lagrange finite elements of the specified order. If order < 1, we
    //    instead use an isoparametric/isogeometric space.
-   FiniteElementCollection *fec;
-   fec = new H1_FECollection(all_data->mfem.order, dim);
-   FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
+  // FiniteElementCollection *fec = new H1_FECollection(all_data->mfem.order, dim);
+  //  FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
+   H1_FECollection fec(all_data->mfem.order, dim);
+   FiniteElementSpace fespace(mesh, &fec, dim);
 
       // 6. Determine the list of true (i.e. conforming) essential boundary dofs.
    //    In this example, the boundary conditions are defined by marking only
@@ -72,7 +39,6 @@ void MFEM_Elasticity(AllData *all_data,
    Array<int> ess_tdof_list, ess_bdr(mesh->bdr_attributes.Max());
    ess_bdr = 0;
    ess_bdr[0] = 1;
-   fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
    // 7. Set up the linear form b(.) which corresponds to the right-hand side of
    //    the FEM linear system. In this case, b_i equals the boundary integral
@@ -93,14 +59,17 @@ void MFEM_Elasticity(AllData *all_data,
       f.Set(dim-1, new PWConstCoefficient(pull_force));
    }
 
-   LinearForm *b = new LinearForm(fespace);
+   LinearForm *b = new LinearForm(&fespace);
    b->AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(f));
    b->Assemble();
 
    // 8. Define the solution vector x as a finite element grid function
    //    corresponding to fespace. Initialize x with initial guess of zero,
    //    which satisfies the boundary conditions.
-   GridFunction x(fespace);
+   Vector zero_vec(dim);
+   zero_vec = 0.0;
+   VectorConstantCoefficient zero_vec_coeff(zero_vec);
+   GridFunction x(&fespace);
    x = 0.0;
 
    // 9. Set up the bilinear form a(.,.) on the finite element space
@@ -115,45 +84,80 @@ void MFEM_Elasticity(AllData *all_data,
    mu(0) = mu(1)*50;
    PWConstCoefficient mu_func(mu);
 
-   BilinearForm *a = new BilinearForm(fespace);
-   a->AddDomainIntegrator(new ElasticityIntegrator(lambda_func,mu_func));
+   BilinearForm *a = new BilinearForm(&fespace);
+   BilinearFormIntegrator *integ = new ElasticityIntegrator(lambda_func, mu_func);
+   a->AddDomainIntegrator(integ);
 
    // 10. Assemble the bilinear form and the corresponding linear system,
    //     applying any necessary transformations such as: eliminating boundary
    //     conditions, applying conforming constraints for non-conforming AMR,
    //     static condensation, etc.
    if (static_cond) { a->EnableStaticCondensation(); }
-   a->Assemble();
+
+   const int tdim = dim*(dim+1)/2;
+   FiniteElementSpace flux_fespace(mesh, &fec, tdim);
+   ZienkiewiczZhuEstimator estimator(*integ, x, flux_fespace);
+   estimator.SetFluxAveraging(flux_averaging);
+
+   // 11. A refiner selects and refines elements based on a refinement strategy.
+   //     The strategy here is to refine elements with errors larger than a
+   //     fraction of the maximum element error. Other strategies are possible.
+   //     The refiner will call the given error estimator.
+   ThresholdRefiner refiner(estimator);
+   refiner.SetTotalErrorFraction(0.7);
 
    SparseMatrix A;
    Vector B, X;
 
-   int count_refs = all_data->mfem.amr_refs;
    while(1){
-      std::vector<int> rand_inds;
-
       a->Assemble();
       b->Assemble();
 
-      a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
-      if (count_refs == 0) break;
-      Vector *E = new Vector(mesh->GetNE());
-      for (int i = 0; i < mesh->GetNE(); i++){
-         rand_inds.push_back(i);
-         (*E)[i] = 0.0;
-      }
-      std::random_shuffle(rand_inds.begin(), rand_inds.end());
-      for (int i = 0; i < mesh->GetNE(); i++){
-         if (count_refs == 0) break;
-         (*E)[rand_inds.back()] = 2.0;
-         count_refs--;
-         rand_inds.pop_back();
-      }
-      mesh->RefineByError(*E, 1.0);
+      Array<int> ess_tdof_list;
+      x.ProjectBdrCoefficient(zero_vec_coeff, ess_bdr);
+      fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
 
-      fespace->Update();
+      // 15. Create the linear system: eliminate boundary conditions, constrain
+      //     hanging nodes and possibly apply other transformations. The system
+      //     will be solved for true (unconstrained) DOFs only.
+      const int copy_interior = 1;
+      a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B, copy_interior);
+      
+      int cdofs = fespace.GetTrueVSize();
+     // if (cdofs >= all_data->mfem.max_amr_dofs){
+         break;
+     // }
+
+      // 16. Define a simple symmetric Gauss-Seidel preconditioner and use it to
+      //     solve the linear system with PCG.
+      GSSmoother M(A);
+      PCG(A, M, B, X, 3, 2000, 1e-12, 0.0);
+
+      // 17. After solving the linear system, reconstruct the solution as a
+      //     finite element GridFunction. Constrained nodes are interpolated
+      //     from true DOFs (it may therefore happen that x.Size() >= X.Size()).
+      a->RecoverFEMSolution(X, *b, x);
+
+      // 19. Call the refiner to modify the mesh. The refiner calls the error
+      //     estimator to obtain element errors, then it selects elements to be
+      //     refined and finally it modifies the mesh. The Stop() method can be
+      //     used to determine if a stopping criterion was met.
+      refiner.Apply(*mesh); 
+      if (refiner.Stop()){
+         break;
+      }
+
+      // 20. Update the space to reflect the new state of the mesh. Also,
+      //     interpolate the solution x so that it lies in the new space but
+      //     represents the same function. This saves solver iterations later
+      //     since we'll have a good initial guess of x in the next step.
+      //     Internally, FiniteElementSpace::Update() calculates an
+      //     interpolation matrix which is then used by GridFunction::Update().
+      fespace.Update();
       x.Update();
 
+      // 21. Inform also the bilinear and linear forms that the space has
+      //     changed.
       a->Update();
       b->Update();
    }
@@ -176,33 +180,35 @@ void MFEM_Elasticity(AllData *all_data,
    HYPRE_IJMatrixSetObjectType(*Aij, HYPRE_PARCSR);
    HYPRE_IJMatrixInitialize(*Aij);
 
-   for (int i = 0; i < A.Height(); i++)
-   {
+   for (int i = 0; i < A.Height(); i++){
+     // Array<int> mfem_cols;
+     // Vector mfem_srow;
+     // A.GetRow(i, mfem_cols, mfem_srow);
 
-      Array<int> mfem_cols;
-      Vector mfem_srow;
-      A.GetRow(i, mfem_cols, mfem_srow);
+     // int nnz = mfem_srow.Size();
 
-      int nnz = mfem_srow.Size();
+     // double *values = (double *)malloc(nnz * sizeof(double));
+     // int *cols = (int *)malloc(nnz * sizeof(int));
 
-      double *values = (double *)malloc(nnz * sizeof(double));
-      int *cols = (int *)malloc(nnz * sizeof(int));
-      
-      for (int j = 0; j < nnz; j++){
-         cols[j] = mfem_cols[j];
-         values[j] = mfem_srow[j];
-      }
+     // for (int j = 0; j < nnz; j++){
+     //    cols[j] = mfem_cols[j];
+     //    values[j] = mfem_srow[j];
+     // }
+
+      int nnz = A.RowSize(i);
+      double *values = A.GetRowEntries(i);
+      int *cols = A.GetRowColumns(i);
 
       /* Set the values for row i */
       HYPRE_IJMatrixSetValues(*Aij, 1, &nnz, &i, cols, values);
    }
 
    // 14. Free the used memory.
-   delete a;
-   delete b;
-   delete fespace;
-   delete fec;
-   delete mesh;
+  // delete a;
+  // delete b;
+  // delete fespace;
+  // delete fec;
+  // delete mesh;
 }
 
 //                                MFEM Example 17

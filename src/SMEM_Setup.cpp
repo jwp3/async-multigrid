@@ -36,8 +36,8 @@ void CSR_Transpose(hypre_CSRMatrix *A,
 void SetupThreads(AllData *all_data);
 void CSR_to_Vector(AllData *all_data,
                    hypre_CSRMatrix *A,
-                   vector<vector<HYPRE_Int>> *col_vector,
-                   vector<vector<HYPRE_Real>> *val_vector,
+                   vector<vector<HYPRE_Int>> *col_vec,
+                   vector<vector<HYPRE_Real>> *val_vec,
                    int row_start, int col_start);
 void BuildExtendedMatrix(AllData *all_data,
                          hypre_CSRMatrix **A_array,
@@ -60,6 +60,10 @@ void SMEM_Setup(AllData *all_data)
                         all_data->hypre.par_b,
                         all_data->hypre.par_x);
    all_data->output.hypre_setup_wtime = omp_get_wtime() - start;
+   
+   if (all_data->input.format_output_flag == 0){
+      printf("\n\nhypre setup time %e\n\n", all_data->output.hypre_setup_wtime);
+   }
 
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
    all_data->grid.num_levels = (int)hypre_ParAMGDataNumLevels(amg_data);
@@ -158,7 +162,8 @@ void InitAlgebra(AllData *all_data)
 	    }
             all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
 	    if (all_data->input.num_pre_smooth_sweeps == 0){
-	       CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
+               hypre_CSRMatrixTranspose(hypre_ParCSRMatrixDiag(parR[level]), &(all_data->matrix.R[level]), 1);
+	      // CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
 	    }
             SmoothTransfer(all_data,
                            hypre_ParCSRMatrixDiag(parP[level]),
@@ -168,7 +173,8 @@ void InitAlgebra(AllData *all_data)
          else {
             all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
             all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
-            CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
+            hypre_CSRMatrixTranspose(hypre_ParCSRMatrixDiag(parR[level]), &(all_data->matrix.R[level]), 1);
+           // CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
          }
       }
    }
@@ -359,11 +365,16 @@ void InitAlgebra(AllData *all_data)
       hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
       hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
       hypre_ParCSRMatrix **R_array = hypre_ParAMGDataRArray(amg_data);
+      double start = omp_get_wtime();
       BuildExtendedMatrix(all_data,
                           all_data->matrix.A,
                           all_data->matrix.P,
                           all_data->matrix.R,
                           &(all_data->matrix.AA));
+      double stop = omp_get_wtime() - start;
+      if (all_data->input.format_output_flag == 0){
+         printf("\nExtended matrix constructed, time %e\n", stop);
+      }
       int N = hypre_CSRMatrixNumRows(all_data->matrix.AA);
       all_data->vector.xx = (HYPRE_Real *)calloc(N, sizeof(HYPRE_Real));
       all_data->vector.xx_prev = (HYPRE_Real *)calloc(N, sizeof(HYPRE_Real));
@@ -394,25 +405,66 @@ void InitAlgebra(AllData *all_data)
             all_data->vector.bb[disp[coarse_grid]+i] = f_local_data[i];
          }
       }
-
       if (all_data->input.cheby_flag == 1){
          ChebySetup(all_data);
       }
 
+     // all_data->thread.AA_NS = (int *)calloc(all_data->input.num_threads, sizeof(int));
+     // all_data->thread.AA_NE = (int *)calloc(all_data->input.num_threads, sizeof(int));
+     // int size = N/all_data->input.num_threads;
+     // int rest = N - size*all_data->input.num_threads;
+     // for (int t = 0; t < all_data->input.num_threads; t++){
+     //    if (t < rest){
+     //       all_data->thread.AA_NS[t] = t*size + t;
+     //       all_data->thread.AA_NE[t] = (t + 1)*size + t + 1;
+     //    }
+     //    else{
+     //       all_data->thread.AA_NS[t] = t*size + rest;
+     //       all_data->thread.AA_NE[t] = (t + 1)*size + rest;
+     //    }
+     // }
+      int NNZ = hypre_CSRMatrixNumNonzeros(all_data->matrix.AA);
+      HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.AA); 
       all_data->thread.AA_NS = (int *)calloc(all_data->input.num_threads, sizeof(int));
       all_data->thread.AA_NE = (int *)calloc(all_data->input.num_threads, sizeof(int));
-      int size = N/all_data->input.num_threads;
-      int rest = N - size*all_data->input.num_threads;
-      for (int t = 0; t < all_data->input.num_threads; t++){
-         if (t < rest){
-            all_data->thread.AA_NS[t] = t*size + t;
-            all_data->thread.AA_NE[t] = (t + 1)*size + t + 1;
-         }
-         else{
-            all_data->thread.AA_NS[t] = t*size + rest;
-            all_data->thread.AA_NE[t] = (t + 1)*size + rest;
+      vector<int> NNZ_vec(all_data->input.num_threads);
+      int size = (int)floor((double)NNZ/(double)all_data->input.num_threads);
+      int rest = NNZ - size*all_data->input.num_threads;
+      int tt = 0;
+      int NNZ_t = 0;
+      all_data->thread.AA_NS[0] = 0;
+      for (int i = 0; i < N; i++){
+         all_data->thread.AA_NE[tt]++;
+         NNZ_t += A_i[i+1] - A_i[i] + 1;
+         if (NNZ_t > size){
+            tt++;
+            all_data->thread.AA_NS[tt] = all_data->thread.AA_NE[tt] = all_data->thread.AA_NE[tt-1];
+            NNZ_vec[tt] = NNZ_t - (A_i[i+1] - A_i[i] + 1);
+            if (tt == all_data->input.num_threads-1) break;
+            NNZ_t = 0;
          }
       }
+      all_data->thread.AA_NE[all_data->input.num_threads-1] = N;
+     // for (int t = 0; t < all_data->input.num_threads; t++){
+     //    printf("%d %d %d %d\n", t, all_data->thread.AA_NS[t], all_data->thread.AA_NE[t],  NNZ_vec[t]);
+     // }
+     // if (all_data->input.num_threads > 1){
+     //    idx_t nparts = (idx_t)all_data->input.num_threads;
+     //    idx_t options[METIS_NOPTIONS];
+     //    idx_t ncon = 1, objval;
+     //    METIS_SetDefaultOptions(options);
+     //    options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+     //    idx_t *perm = (idx_t *)calloc(N, sizeof(idx_t));
+     //    idx_t *xadj = hypre_CSRMatrixI(all_data->matrix.AA);
+     //    idx_t *adjncy = hypre_CSRMatrixJ(all_data->matrix.AA);
+     //    int metis_flag = METIS_OK;
+     //    metis_flag = METIS_PartGraphKway(&N, &ncon, xadj, adjncy, NULL,
+     //                                     NULL, NULL, &nparts, NULL, NULL,
+     //                                     options, &objval, perm);
+     //    if (metis_flag != METIS_OK){
+     //       printf("****WARNING****: METIS returned error with code %d.\n", metis_flag);
+     //    }
+     // }
       
      // char buffer[100];
      // sprintf(buffer, "AA.txt");
@@ -1077,15 +1129,34 @@ void StdVector_to_CSR(hypre_CSRMatrix *A,
    for (int i = 0; i < num_rows; i++){
       A_i[i+1] = A_i[i] + j_vector[i].size();
    }
+  
+   k = 0; 
+   #pragma omp parallel for
+   for (int i = 0; i < num_rows; i++){
+      for (int jj = A_i[i], kk = j_vector[i].size()-1; jj < A_i[i+1]; jj++, kk--){
+         A_j[jj] = j_vector[i][kk];
+         A_data[jj] = data_vector[i][kk];
+        // A_j[k] = j_vector[i].back();
+        // A_data[k] = data_vector[i].back();
+        // j_vector[i].pop_back();
+        // data_vector[i].pop_back();
+        // k++;
+      }
+   }
 
-   k = 0;
+   #pragma omp parallel for
    for (int i = 0; i < num_rows; i++){
       for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-         A_j[k] = j_vector[i].back();
-         A_data[k] = data_vector[i].back();
-         j_vector[i].pop_back();
-         data_vector[i].pop_back();
-         k++;
+         if (i == A_j[jj]){
+            int j_tmp = A_j[A_i[i]];
+            A_j[A_i[i]] = A_j[jj];
+            A_j[jj] = j_tmp;
+
+            double data_tmp = A_data[A_i[i]];
+            A_data[A_i[i]] = A_data[jj];
+            A_data[jj] = data_tmp;
+            break;
+         }
       }
    }
 
@@ -1102,6 +1173,7 @@ void BuildExtendedMatrix(AllData *all_data,
 {
    hypre_CSRMatrix *Q, *M, *AP, *RA;
    hypre_CSRMatrix *B = NULL;
+   double matmul_wtime = 0, csr_to_vec_wtime = 0, start;
 
    int num_levels = all_data->grid.num_levels;
    all_data->grid.disp = (int *)malloc((num_levels + 1) * sizeof(int));
@@ -1113,65 +1185,100 @@ void BuildExtendedMatrix(AllData *all_data,
       N += num_rows;
    }
 
-   vector<vector<HYPRE_Int>> col_vector(N, vector<HYPRE_Int>(0));
-   vector<vector<HYPRE_Real>> val_vector(N, vector<HYPRE_Real>(0));
+   vector<vector<HYPRE_Int>> col_vec(N, vector<HYPRE_Int>(0));
+   vector<vector<HYPRE_Real>> val_vec(N, vector<HYPRE_Real>(0));
    /* loop over row blocks */
    for (int level = 0; level < num_levels; level++){
       int level_start = all_data->grid.disp[level];
-      CSR_to_Vector(all_data, A_array[level], &col_vector, &val_vector, level_start, level_start);
+      start = omp_get_wtime();
+      CSR_to_Vector(all_data, A_array[level], &col_vec, &val_vec, level_start, level_start);
+      csr_to_vec_wtime += omp_get_wtime() - start;
       /* loop over column blocks */
       for (int inner_level = level+1; inner_level < num_levels; inner_level++){
          int inner_level_start = all_data->grid.disp[inner_level];
          AP = A_array[level];
          hypre_CSRMatrixTranspose(A_array[level], &RA, 1);
+         start = omp_get_wtime();
          for (int k = level; k < inner_level; k++){
             Q = hypre_CSRMatrixMultiply(AP, P_array[k]);
             AP = Q;
             M = hypre_CSRMatrixMultiply(R_array[k], RA);
             RA = M;
          }
-        
-         CSR_to_Vector(all_data, AP, &col_vector, &val_vector, level_start, inner_level_start);
-         CSR_to_Vector(all_data, RA, &col_vector, &val_vector, inner_level_start, level_start);
+         matmul_wtime += omp_get_wtime() - start;
+       
+         start = omp_get_wtime(); 
+         CSR_to_Vector(all_data, AP, &col_vec, &val_vec, level_start, inner_level_start);
+         CSR_to_Vector(all_data, RA, &col_vec, &val_vec, inner_level_start, level_start);
+         csr_to_vec_wtime += omp_get_wtime() - start;
       }
    }
 
    NNZ = 0;
    for (int i = 0; i < N; i++){
-      NNZ += col_vector[i].size();
+      NNZ += col_vec[i].size();
    }
    B = hypre_CSRMatrixCreate(N, N, NNZ);
-
-   StdVector_to_CSR(B, col_vector, val_vector);
-
+   start = omp_get_wtime();
+   StdVector_to_CSR(B, col_vec, val_vec);
+   csr_to_vec_wtime += omp_get_wtime() - start;
+   if (all_data->input.format_output_flag == 0){
+      printf("matmul wtime %e, csr_to_vec wtime %e\n", matmul_wtime, csr_to_vec_wtime);
+   }
    *B_ptr = B;
+
+ //  HYPRE_IJMatrix Bij;
+ //  HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, N-1, 0, N-1, &Bij);
+ //  HYPRE_IJMatrixSetObjectType(Bij, HYPRE_PARCSR);
+ //  HYPRE_IJMatrixInitialize(Bij);
+ //  for (int i = 0; i < N; i++){
+ //     int nnz = col_vec[i].size();
+ //     double *values = (double *)malloc(nnz * sizeof(double));
+ //     int *cols = (int *)malloc(nnz * sizeof(int));
+
+ //     for (int j = 0; j < nnz; j++){
+ //        cols[j] = col_vec[i][j];
+ //        values[j] = val_vec[i][j];
+ //     }
+
+ //     HYPRE_IJMatrixSetValues(Bij, 1, &nnz, &i, cols, values);
+
+ //     free(values);
+ //     free(cols);
+ //  }
+ //  HYPRE_IJMatrixAssemble(Bij);
+ //  void *object;
+ //  HYPRE_IJMatrixGetObject(Bij, &object);
+ // // *B_ptr = (hypre_ParCSRMatrix *)object;
+ //  *B_ptr = hypre_ParCSRMatrixDiag((hypre_ParCSRMatrix *)object);
 }
 
 void CSR_to_Vector(AllData *all_data,
                    hypre_CSRMatrix *A,
-                   vector<vector<HYPRE_Int>> *col_vector,
-                   vector<vector<HYPRE_Real>> *val_vector,
+                   vector<vector<HYPRE_Int>> *col_vec,
+                   vector<vector<HYPRE_Real>> *val_vec,
                    int row_start, int col_start)
 {
    HYPRE_Real *A_data = hypre_CSRMatrixData(A);
    HYPRE_Int *A_i = hypre_CSRMatrixI(A);
    HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
    HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
-   for (HYPRE_Int i = 0; i < num_rows; i++){
-      for (HYPRE_Int jj = A_i[i]; jj < A_i[i+1]; jj++){
+   #pragma omp parallel for
+   for (int i = 0; i < num_rows; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
          HYPRE_Int ii = A_j[jj];
          int row = row_start+i;
          int col = col_start+ii;
          double val = A_data[jj];
          
-         if (row_start == col_start && row == col){
-            (*col_vector)[row].push_back(col);
-            (*val_vector)[row].push_back(val);
-         }
-         else { 
-            (*col_vector)[row].insert((*col_vector)[row].begin(), col);
-            (*val_vector)[row].insert((*val_vector)[row].begin(), val);
-         }
+        // if (row_start == col_start && row == col){
+            (*col_vec)[row].push_back(col);
+            (*val_vec)[row].push_back(val);
+        // }
+        // else { 
+        //    (*col_vec)[row].insert((*col_vec)[row].begin(), col);
+        //    (*val_vec)[row].insert((*val_vec)[row].begin(), val);
+        // }
       }
    }
 }
@@ -1208,6 +1315,18 @@ void SMEM_BuildMatrix(AllData *all_data)
       MFEM_Maxwell(all_data, &A);
       HYPRE_IJMatrixAssemble(A);
       HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
+   }
+   else if (all_data->input.test_problem == MATRIX_FROM_FILE){
+      FILE *mat_file = fopen(all_data->input.mat_file_str, "rb");
+      if (mat_file != NULL){
+         ReadBinary_fread_HypreParCSR(mat_file, &(all_data->hypre.parcsr_A), 1, 1);
+         fclose(mat_file);
+      }
+      else {
+         printf("ERROR: incorrect matrix file \"%s\"\n", all_data->input.mat_file_str);
+         MPI_Finalize();
+         exit(1);
+      }
    }
    else{
       Laplacian_2D_5pt(&A, all_data->matrix.n);
@@ -1264,8 +1383,9 @@ void SMEM_SetHypreParameters(AllData *all_data)
    x_values = (double*) calloc(num_rows, sizeof(double));
    rows = (int*)calloc(num_rows, sizeof(int));
 
+   srand(0);
    for (int i = 0; i < num_rows; i++){
-      rhs_values[i] = 1.0;
+      rhs_values[i] = RandDouble(0.0, 1.0)-.5;//1.0;
       x_values[i] = 0.0;
       rows[i] = i;
    }
