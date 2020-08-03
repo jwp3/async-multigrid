@@ -57,38 +57,38 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
 
    vector<int> divs = Divisors(num_procs);
 
-   if (divs.size() == 2){
+  // if (divs.size() == 2){
       P = 1;
       Q = num_procs;
       R = 1;      
-   }
-   else {
-      HYPRE_Int x, y, z;
-      int break_flag = 0;
-      x = y = z = 1;
-      for (int i = 0; i < divs.size(); i++){
-         for (int j = 0; j < divs.size(); j++){
-            for (int k = 0; k < divs.size(); k++){
-               if (divs[k] > nz || break_flag == 1){
-                  break;
-               }
-               x = divs[i]; y = divs[j]; z = divs[k];
-               if (x*y*z == num_procs){
-                  break_flag = 1;
-               }
-            }
-            if (divs[j] > ny || break_flag == 1){
-               break;
-            }
-         }
-         if (divs[i] > nx || break_flag == 1){
-            break;
-         }
-      }
-      P = x;
-      Q = y;
-      R = z;
-   }
+  // }
+  // else {
+  //    HYPRE_Int x, y, z;
+  //    int break_flag = 0;
+  //    x = y = z = 1;
+  //    for (int i = 0; i < divs.size(); i++){
+  //       for (int j = 0; j < divs.size(); j++){
+  //          for (int k = 0; k < divs.size(); k++){
+  //             if (divs[k] > nz || break_flag == 1){
+  //                break;
+  //             }
+  //             x = divs[i]; y = divs[j]; z = divs[k];
+  //             if (x*y*z == num_procs){
+  //                break_flag = 1;
+  //             }
+  //          }
+  //          if (divs[j] > ny || break_flag == 1){
+  //             break;
+  //          }
+  //       }
+  //       if (divs[i] > nx || break_flag == 1){
+  //          break;
+  //       }
+  //    }
+  //    P = x;
+  //    Q = y;
+  //    R = z;
+  // }
 
    /*-----------------------------------------------------------
     * Check a few things
@@ -1367,6 +1367,7 @@ void ParReadBinary_fread(FILE *mat_file,
    int k, q;
    int row, col;
    double elem;
+   Triplet_AOS *buffer;
 
    fseek(mat_file, 0, SEEK_END);
    size = ftell(mat_file);

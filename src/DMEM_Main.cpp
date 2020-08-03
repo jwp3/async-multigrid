@@ -46,7 +46,7 @@ int main (int argc, char *argv[])
    dmem_all_data.hypre.multadd_trunc_factor = 0.0;
    dmem_all_data.hypre.start_smooth_level = 0;
    dmem_all_data.hypre.num_functions = 1;
-   dmem_all_data.hypre.P_max_elmts = 5;
+   dmem_all_data.hypre.P_max_elmts = 0;
    dmem_all_data.hypre.add_P_max_elmts = 0;
    dmem_all_data.hypre.add_trunc_factor = 0.0;
 
@@ -75,6 +75,8 @@ int main (int argc, char *argv[])
    dmem_all_data.input.test_problem = LAPLACE_3D27PT;
    dmem_all_data.input.tol = 1e-10;
    dmem_all_data.input.inner_tol = .001;
+   dmem_all_data.input.outer_tol = 1e-8;
+   dmem_all_data.input.outer_max_iter = 500;
    dmem_all_data.input.async_flag = 0;
    dmem_all_data.input.async_smoother_flag = 0;
    dmem_all_data.input.global_conv_flag = 0;
@@ -93,6 +95,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.smoother = JACOBI;
    dmem_all_data.input.smooth_interp_type = JACOBI;
    dmem_all_data.input.solver = MULT;
+   dmem_all_data.input.outer_solver = NO_OUTER_SOLVER;
    dmem_all_data.input.hypre_test_error_flag = 0;
    dmem_all_data.input.mfem_test_error_flag = 0;
    dmem_all_data.input.mfem_solve_print_flag = 0;
@@ -115,7 +118,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.sps_probability_type = SPS_PROBABILITY_EXPONENTIAL;
    dmem_all_data.input.sps_alpha = 1.0;
    dmem_all_data.input.sps_min_prob = 0;
-   dmem_all_data.input.simple_jacobi_flag = 0;
+   dmem_all_data.input.simple_jacobi_flag = -1;
    dmem_all_data.input.async_comm_save_divisor = 1;
    dmem_all_data.input.optimal_jacobi_weight_flag = 1;
    dmem_all_data.input.eig_CG_max_iters = 20;
@@ -315,6 +318,7 @@ int main (int argc, char *argv[])
             dmem_all_data.input.solver = MULTADD;
             dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_AFACX;
             dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.simple_jacobi_flag = 1;
          }
          else if (strcmp(argv[arg_index], "mult_multadd") == 0){
             dmem_all_data.input.solver = MULT_MULTADD;
@@ -324,13 +328,36 @@ int main (int argc, char *argv[])
             dmem_all_data.input.async_flag = 0;
             dmem_all_data.input.async_smoother_flag = 0;
          }
+         else if (strcmp(argv[arg_index], "sync_afacj") == 0){
+            dmem_all_data.input.solver = SYNC_AFACJ;
+            dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.async_smoother_flag = 0;
+         }
          else if (strcmp(argv[arg_index], "sync_afacx") == 0){
             dmem_all_data.input.solver = SYNC_AFACX;
             dmem_all_data.input.async_flag = 0;
             dmem_all_data.input.async_smoother_flag = 0;
          }
+         else if (strcmp(argv[arg_index], "sync_bpx") == 0){
+            dmem_all_data.input.solver = SYNC_BPX;
+            dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.async_smoother_flag = 0;
+         }
+         else if (strcmp(argv[arg_index], "boomeramg") == 0){
+            dmem_all_data.input.solver = BOOMERAMG;
+            dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.async_smoother_flag = 0;
+         }
+         else if (strcmp(argv[arg_index], "boomeramg_multadd") == 0){
+            dmem_all_data.input.solver = BOOMERAMG_MULTADD;
+            dmem_all_data.input.async_flag = 0;
+            dmem_all_data.input.async_smoother_flag = 0;
+         }
         // solvers.push_back(dmem_all_data.input.solver);
         // num_solvers++;
+      }
+      else if (strcmp(argv[arg_index], "-pcg") == 0){
+         dmem_all_data.input.outer_solver = PCG;
       }
       else if (strcmp(argv[arg_index], "-simple_jacobi") == 0){
          dmem_all_data.input.simple_jacobi_flag = 1;
@@ -700,7 +727,8 @@ int main (int argc, char *argv[])
    }
    else if ((dmem_all_data.input.solver == SYNC_AFACX ||
              dmem_all_data.input.solver == SYNC_MULTADD || 
-             dmem_all_data.input.solver == MULT) &&
+             dmem_all_data.input.solver == MULT ||
+             dmem_all_data.input.solver == SYNC_AFACJ) &&
             (dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_JACOBI ||
              dmem_all_data.input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL_GAUSS_SEIDEL)){
       dmem_all_data.input.smoother = JACOBI;
@@ -739,62 +767,97 @@ int main (int argc, char *argv[])
       return 0;
    }
 
+   HYPRE_Real final_res_norm;
+   HYPRE_Int num_iterations;
+
    for (int s = 0; s < num_solvers; s++){
       dmem_all_data.input.solver = solvers[s];
       for (int run = 0; run < num_runs; run++){
          DMEM_ResetData(&dmem_all_data);
-
          if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
             printf("\nSOLVER: ");
             if (dmem_all_data.input.async_flag == 1){
                printf("asynchronous ");
             }
          }
-         if (dmem_all_data.input.solver == MULT){
-            if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-               printf("classical multiplicative\n\n\n");
+         if (dmem_all_data.input.outer_solver == PCG){
+            if (my_id == 0){
+               printf("PCG\n");
             }
-            DMEM_Mult(&dmem_all_data);
-         }
-         else if (dmem_all_data.input.solver == MULT_MULTADD){
-            if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-               printf("classical multiplicative with multadd as coarse grid solver\n\n\n");
+            start = MPI_Wtime();  
+            HYPRE_PCGSolve(dmem_all_data.hypre.outer_solver,
+                           (HYPRE_Matrix)(dmem_all_data.matrix.A_fine),
+                           (HYPRE_Vector)(dmem_all_data.vector_fine.f),
+                           (HYPRE_Vector)(dmem_all_data.vector_fine.u));
+            HYPRE_Real pcg_wtime = MPI_Wtime() - start;
+            HYPRE_PCGGetNumIterations(dmem_all_data.hypre.outer_solver, &num_iterations);
+            HYPRE_PCGGetFinalRelativeResidualNorm(dmem_all_data.hypre.outer_solver, &final_res_norm);
+            if (my_id == 0){
+               hypre_printf("\n");
+               hypre_printf("Iterations = %d\n", num_iterations);
+               hypre_printf("Final Relative Residual Norm = %e\n", final_res_norm);
+               hypre_printf("PCG Wall-clock Time = %e\n", pcg_wtime);
+               hypre_printf("Hypre Comm Wall-clock Time = %e\n", hypre_comm_wtime);
+               hypre_printf("Hypre Smooth Wall-clock Time = %e\n", hypre_smooth_wtime);
+               hypre_printf("Hypre Restrict Wall-clock Time = %e\n", hypre_restrict_wtime);
+               hypre_printf("Hypre Prolong Wall-clock Time = %e\n", hypre_prolong_wtime);
+               hypre_printf("\n");
             }
-            DMEM_Mult(&dmem_all_data);
          }
-         else if (dmem_all_data.input.solver == SYNC_MULTADD || dmem_all_data.input.solver == SYNC_AFACX){
-            if (dmem_all_data.input.solver == SYNC_AFACX){
+         else {
+            if (dmem_all_data.input.solver == MULT){
                if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-                  printf("synchronous AFACx\n\n\n");
+                  printf("classical multiplicative\n\n\n");
                }
+               DMEM_Mult(&dmem_all_data);
+            }
+            else if (dmem_all_data.input.solver == MULT_MULTADD){
+               if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+                  printf("classical multiplicative with multadd as coarse grid solver\n\n\n");
+               }
+               DMEM_Mult(&dmem_all_data);
+            }
+            else if (dmem_all_data.input.solver == SYNC_MULTADD || 
+                     dmem_all_data.input.solver == SYNC_AFACX ||
+                     dmem_all_data.input.solver == SYNC_AFACJ){
+               if (dmem_all_data.input.solver == SYNC_AFACX){
+                  if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+                     printf("synchronous AFACx\n\n\n");
+                  }
+               }
+               else if (dmem_all_data.input.solver == SYNC_AFACJ){
+                  if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+                     printf("synchronous AFACj\n\n\n");
+                  }
+               }
+               else {
+                  if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
+                     printf("synchronous multadd\n\n\n");
+                  }
+               }
+               DMEM_SyncAdd(&dmem_all_data);
             }
             else {
                if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-                  printf("synchronous multadd\n\n\n");
-               }
-            }
-            DMEM_SyncAdd(&dmem_all_data);
-         }
-         else {
-            if (dmem_all_data.input.oneline_output_flag == 0 && my_id == 0){
-               if (dmem_all_data.input.solver == BPX){
-                  printf("BPX\n\n\n");
-               }
-               else if (dmem_all_data.input.solver == AFACX){
-                  printf("AFACx\n\n\n");
-               }
-               else {
-                  if (dmem_all_data.input.multadd_smooth_interp_level_type == SMOOTH_INTERP_AFACJ){
-                     printf("AFACj\n\n\n");
+                  if (dmem_all_data.input.solver == BPX){
+                     printf("BPX\n\n\n");
+                  }
+                  else if (dmem_all_data.input.solver == AFACX){
+                     printf("AFACx\n\n\n");
                   }
                   else {
-                     printf("multadd\n\n\n");
+                     if (dmem_all_data.input.multadd_smooth_interp_level_type == SMOOTH_INTERP_AFACJ){
+                        printf("AFACj\n\n\n");
+                     }
+                     else {
+                        printf("multadd\n\n\n");
+                     }
                   }
                }
+               DMEM_Add(&dmem_all_data);
             }
-            DMEM_Add(&dmem_all_data);
+            DMEM_PrintOutput(&dmem_all_data);
          }
-         DMEM_PrintOutput(&dmem_all_data);
       }
    }
 

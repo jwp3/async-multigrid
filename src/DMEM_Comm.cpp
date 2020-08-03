@@ -181,8 +181,15 @@ int SendRecv(DMEM_AllData *dmem_all_data,
                   int all_done_flag;
                   if (dmem_all_data->comm.is_async_smoothing_flag == 1){
                      all_done_flag = dmem_all_data->comm.async_smooth_done_flag;
-                     if (dmem_all_data->comm.outside_recv_done_flag == 1){
-                        my_converge_flag = 1;
+                     if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
+                        if (all_done_flag == 1){
+                           my_converge_flag = 1;
+                        }
+                     }
+                     else {
+                        if (dmem_all_data->comm.outside_recv_done_flag == 1){
+                           my_converge_flag = 1;
+                        }
                      }
                   }
                   else {

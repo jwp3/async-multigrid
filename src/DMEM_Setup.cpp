@@ -3,18 +3,18 @@
 #include "DMEM_Setup.hpp"
 #include "DMEM_Main.hpp"
 #include "DMEM_BuildMatrix.hpp"
-#include "DMEM_Misc.hpp"
 #include "DMEM_ParMfem.hpp"
 #include "DMEM_Add.hpp"
 #include "DMEM_Comm.hpp"
 #include "DMEM_Misc.hpp"
 #include "DMEM_Eig.hpp"
+#include "DMEM_Mult.hpp"
 
 using namespace std;
 
 void SetHypreSolver(DMEM_AllData *dmem_all_data,
                     HYPRE_Solver *solver);
-void SetMultaddHypreSolver(DMEM_AllData *dmem_all_data,
+void SetHypreAddSolver(DMEM_AllData *dmem_all_data,
                            HYPRE_Solver *solver);
 void ConstructVectors(DMEM_AllData *dmem_all_data,
                       hypre_ParCSRMatrix *A,
@@ -32,6 +32,8 @@ void SetVectorComms(DMEM_AllData *dmem_all_data,
 void ComputeWork(AllData *dmem_all_data);
 void ResetOutputData(DMEM_AllData *dmem_all_data);
 void ChebySetup(DMEM_AllData *dmem_all_data);
+void SetHyprePCGSolver(DMEM_AllData *dmem_all_data,
+                       HYPRE_Solver *pcg_solver);
 
 //TODO: clear extra memory
 void DMEM_Setup(DMEM_AllData *dmem_all_data)
@@ -115,19 +117,62 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
        dmem_all_data->input.solver == MULT ||
        dmem_all_data->input.solver == BPX ||
        dmem_all_data->input.solver == AFACX ||
-       dmem_all_data->input.solver == SYNC_AFACX /*||
-       dmem_all_data->input.solver == SYNC_MULTADD*/){
+       dmem_all_data->input.solver == BOOMERAMG){
       SetHypreSolver(dmem_all_data,
                      &(dmem_all_data->hypre.solver));
    }
    else {
-      SetMultaddHypreSolver(dmem_all_data,
-                            &(dmem_all_data->hypre.solver));
+      SetHypreAddSolver(dmem_all_data,
+                        &(dmem_all_data->hypre.solver));
    }
-   HYPRE_BoomerAMGSetup(dmem_all_data->hypre.solver,
-			dmem_all_data->matrix.A_fine,
-			dmem_all_data->vector_fine.f,
-			dmem_all_data->vector_fine.u);
+
+   if (dmem_all_data->input.outer_solver == PCG){
+      precond_zero_init_guess = 1;
+      cycle_type = dmem_all_data->input.solver;
+      HYPRE_BoomerAMGSetMaxIter(dmem_all_data->hypre.solver, 1);
+      SetHyprePCGSolver(dmem_all_data,
+                        &(dmem_all_data->hypre.outer_solver));
+      if (dmem_all_data->input.solver == SYNC_AFACX ||
+          dmem_all_data->input.solver == SYNC_AFACJ){
+         HYPRE_PCGSetPrecond(dmem_all_data->hypre.outer_solver,
+                             (HYPRE_PtrToSolverFcn)DMEM_SyncAFACCycle,
+                             (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup,
+                             dmem_all_data->hypre.solver);
+      }
+      else if (dmem_all_data->input.solver == SYNC_BPX ||
+               dmem_all_data->input.solver == SYNC_MULTADD){
+         HYPRE_PCGSetPrecond(dmem_all_data->hypre.outer_solver,
+                             (HYPRE_PtrToSolverFcn)DMEM_SyncAddCycle,
+                             (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup,
+                             dmem_all_data->hypre.solver);
+      }
+      else if (dmem_all_data->input.solver == MULT){
+        // HYPRE_PCGSetPrecond(dmem_all_data->hypre.outer_solver,
+        //                     (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve,
+        //                     (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup,
+        //                     dmem_all_data->hypre.solver);
+         HYPRE_PCGSetPrecond(dmem_all_data->hypre.outer_solver,
+                             (HYPRE_PtrToSolverFcn)DMEM_MultCycle,
+                             (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup,
+                             dmem_all_data->hypre.solver);
+      }
+      else {
+         HYPRE_PCGSetPrecond(dmem_all_data->hypre.outer_solver,
+                             (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve,
+                             (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup,
+                             dmem_all_data->hypre.solver);
+      }
+      HYPRE_PCGSetup(dmem_all_data->hypre.outer_solver,
+                     (HYPRE_Matrix)(dmem_all_data->matrix.A_fine),
+                     (HYPRE_Vector)(dmem_all_data->vector_fine.f),
+                     (HYPRE_Vector)(dmem_all_data->vector_fine.u));
+   }
+   else {
+      HYPRE_BoomerAMGSetup(dmem_all_data->hypre.solver,
+                           dmem_all_data->matrix.A_fine,
+                           dmem_all_data->vector_fine.f,
+                           dmem_all_data->vector_fine.u);
+   }
   // HYPRE_BoomerAMGSetMaxIter(dmem_all_data->hypre.solver, dmem_all_data->input.num_cycles);
   // HYPRE_BoomerAMGSolve(dmem_all_data->hypre.solver,
   //                      dmem_all_data->matrix.A_fine,
@@ -182,7 +227,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
                         &(dmem_all_data->hypre.solver_gridk));
       }
       else {
-         SetMultaddHypreSolver(dmem_all_data,
+         SetHypreAddSolver(dmem_all_data,
                                &(dmem_all_data->hypre.solver_gridk));
          HYPRE_BoomerAMGSetMaxLevels(dmem_all_data->hypre.solver_gridk, dmem_all_data->grid.num_levels);
       }
@@ -333,7 +378,11 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
 
    if (dmem_all_data->input.solver == MULT ||
        dmem_all_data->input.solver == SYNC_MULTADD ||
-       dmem_all_data->input.solver == SYNC_AFACX){
+       dmem_all_data->input.solver == SYNC_AFACX ||
+       dmem_all_data->input.solver == SYNC_AFACJ ||
+       dmem_all_data->input.solver == SYNC_BPX ||
+       dmem_all_data->input.solver == BOOMERAMG ||
+       dmem_all_data->input.solver == BOOMERAMG_MULTADD){
       hypre_GaussElimSetup(amg_data_fine, dmem_all_data->grid.num_levels-1, 9);
    }
    else {
@@ -345,7 +394,11 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
       if (dmem_all_data->input.solver == MULT_MULTADD ||
           dmem_all_data->input.solver == MULT ||
           dmem_all_data->input.solver == SYNC_MULTADD ||
-          dmem_all_data->input.solver == SYNC_AFACX){
+          dmem_all_data->input.solver == SYNC_AFACX ||
+          dmem_all_data->input.solver == SYNC_AFACJ ||
+          dmem_all_data->input.solver == SYNC_BPX ||
+          dmem_all_data->input.solver == BOOMERAMG ||
+          dmem_all_data->input.solver == BOOMERAMG_MULTADD){
          dmem_all_data->matrix.L1_row_norm_fine = hypre_CTAlloc(HYPRE_Real *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
          dmem_all_data->matrix.symmL1_row_norm_fine = hypre_CTAlloc(HYPRE_Real *, dmem_all_data->grid.num_levels, dmem_all_data->input.hypre_memory);
          A_array = hypre_ParAMGDataAArray(amg_data_fine);
@@ -465,6 +518,11 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
       ResetOutputData(dmem_all_data);
       ChebySetup(dmem_all_data);
    }
+
+   hypre_comm_wtime = 0; 
+   hypre_smooth_wtime = 0;
+   hypre_restrict_wtime = 0;
+   hypre_prolong_wtime = 0;
 }
 
 void SetHypreSolver(DMEM_AllData *dmem_all_data,
@@ -493,45 +551,54 @@ void SetHypreSolver(DMEM_AllData *dmem_all_data,
    }
 }
 
-void SetMultaddHypreSolver(DMEM_AllData *dmem_all_data,
-                           HYPRE_Solver *solver)
+void SetHypreAddSolver(DMEM_AllData *dmem_all_data,
+                       HYPRE_Solver *add_solver)
 {
    int my_grid = dmem_all_data->grid.my_grid;
-   HYPRE_BoomerAMGCreate(solver);
+   HYPRE_BoomerAMGCreate(add_solver);
    if (my_grid == 0){
-      HYPRE_BoomerAMGSetPrintLevel(*solver, dmem_all_data->hypre.print_level);
+      HYPRE_BoomerAMGSetPrintLevel(*add_solver, dmem_all_data->hypre.print_level);
    }
    else {
-      HYPRE_BoomerAMGSetPrintLevel(*solver, 0);
+      HYPRE_BoomerAMGSetPrintLevel(*add_solver, 0);
    }
-   HYPRE_BoomerAMGSetMaxRowSum(*solver, 1.0);
-   HYPRE_BoomerAMGSetPostInterpType(*solver, 0);
-   HYPRE_BoomerAMGSetInterpType(*solver, dmem_all_data->hypre.interp_type);
-   HYPRE_BoomerAMGSetRestriction(*solver, 0);
-   HYPRE_BoomerAMGSetCoarsenType(*solver, dmem_all_data->hypre.coarsen_type);
-   HYPRE_BoomerAMGSetMaxLevels(*solver, dmem_all_data->hypre.max_levels);
-   HYPRE_BoomerAMGSetAggNumLevels(*solver, dmem_all_data->hypre.agg_num_levels);
-   HYPRE_BoomerAMGSetStrongThreshold(*solver, dmem_all_data->hypre.strong_threshold);
-   HYPRE_BoomerAMGSetPMaxElmts(*solver, dmem_all_data->hypre.P_max_elmts);
-   HYPRE_BoomerAMGSetNumFunctions(*solver, dmem_all_data->hypre.num_functions);
-   HYPRE_BoomerAMGSetMeasureType(*solver, 1);
+   HYPRE_BoomerAMGSetMaxRowSum(*add_solver, 1.0);
+   HYPRE_BoomerAMGSetPostInterpType(*add_solver, 0);
+   HYPRE_BoomerAMGSetInterpType(*add_solver, dmem_all_data->hypre.interp_type);
+   HYPRE_BoomerAMGSetRestriction(*add_solver, 0);
+   HYPRE_BoomerAMGSetCoarsenType(*add_solver, dmem_all_data->hypre.coarsen_type);
+   HYPRE_BoomerAMGSetMaxLevels(*add_solver, dmem_all_data->hypre.max_levels);
+   HYPRE_BoomerAMGSetAggNumLevels(*add_solver, dmem_all_data->hypre.agg_num_levels);
+   HYPRE_BoomerAMGSetStrongThreshold(*add_solver, dmem_all_data->hypre.strong_threshold);
+   HYPRE_BoomerAMGSetPMaxElmts(*add_solver, dmem_all_data->hypre.P_max_elmts);
+   HYPRE_BoomerAMGSetNumFunctions(*add_solver, dmem_all_data->hypre.num_functions);
+   HYPRE_BoomerAMGSetMeasureType(*add_solver, 1);
 
    if (dmem_all_data->input.smoother == L1_JACOBI ||
        dmem_all_data->input.smoother == ASYNC_L1_JACOBI){
-      HYPRE_BoomerAMGSetRelaxType(*solver, 18);
-      HYPRE_BoomerAMGSetAddRelaxType(*solver, 18);
+      HYPRE_BoomerAMGSetRelaxType(*add_solver, 18);
+      HYPRE_BoomerAMGSetAddRelaxType(*add_solver, 18);
    }
    else {
-      HYPRE_BoomerAMGSetRelaxType(*solver, 0);
-      HYPRE_BoomerAMGSetAddRelaxType(*solver, 0);
-      HYPRE_BoomerAMGSetRelaxWt(*solver, dmem_all_data->input.smooth_weight);
-      HYPRE_BoomerAMGSetAddRelaxWt(*solver, dmem_all_data->input.smooth_weight);
+      HYPRE_BoomerAMGSetRelaxType(*add_solver, 0);
+      HYPRE_BoomerAMGSetAddRelaxType(*add_solver, 0);
+      HYPRE_BoomerAMGSetRelaxWt(*add_solver, dmem_all_data->input.smooth_weight);
+      HYPRE_BoomerAMGSetAddRelaxWt(*add_solver, dmem_all_data->input.smooth_weight);
    }
 
    /* multadd options */
-   HYPRE_BoomerAMGSetMultAdditive(*solver, 0);
-   HYPRE_BoomerAMGSetMultAddTruncFactor(*solver, dmem_all_data->hypre.add_trunc_factor);
-   HYPRE_BoomerAMGSetMultAddPMaxElmts(*solver, dmem_all_data->hypre.add_P_max_elmts);
+   HYPRE_BoomerAMGSetMultAdditive(*add_solver, 0);
+   HYPRE_BoomerAMGSetMultAddTruncFactor(*add_solver, dmem_all_data->hypre.add_trunc_factor);
+   HYPRE_BoomerAMGSetMultAddPMaxElmts(*add_solver, dmem_all_data->hypre.add_P_max_elmts);
+   HYPRE_BoomerAMGSetSimple(*add_solver, dmem_all_data->input.simple_jacobi_flag);
+}
+
+void SetHyprePCGSolver(DMEM_AllData *dmem_all_data,
+                       HYPRE_Solver *pcg_solver)
+{
+   HYPRE_ParCSRPCGCreate(hypre_MPI_COMM_WORLD, pcg_solver);
+   HYPRE_PCGSetMaxIter(*pcg_solver, dmem_all_data->input.outer_max_iter);
+   HYPRE_PCGSetTol(*pcg_solver, dmem_all_data->input.outer_tol);
 }
 
 void AllocCommVars(DMEM_AllData *dmem_all_data, DMEM_CommData *comm_data)

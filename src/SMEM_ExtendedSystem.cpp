@@ -74,6 +74,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    double mean_wtime = 0, mean_relax = 0, min_wtime, max_wtime = 0;
 
    int converge_flag = 0;
+   int glob_done_iters = 0;
   // double start = omp_get_wtime();
    #pragma omp parallel
    { 
@@ -230,8 +231,8 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             }
          }
          else {
-            if (tid == 0){
-               if (all_data->input.check_resnorm_flag == 1){
+            if (all_data->input.check_resnorm_flag == 1){
+               if (tid == 0){
                   double r_norm2_squ = 0;
                   for (int t = 0; t < num_threads; t++){
                      r_norm2_squ += r_norm2_glob[t * cache_line];
@@ -240,25 +241,39 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                      converge_flag = 1;
                      break;
                   }
+
+                 // int min_iter = iters[0];
+                 // for (int t = 1; t < num_threads; t++){
+                 //    int t_iter = iters[t * cache_line];
+                 //    if (min_iter > t_iter){
+                 //       min_iter = t_iter;
+                 //    }
+                 // }
+                 // if (min_iter >= all_data->input.num_cycles){
+                 //    converge_flag = 1;
+                 //    break;
+                 // }
                }
-               int min_iter = iters[0];
-               for (int t = 1; t < num_threads; t++){
-                  int t_iter = iters[t * cache_line];
-                  if (min_iter > t_iter){
-                     min_iter = t_iter;
+               else {
+                  if (converge_flag == 1){
+                     break;
                   }
                }
-               if (min_iter >= all_data->input.num_cycles){
-                  converge_flag = 1;
-                  break;
-               }
             }
-            else {
-               if (converge_flag == 1){
+            
+            tid_iters = iters[tid * cache_line];
+            if (tid_iters >= all_data->input.num_cycles){
+               if (tid_iters == all_data->input.num_cycles){
+                  #pragma omp atomic
+                  glob_done_iters++;
+               }
+               if (glob_done_iters == num_threads){
                   break;
                }
             }
          }
+
+         
       }
       wtime[tid] = omp_get_wtime() - start;
       #pragma omp barrier

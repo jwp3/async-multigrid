@@ -39,19 +39,19 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    double solve_wtime, residual_wtime, residual_norm_wtime, prolong_wtime, restrict_wtime, vecop_wtime, matvec_wtime, smooth_wtime, coarsest_solve_wtime, comm_wtime, start_wtime, end_wtime;
 
    if (dmem_all_data->input.solver == MULTADD){
-      int my_id_local, num_procs_local;
-      MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
-      MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
-      for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
-         if (level == dmem_all_data->grid.my_grid){
-            if (my_id_local == 0){
-           // if (level == 0){
-               printf("level %d num cycles %d wtime %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.solve_wtime);
-            }
-         }
-         MPI_Barrier(MPI_COMM_WORLD);
-      }
-      MPI_Barrier(MPI_COMM_WORLD);
+     // int my_id_local, num_procs_local;
+     // MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_local);
+     // MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_local);
+     // for (int level = 0; level < dmem_all_data->grid.num_levels; level++){
+     //    if (level == dmem_all_data->grid.my_grid){
+     //       if (my_id_local == 0){
+     //      // if (level == 0){
+     //          printf("level %d num cycles %d wtime %e\n", level, dmem_all_data->iter.cycle, dmem_all_data->output.solve_wtime);
+     //       }
+     //    }
+     //    MPI_Barrier(MPI_COMM_WORLD);
+     // }
+     // MPI_Barrier(MPI_COMM_WORLD);
 
       MPI_Comm_rank(dmem_all_data->grid.my_comm, &my_id_gridk);
       MPI_Comm_size(dmem_all_data->grid.my_comm, &num_procs_gridk);
@@ -65,7 +65,10 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    dmem_all_data->output.e_Anorm = sqrt(hypre_ParVectorInnerProd(Ax, x));
 
    double scaled_cycles;
-   if (dmem_all_data->input.solver == MULT){
+   if (dmem_all_data->input.solver == MULT ||
+       dmem_all_data->input.solver == SYNC_MULTADD ||
+       dmem_all_data->input.solver == SYNC_AFACX ||
+       dmem_all_data->input.solver == SYNC_AFACJ){
       scaled_cycles = (double)dmem_all_data->iter.cycle/(double)num_procs;
    }
    else {
@@ -117,7 +120,10 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
    mean_mpitest_wtime /= (double)num_procs;
    mean_mpiwait_wtime /= (double)num_procs;
 
-   if (dmem_all_data->input.solver == MULT){
+   if (dmem_all_data->input.solver == MULT ||
+       dmem_all_data->input.solver == SYNC_MULTADD ||
+       dmem_all_data->input.solver == SYNC_AFACX ||
+       dmem_all_data->input.solver == SYNC_AFACJ){
       mean_cycles = sum_cycles;
    }
    else {

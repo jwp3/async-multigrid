@@ -74,6 +74,8 @@ LIBS_LASSEN = \
  -lcurand \
  -lcudart \
 
+SMEM_lassen: clean_smem_lassen SMEM_Main_lassen
+
 SMEM_quartz: clean_smem_quartz SMEM_Main_quartz
 
 SMEM_quartz2: clean_smem_quartz2 SMEM_Main_quartz2
@@ -89,6 +91,9 @@ SMEM_Main: $(SRC_DIR)SMEM_Main.cpp
 
 SMEM_Main_quartz: $(SRC_DIR)SMEM_Main.cpp
 	$(COMPILE_QUARTZ) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o SMEM_Main_quartz
+
+SMEM_Main_lassen: $(SRC_DIR)SMEM_Main.cpp
+	$(COMPILE_LASSEN) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_LASSEN) $(INCLUDE_LASSEN) -o SMEM_Main_lassen
 
 SMEM_Main_quartz2: $(SRC_DIR)SMEM_Main.cpp
 	$(COMPILE_QUARTZ) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o SMEM_Main_quartz2
@@ -113,6 +118,9 @@ clean_lassen2:
 
 clean_quartz:
 	rm -f DMEM_Main_quartz2
+
+clean_smem_lassen:
+	rm -f SMEM_Main_lassen
 
 clean_smem_quartz:
 	rm -f SMEM_Main_quartz

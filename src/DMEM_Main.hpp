@@ -80,6 +80,8 @@ typedef struct{
    int num_threads;
    double tol;
    double inner_tol;
+   double outer_tol;
+   int outer_max_iter;
    int oneline_output_flag;
    int print_reshist_flag;
    int print_output_flag;
@@ -87,6 +89,7 @@ typedef struct{
    double smooth_weight;
    int smoother;
    int solver;
+   int outer_solver;
    int async_flag;
    int async_smoother_flag;
    int assign_procs_type;
@@ -154,6 +157,7 @@ typedef struct{
    HYPRE_Solver solver_gridk;
    HYPRE_Solver solver_afacj;
    HYPRE_Solver solver_afacj_gridk;
+   HYPRE_Solver outer_solver;
    HYPRE_Int print_level;
    HYPRE_Int interp_type;
    HYPRE_Int coarsen_type;

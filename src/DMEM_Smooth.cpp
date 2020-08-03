@@ -314,22 +314,35 @@ void DMEM_AsyncSmooth(DMEM_AllData *dmem_all_data, int level)
 
 int AsyncSmoothCheckConverge(DMEM_AllData *dmem_all_data)
 {
-   if (dmem_all_data->comm.async_smooth_done_flag == 1){
-      if (DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), 2) == 1 &&
-          DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend), 2) == 1){
-         return 1;
-      }
-   }
-   else {
-      if (dmem_all_data->comm.outside_recv_done_flag == 1){
-         if (DMEM_CheckMessageFlagsNotValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend), 0) == 1 &&
-             DMEM_CheckMessageFlagsNotValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv), 0) == 1){
-            dmem_all_data->comm.async_smooth_done_flag = 1;
+   if (dmem_all_data->input.converge_test_type == GLOBAL_CONVERGE){
+      if (dmem_all_data->comm.async_smooth_done_flag == 1){
+         if (DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), 2) == 1 &&
+             DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend), 2) == 1){
+            return 1;
          }
       }
       else {
-         if (DMEM_CheckMessageFlagsNotValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv), 0)){
-            dmem_all_data->comm.outside_recv_done_flag = 1;
+         if (dmem_all_data->comm.outside_recv_done_flag == 1){
+            if (DMEM_CheckMessageFlagsNotValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend), 0) == 1 &&
+                DMEM_CheckMessageFlagsNotValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv), 0) == 1){
+               dmem_all_data->comm.async_smooth_done_flag = 1;
+            }
+         }
+         else {
+            if (DMEM_CheckMessageFlagsNotValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv), 0)){
+               dmem_all_data->comm.outside_recv_done_flag = 1;
+            }
+         }
+      }
+   }
+   else {
+      if (dmem_all_data->comm.async_smooth_done_flag == 1){
+         return 1;
+      }
+      else {
+         if (dmem_all_data->iter.cycle >= dmem_all_data->input.num_cycles-2){
+           // dmem_all_data->comm.outside_recv_done_flag = 1;
+            dmem_all_data->comm.async_smooth_done_flag = 1;
          }
       }
    }
@@ -457,11 +470,31 @@ void AsyncSmoothRecvCleanup(DMEM_AllData *dmem_all_data)
    HYPRE_Real *x_ghost_data = hypre_VectorData(dmem_all_data->vector_gridk.x_ghost);
 
    while (1){
-      if (DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv), 2) == 1){
-         break;
+      if (dmem_all_data->input.converge_test_type == GLOBAL_CONVERGE){
+         if (DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv), 2) == 1){
+            break;
+         }
+      }
+      else {
+         if (DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideRecv), 2) == 1 &&
+             DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv), 2) == 1 &&
+             DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend), 2) == 1 &&
+             DMEM_CheckMessageFlagsValue(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend), 2) == 1){
+            break;
+         }
       }
 
       DMEM_HypreParVector_Set(e, 0.0, num_rows);
+      if (dmem_all_data->input.converge_test_type == LOCAL_CONVERGE){
+         SendRecv(dmem_all_data,
+                  &(dmem_all_data->comm.finestIntra_outsideSend),
+                  e_local_data,
+                  ACCUMULATE);
+         SendRecv(dmem_all_data,
+                  &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend),
+                  e_local_data,
+                  ACCUMULATE);
+      }
       comm_begin = MPI_Wtime();
       SendRecv(dmem_all_data,
                &(dmem_all_data->comm.gridjToGridk_Correct_outsideRecv),
@@ -480,6 +513,7 @@ void AsyncSmoothRecvCleanup(DMEM_AllData *dmem_all_data)
 
    comm_begin = MPI_Wtime();
    CompleteInFlight(dmem_all_data, &(dmem_all_data->comm.finestIntra_outsideSend));
+   CompleteInFlight(dmem_all_data, &(dmem_all_data->comm.gridjToGridk_Correct_outsideSend));
    dmem_all_data->output.comm_wtime += MPI_Wtime() - comm_begin;
 
   // if (dmem_all_data->input.smoother == ASYNC_STOCHASTIC_PARALLEL_SOUTHWELL){
@@ -582,7 +616,7 @@ void DMEM_AddSmooth(DMEM_AllData *dmem_all_data, int coarsest_level)
    }
    dmem_all_data->output.vecop_wtime += MPI_Wtime() - vecop_begin;
 
-   if (dmem_all_data->input.simple_jacobi_flag == 0){
+   if (dmem_all_data->input.simple_jacobi_flag == -1){
       matvec_begin = MPI_Wtime();
       hypre_ParCSRMatrixMatvec(1.0,
                                A_array[coarsest_level],

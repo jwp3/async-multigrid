@@ -60,10 +60,17 @@
 #define SYNC_MULTADD 9
 #define SYNC_AFACX 10
 #define EXTENDED_SYSTEM_MULTIGRID 11
+#define SYNC_AFACJ 12
+#define SYNC_BPX 13
+#define BOOMERAMG 14
+#define BOOMERAMG_MULTADD 15
 
 #define NO_ACCEL 0
 #define CHEBY_ACCEL 1
 #define RICHARD_ACCEL 1
+
+#define NO_OUTER_SOLVER 0
+#define PCG 1
 
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1

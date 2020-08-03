@@ -60,6 +60,27 @@ void SMEM_Setup(AllData *all_data)
                         all_data->hypre.par_b,
                         all_data->hypre.par_x);
    all_data->output.hypre_setup_wtime = omp_get_wtime() - start;
+
+  // HYPRE_Solver pcg_solver;
+  // HYPRE_BoomerAMGSetMaxIter( all_data->hypre.solver, 1);
+  // HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &pcg_solver);
+  // HYPRE_PCGSetPrintLevel(pcg_solver, 0);
+  // HYPRE_PCGSetTwoNorm(pcg_solver, 1);
+  // HYPRE_PCGSetMaxIter(pcg_solver, 1000);
+  // HYPRE_PCGSetTol(pcg_solver, 1e-8);
+  // HYPRE_PCGSetPrintLevel(pcg_solver, 0);
+  // HYPRE_PCGSetPrecond(pcg_solver,
+  //                     (HYPRE_PtrToSolverFcn) HYPRE_BoomerAMGSolve,
+  //                     (HYPRE_PtrToSolverFcn) HYPRE_BoomerAMGSetup,
+  //                     all_data->hypre.solver);
+  // HYPRE_ParCSRPCGSetup(pcg_solver, all_data->hypre.parcsr_A, all_data->hypre.par_b, all_data->hypre.par_x);
+  // HYPRE_ParCSRPCGSolve(pcg_solver, all_data->hypre.parcsr_A, all_data->hypre.par_b, all_data->hypre.par_x);
+  // int num_iterations;
+  // double final_res_norm;
+  // HYPRE_PCGGetNumIterations(pcg_solver, &num_iterations);
+  // HYPRE_PCGGetFinalRelativeResidualNorm(pcg_solver, &final_res_norm);
+  // printf("PCG: %d %e\n", num_iterations, final_res_norm);
+  // return;
    
    if (all_data->input.format_output_flag == 0){
       printf("\n\nhypre setup time %e\n\n", all_data->output.hypre_setup_wtime);
@@ -1354,13 +1375,16 @@ void SMEM_SetHypreParameters(AllData *all_data)
    if (all_data->input.smoother == L1_JACOBI ||
        all_data->input.smoother == ASYNC_L1_JACOBI){
       HYPRE_BoomerAMGSetRelaxType(all_data->hypre.solver, 18);
+      HYPRE_BoomerAMGSetAddRelaxType(all_data->hypre.solver, 18);
    }
    else {
       HYPRE_BoomerAMGSetRelaxType(all_data->hypre.solver, 0);
       HYPRE_BoomerAMGSetRelaxWt(all_data->hypre.solver, all_data->input.smooth_weight);
+      HYPRE_BoomerAMGSetAddRelaxType(all_data->hypre.solver, 0);
+      HYPRE_BoomerAMGSetAddRelaxWt(all_data->hypre.solver, all_data->input.smooth_weight);
    }
-   HYPRE_BoomerAMGSetCycleRelaxType(all_data->hypre.solver, 9, 3);
-
+   HYPRE_BoomerAMGSetRelaxType(all_data->hypre.solver, 0);
+   HYPRE_BoomerAMGSetAdditive(all_data->hypre.solver, 0);
 
    int num_rows = hypre_ParCSRMatrixNumRows(all_data->hypre.parcsr_A);
 
@@ -1385,7 +1409,7 @@ void SMEM_SetHypreParameters(AllData *all_data)
 
    srand(0);
    for (int i = 0; i < num_rows; i++){
-      rhs_values[i] = RandDouble(0.0, 1.0)-.5;//1.0;
+      rhs_values[i] = RandDouble(-1.0, 1.0);//1.0;
       x_values[i] = 0.0;
       rows[i] = i;
    }
