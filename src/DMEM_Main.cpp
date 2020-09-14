@@ -84,6 +84,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.assign_procs_scalar = .5;
    dmem_all_data.input.converge_test_type = GLOBAL_CONVERGE;
    dmem_all_data.input.res_compute_type = LOCAL_RES;
+   dmem_all_data.input.num_add_smooth_sweeps = 2;
    dmem_all_data.input.num_pre_smooth_sweeps = 1;
    dmem_all_data.input.num_post_smooth_sweeps = 1;
    dmem_all_data.input.num_fine_smooth_sweeps = 1;
@@ -111,7 +112,7 @@ int main (int argc, char *argv[])
    dmem_all_data.input.multadd_smooth_interp_level_type = SMOOTH_INTERP_MULTADD;
    dmem_all_data.input.max_inflight = 1;
    dmem_all_data.input.rhs_type = RHS_RAND;
-   dmem_all_data.input.init_guess_type = INITGUESS_RAND;
+   dmem_all_data.input.init_guess_type = INITGUESS_ZEROS;
    dmem_all_data.input.afacj_level = 1;
    dmem_all_data.input.num_interpolants = NUMLEVELS_INTERPOLANTS;
    dmem_all_data.input.res_update_type = RES_RECOMPUTE;
@@ -221,7 +222,10 @@ int main (int argc, char *argv[])
       }
       else if (strcmp(argv[arg_index], "-problem") == 0){
          arg_index++;
-         if (strcmp(argv[arg_index], "27pt") == 0){
+         if (strcmp(argv[arg_index], "5pt") == 0){
+            dmem_all_data.input.test_problem = LAPLACE_2D5PT;
+         }
+         else if (strcmp(argv[arg_index], "27pt") == 0){
             dmem_all_data.input.test_problem = LAPLACE_3D27PT;
          }
          else if (strcmp(argv[arg_index], "7pt") == 0){
@@ -488,6 +492,7 @@ int main (int argc, char *argv[])
          dmem_all_data.input.num_post_smooth_sweeps = atoi(argv[arg_index]);
          dmem_all_data.input.num_fine_smooth_sweeps = atoi(argv[arg_index]);
          dmem_all_data.input.num_coarse_smooth_sweeps = atoi(argv[arg_index]);
+         dmem_all_data.input.num_add_smooth_sweeps = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-num_pre_smooth_sweeps") == 0){
          arg_index++;
@@ -797,10 +802,38 @@ int main (int argc, char *argv[])
                hypre_printf("Iterations = %d\n", num_iterations);
                hypre_printf("Final Relative Residual Norm = %e\n", final_res_norm);
                hypre_printf("PCG Wall-clock Time = %e\n", pcg_wtime);
-               hypre_printf("Hypre Comm Wall-clock Time = %e\n", hypre_comm_wtime);
-               hypre_printf("Hypre Smooth Wall-clock Time = %e\n", hypre_smooth_wtime);
-               hypre_printf("Hypre Restrict Wall-clock Time = %e\n", hypre_restrict_wtime);
-               hypre_printf("Hypre Prolong Wall-clock Time = %e\n", hypre_prolong_wtime);
+               hypre_printf("Precond Wall-clock Time = %e\n", hypre_precond_wtime);
+               hypre_printf("Precond Comm Wall-clock Time = %e\n", hypre_comm_wtime);
+               hypre_printf("Precond Smooth Wall-clock Time = %e\n", hypre_smooth_wtime);
+               hypre_printf("Precond Restrict Wall-clock Time = %e\n", hypre_restrict_wtime);
+               hypre_printf("Precond Prolong Wall-clock Time = %e\n", hypre_prolong_wtime);
+               hypre_printf("\n");
+            }
+         }
+         else if (dmem_all_data.input.solver == BOOMERAMG ||
+                  dmem_all_data.input.solver == BOOMERAMG_MULTADD){
+            if (my_id == 0){
+               printf("BoomerAMG\n");
+            }
+            HYPRE_BoomerAMGSetMaxIter(dmem_all_data.hypre.solver, dmem_all_data.input.num_cycles);
+            HYPRE_BoomerAMGSetTol(dmem_all_data.hypre.solver, dmem_all_data.input.tol);
+            start = MPI_Wtime();
+            HYPRE_BoomerAMGSolve(dmem_all_data.hypre.solver,
+                                 dmem_all_data.matrix.A_fine,
+                                 dmem_all_data.vector_fine.b,
+                                 dmem_all_data.vector_fine.x);
+            HYPRE_Real amg_wtime = MPI_Wtime() - start;
+            HYPRE_BoomerAMGGetNumIterations(dmem_all_data.hypre.solver, &num_iterations);
+            HYPRE_BoomerAMGGetFinalRelativeResidualNorm(dmem_all_data.hypre.solver, &final_res_norm);
+            if (my_id == 0){
+               hypre_printf("\n");
+               hypre_printf("Iterations = %d\n", num_iterations);
+               hypre_printf("Final Relative Residual Norm = %e\n", final_res_norm);
+               hypre_printf("AMG Wall-clock Time = %e\n", amg_wtime);
+               hypre_printf("Comm Wall-clock Time = %e\n", hypre_comm_wtime);
+               hypre_printf("Smooth Wall-clock Time = %e\n", hypre_smooth_wtime);
+               hypre_printf("Restrict Wall-clock Time = %e\n", hypre_restrict_wtime);
+               hypre_printf("Prolong Wall-clock Time = %e\n", hypre_prolong_wtime);
                hypre_printf("\n");
             }
          }

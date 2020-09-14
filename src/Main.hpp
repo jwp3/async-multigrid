@@ -1,13 +1,18 @@
 #ifndef MAIN_HPP
 #define MAIN_HPP
 
+#ifdef WINDOWS
+#include <Windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #include <fstream>
 #include <iostream>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <float.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <assert.h>
@@ -17,10 +22,12 @@
 #include <time.h>
 #include <functional>
 #include <omp.h>
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 #include <numeric>
 #include <iterator>
 #include <malloc.h>
+#include <thread>
+#include <chrono>
 
 //#include <mkl.h>
 
@@ -31,7 +38,9 @@
 #include "HYPRE_parcsr_mv.h"
 #include "HYPRE_parcsr_ls.h"
 
+#ifdef USE_MFEM
 #include "mfem.hpp"
+#endif
 
 #include "metis.h"
 
@@ -59,11 +68,12 @@
 #define AFACJ 8
 #define SYNC_MULTADD 9
 #define SYNC_AFACX 10
-#define EXTENDED_SYSTEM_MULTIGRID 11
+#define EXPLICIT_EXTENDED_SYSTEM_BPX 11
 #define SYNC_AFACJ 12
 #define SYNC_BPX 13
 #define BOOMERAMG 14
 #define BOOMERAMG_MULTADD 15
+#define IMPLICIT_EXTENDED_SYSTEM_BPX 16
 
 #define NO_ACCEL 0
 #define CHEBY_ACCEL 1
@@ -128,7 +138,9 @@
 #define DELAY_ALL 3
 
 using namespace std;
+#ifdef USE_MFEM
 using namespace mfem;
+#endif
 
 typedef struct{
    int counter;
@@ -216,6 +228,9 @@ typedef struct{
    HYPRE_Real **r_fine;
    HYPRE_Real **r_coarse;
    HYPRE_Real **e;
+   HYPRE_Real **z;
+   HYPRE_Real **z1;
+   HYPRE_Real **z2;
    vector<vector<int>> i;
    HYPRE_Real *xx;
    HYPRE_Real *xx_prev;

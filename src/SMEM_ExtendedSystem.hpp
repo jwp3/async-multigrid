@@ -5,4 +5,6 @@
 
 void SMEM_ExtendedSystemSolve(AllData *all_data);
 
+void SMEM_ImplicitExtendedSystemSolve(AllData *all_data);
+
 #endif

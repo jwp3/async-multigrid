@@ -1,5 +1,6 @@
 #include "Main.hpp"
 
+#ifdef USE_MFEM
 void MFEM_Elasticity(AllData *all_data,
                      HYPRE_IJMatrix *Aij)
 {
@@ -130,8 +131,9 @@ void MFEM_Elasticity(AllData *all_data,
 
       // 16. Define a simple symmetric Gauss-Seidel preconditioner and use it to
       //     solve the linear system with PCG.
-      GSSmoother M(A);
-      PCG(A, M, B, X, 3, 2000, 1e-12, 0.0);
+     // TODO: fix PCG
+     // GSSmoother M(A);
+     // PCG(A, M, B, X, 3, 2000, 1e-12, 0.0);
 
       // 17. After solving the linear system, reconstruct the solution as a
       //     finite element GridFunction. Constrained nodes are interpolated
@@ -167,8 +169,9 @@ void MFEM_Elasticity(AllData *all_data,
          B[i] = 1.0;
       }
 
-      GSSmoother M(A);
-      PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);     
+      // TODO: fix PCG
+     // GSSmoother M(A);
+     // PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);     
 
       all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double));
       for (int i = 0; i < A.Height(); i++){
@@ -383,8 +386,9 @@ void MFEM_Elasticity2(AllData *all_data,
          B[i] = 1.0;
       }
 
-      GSSmoother M(A);
-      PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
+      // TODO: fix PCG
+     // GSSmoother M(A);
+     // PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
 
       all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double));
       for (int i = 0; i < A.Height(); i++){
@@ -444,3 +448,5 @@ double StressCoefficient::Eval(ElementTransformation &T,
       return M*(grad(si,sj) + grad(sj,si));
    }
 }
+
+#endif

@@ -5,16 +5,16 @@
 #include "Elasticity.hpp"
 #include "Maxwell.hpp"
 #include "SMEM_Cheby.hpp"
-//#include "../eigen/Eigen/Sparse"
-//#include "../eigen/Eigen/Cholesky"
+#include "Sparse"
+#include "Cholesky"
 
 //TODO: replace PARDISO and EIGEN
 
 using namespace std;
 
-//typedef Eigen::SparseMatrix<double,Eigen::RowMajor> EigenSpMat;
-//typedef Eigen::Triplet<double> EigenTrip;
-//typedef Eigen::VectorXd EigenVec;
+typedef Eigen::SparseMatrix<double,Eigen::RowMajor> EigenSpMat;
+typedef Eigen::Triplet<double> EigenTrip;
+typedef Eigen::VectorXd EigenVec;
 
 void SmoothTransfer(AllData *all_data,
                     hypre_CSRMatrix *P,
@@ -44,7 +44,7 @@ void BuildExtendedMatrix(AllData *all_data,
                          hypre_CSRMatrix **P_array,
                          hypre_CSRMatrix **R_array,
                          hypre_CSRMatrix **B_ptr);
-void ChebySetup(AllData *all_data);
+void Setup(AllData *all_data);
 
 void SMEM_Setup(AllData *all_data)
 {
@@ -125,7 +125,7 @@ void SMEM_Setup(AllData *all_data)
    all_data->grid.max_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
    all_data->grid.min_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
 
-   if (all_data->input.solver != EXTENDED_SYSTEM_MULTIGRID){
+   if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
       ComputeWork(all_data);
       PartitionLevels(all_data);
       PartitionGrids(all_data);
@@ -200,18 +200,17 @@ void InitAlgebra(AllData *all_data)
       }
    }
 
-   if (all_data->input.solver != EXTENDED_SYSTEM_MULTIGRID){
-      all_data->vector.u =
-            (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-      all_data->vector.y =
-            (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-      all_data->vector.r =
-            (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-      all_data->vector.f =
-            (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+   if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
+      all_data->vector.u =(HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.r = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.f = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.u_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.z = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.e = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    
-      if (all_data->input.thread_part_type == ALL_LEVELS &&
-          all_data->input.num_threads > 1){
+      if (all_data->input.thread_part_type == ALL_LEVELS/* &&
+          all_data->input.num_threads > 1*/){
    
          all_data->level_vector =
             (VectorData *)malloc(all_data->grid.num_levels * sizeof(VectorData));
@@ -230,10 +229,20 @@ void InitAlgebra(AllData *all_data)
             all_data->level_vector[level].r_coarse = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
             all_data->level_vector[level].r_fine = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
             all_data->level_vector[level].e = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+            all_data->level_vector[level].z = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+            all_data->level_vector[level].z1 = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+            all_data->level_vector[level].z2 = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          }
    
          for (int level = 0; level < all_data->grid.num_levels; level++){
-            for (int inner_level = 0; inner_level < level+2; inner_level++){
+            int coarsest_level;
+            if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+               coarsest_level = all_data->grid.num_levels;
+            }
+            else {
+               coarsest_level = level+2;
+            }
+            for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
                if (inner_level < all_data->grid.num_levels){
                   int n = all_data->grid.n[inner_level];
                   all_data->level_vector[level].f[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
@@ -248,10 +257,13 @@ void InitAlgebra(AllData *all_data)
                   all_data->level_vector[level].r_coarse[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
                   all_data->level_vector[level].r_fine[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
                   all_data->level_vector[level].e[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+                  all_data->level_vector[level].z[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+                  all_data->level_vector[level].z1[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+                  all_data->level_vector[level].z2[inner_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
                }
             }
-            if (level == 0){
-               int n = all_data->grid.n[level];
+            int n = all_data->grid.n[level];
+            if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
                all_data->vector.f[level] =
                   (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
                all_data->vector.r[level] =
@@ -260,6 +272,24 @@ void InitAlgebra(AllData *all_data)
                   (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
                all_data->vector.y[level] =
                   (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+               all_data->vector.u_prev[level] =
+                  (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+               all_data->vector.z[level] =
+                  (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+               all_data->vector.e[level] =
+                  (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+            }
+            else {
+               if (level == 0){
+                  all_data->vector.f[level] =
+                     (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+                  all_data->vector.r[level] =
+                     (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+                  all_data->vector.u[level] =
+                     (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+                  all_data->vector.y[level] =
+                     (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+               }
             }
          }
       }
@@ -310,7 +340,7 @@ void InitAlgebra(AllData *all_data)
       }
       int level = 0;
       for (int i = 0; i < all_data->grid.n[level]; i++){
-         all_data->vector.f[level][i] = RandDouble(-1.0, 1.0);
+         all_data->vector.f[level][i] = 1.0;//RandDouble(-1.0, 1.0);
       }
    
      // level = all_data->grid.num_levels-1;         
@@ -426,9 +456,6 @@ void InitAlgebra(AllData *all_data)
             all_data->vector.bb[disp[coarse_grid]+i] = f_local_data[i];
          }
       }
-      if (all_data->input.cheby_flag == 1){
-         ChebySetup(all_data);
-      }
 
      // all_data->thread.AA_NS = (int *)calloc(all_data->input.num_threads, sizeof(int));
      // all_data->thread.AA_NE = (int *)calloc(all_data->input.num_threads, sizeof(int));
@@ -491,6 +518,12 @@ void InitAlgebra(AllData *all_data)
      // sprintf(buffer, "AA.txt");
      // PrintCSRMatrix(all_data->matrix.AA, buffer, 0);
    }
+   if (all_data->input.cheby_flag == 1){
+      ChebySetup(all_data);
+   }
+   //char buffer[100];
+   //sprintf(buffer, "A.txt");
+   //PrintCSRMatrix(all_data->matrix.A[0], buffer, 0);
 }
 
 void PartitionLevels(AllData *all_data)
@@ -1021,84 +1054,84 @@ void EigenMatMat(AllData *all_data,
                  hypre_CSRMatrix *B,
                  hypre_CSRMatrix *C)
 {
-//   Eigen::setNbThreads(all_data->input.num_threads);
-//
-//   int A_num_rows = hypre_CSRMatrixNumRows(A); 
-//   int A_num_cols = hypre_CSRMatrixNumCols(A);
-//   int B_num_rows = hypre_CSRMatrixNumRows(B);
-//   int B_num_cols = hypre_CSRMatrixNumCols(B);
-//   
-//   EigenSpMat eigen_A(A_num_rows, A_num_cols);
-//   EigenSpMat eigen_B(B_num_rows, B_num_cols);
-//   EigenSpMat eigen_C(A_num_rows, B_num_cols);
-// 
-//   vector<EigenTrip> A_eigtrip;
-//   vector<EigenTrip> B_eigtrip;
-//
-//   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
-//   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
-//   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
-//
-//   HYPRE_Int *B_i = hypre_CSRMatrixI(B);
-//   HYPRE_Int *B_j = hypre_CSRMatrixJ(B);
-//   HYPRE_Real *B_data = hypre_CSRMatrixData(B);
-//   
-//
-//   for (int i = 0; i < A_num_rows; i++){
-//      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-//         A_eigtrip.push_back(EigenTrip(i, A_j[jj], A_data[jj]));
-//      }
-//   }
-//   for (int i = 0; i < B_num_rows; i++){
-//      for (int jj = B_i[i]; jj < B_i[i+1]; jj++){
-//         B_eigtrip.push_back(EigenTrip(i, B_j[jj], B_data[jj]));
-//      }
-//   }
-//
-//   eigen_A.setFromTriplets(A_eigtrip.begin(), A_eigtrip.end());
-//   eigen_B.setFromTriplets(B_eigtrip.begin(), B_eigtrip.end());
-//   eigen_A.makeCompressed();
-//   eigen_B.makeCompressed();
-//   eigen_C = (eigen_A * eigen_B);
-//   eigen_C.makeCompressed();
-//
-//  // vector<double> row_sum(eigen_C.rows());
-//  // for (int i = 0; i < eigen_C.rows(); i++){
-//  //    row_sum[i] = 0;
-//  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
-//  //       row_sum[i] += it.value();
-//  //    }
-//  // }
-//  // eigen_C = (eigen_A * eigen_B).pruned(.5,1.0);
-//  // for (int i = 0; i < eigen_C.rows(); i++){
-//  //    double pruned_row_sum = 0;
-//  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
-//  //       pruned_row_sum += it.value();
-//  //    }
-//  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
-//  //       it.valueRef() /= pruned_row_sum / row_sum[i];
-//  //    }
-//  // }
-//
-//   int num_rows, num_cols, nnz;
-//   
-//   hypre_CSRMatrixNumRows(C) = num_rows = eigen_C.rows();
-//   hypre_CSRMatrixNumCols(C) = num_cols = eigen_C.cols();
-//   hypre_CSRMatrixNumNonzeros(C) = nnz = eigen_C.nonZeros();
-//
-//   vector<vector<HYPRE_Int>>
-//      j_vector(num_rows, vector<HYPRE_Int>(0));
-//   vector<vector<HYPRE_Real>>
-//      data_vector(num_rows, vector<HYPRE_Real>(0));
-//
-//   for (int i = 0; i < eigen_C.rows(); i++){
-//      for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
-//         j_vector[i].push_back(it.col());
-//         data_vector[i].push_back(it.value());
-//      }
-//   }
-//
-//   StdVector_to_CSR(C, j_vector, data_vector);
+   Eigen::setNbThreads(all_data->input.num_threads);
+
+   int A_num_rows = hypre_CSRMatrixNumRows(A); 
+   int A_num_cols = hypre_CSRMatrixNumCols(A);
+   int B_num_rows = hypre_CSRMatrixNumRows(B);
+   int B_num_cols = hypre_CSRMatrixNumCols(B);
+   
+   EigenSpMat eigen_A(A_num_rows, A_num_cols);
+   EigenSpMat eigen_B(B_num_rows, B_num_cols);
+   EigenSpMat eigen_C(A_num_rows, B_num_cols);
+ 
+   vector<EigenTrip> A_eigtrip;
+   vector<EigenTrip> B_eigtrip;
+
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+
+   HYPRE_Int *B_i = hypre_CSRMatrixI(B);
+   HYPRE_Int *B_j = hypre_CSRMatrixJ(B);
+   HYPRE_Real *B_data = hypre_CSRMatrixData(B);
+   
+
+   for (int i = 0; i < A_num_rows; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         A_eigtrip.push_back(EigenTrip(i, A_j[jj], A_data[jj]));
+      }
+   }
+   for (int i = 0; i < B_num_rows; i++){
+      for (int jj = B_i[i]; jj < B_i[i+1]; jj++){
+         B_eigtrip.push_back(EigenTrip(i, B_j[jj], B_data[jj]));
+      }
+   }
+
+   eigen_A.setFromTriplets(A_eigtrip.begin(), A_eigtrip.end());
+   eigen_B.setFromTriplets(B_eigtrip.begin(), B_eigtrip.end());
+   eigen_A.makeCompressed();
+   eigen_B.makeCompressed();
+   eigen_C = (eigen_A * eigen_B);
+   eigen_C.makeCompressed();
+
+  // vector<double> row_sum(eigen_C.rows());
+  // for (int i = 0; i < eigen_C.rows(); i++){
+  //    row_sum[i] = 0;
+  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+  //       row_sum[i] += it.value();
+  //    }
+  // }
+  // eigen_C = (eigen_A * eigen_B).pruned(.5,1.0);
+  // for (int i = 0; i < eigen_C.rows(); i++){
+  //    double pruned_row_sum = 0;
+  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+  //       pruned_row_sum += it.value();
+  //    }
+  //    for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+  //       it.valueRef() /= pruned_row_sum / row_sum[i];
+  //    }
+  // }
+
+   int num_rows, num_cols, nnz;
+   
+   hypre_CSRMatrixNumRows(C) = num_rows = eigen_C.rows();
+   hypre_CSRMatrixNumCols(C) = num_cols = eigen_C.cols();
+   hypre_CSRMatrixNumNonzeros(C) = nnz = eigen_C.nonZeros();
+
+   vector<vector<HYPRE_Int>>
+      j_vector(num_rows, vector<HYPRE_Int>(0));
+   vector<vector<HYPRE_Real>>
+      data_vector(num_rows, vector<HYPRE_Real>(0));
+
+   for (int i = 0; i < eigen_C.rows(); i++){
+      for (EigenSpMat::InnerIterator it(eigen_C,i); it; ++it) {
+         j_vector[i].push_back(it.col());
+         data_vector[i].push_back(it.value());
+      }
+   }
+
+   StdVector_to_CSR(C, j_vector, data_vector);
 }
 
 void CSR_Transpose(hypre_CSRMatrix *A,
@@ -1323,17 +1356,29 @@ void SMEM_BuildMatrix(AllData *all_data)
                        all_data->matrix.nz);
    }
    else if (all_data->input.test_problem == MFEM_LAPLACE){
+#ifdef MFEM
       MFEM_Laplacian(all_data, &A);
+#else
+      
+#endif
       HYPRE_IJMatrixAssemble(A);
       HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
    else if (all_data->input.test_problem == MFEM_ELAST){
+#ifdef MFEM
       MFEM_Elasticity(all_data, &A);
+#else
+
+#endif
       HYPRE_IJMatrixAssemble(A);
       HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
    else if (all_data->input.test_problem == MFEM_MAXWELL){
+#ifdef MFEM
       MFEM_Maxwell(all_data, &A);
+#else
+
+#endif
       HYPRE_IJMatrixAssemble(A);
       HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
@@ -1409,7 +1454,7 @@ void SMEM_SetHypreParameters(AllData *all_data)
 
    srand(0);
    for (int i = 0; i < num_rows; i++){
-      rhs_values[i] = RandDouble(-1.0, 1.0);//1.0;
+      rhs_values[i] = 1.0;//RandDouble(-1.0, 1.0);
       x_values[i] = 0.0;
       rows[i] = i;
    }

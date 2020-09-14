@@ -73,6 +73,7 @@ typedef struct{
    int num_post_smooth_sweeps;
    int num_fine_smooth_sweeps;
    int num_coarse_smooth_sweeps;
+   int num_add_smooth_sweeps;
    int num_cycles;
    int num_inner_cycles;
    int start_cycle;

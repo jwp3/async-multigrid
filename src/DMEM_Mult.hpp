@@ -20,10 +20,11 @@ void DMEM_SyncAddCycle(void *amg_vdata,
 
 void DMEM_SyncAFACCycle(void *amg_vdata,
                         hypre_ParCSRMatrix *A,
-                        hypre_ParVector *f,
-                        hypre_ParVector *u);
+                        hypre_ParVector *b,
+                        hypre_ParVector *x);
 
 extern int cycle_type;
 extern int precond_zero_init_guess;
+extern int glob_num_smooth_sweeps;
 
 #endif

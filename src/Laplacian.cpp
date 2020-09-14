@@ -165,6 +165,7 @@ void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
    *A_ptr = A;
 }
 
+#ifdef USE_MFEM
 // Sample runs:  ex1 -m ../data/square-disc.mesh
 //               ex1 -m ../data/star.mesh
 //               ex1 -m ../data/escher.mesh
@@ -304,8 +305,9 @@ void MFEM_Laplacian(AllData *all_data,
          B[i] = 1.0;   
       }
 
-      GSSmoother M(A);
-      PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
+     // TODO: fix PCG
+     // GSSmoother M(A);
+     // PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
     
       all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double)); 
       for (int i = 0; i < A.Height(); i++){
@@ -346,3 +348,5 @@ void MFEM_Laplacian(AllData *all_data,
    delete fec;
    delete mesh;
 }
+
+#endif

@@ -8,6 +8,7 @@
 
 int cycle_type;
 int precond_zero_init_guess;
+int glob_num_smooth_sweeps;
 
 void DMEM_Mult(DMEM_AllData *dmem_all_data)
 {
@@ -275,6 +276,7 @@ void DMEM_SyncAdd(DMEM_AllData *dmem_all_data)
 
    dmem_all_data->iter.cycle = 0;
    cycle_type = dmem_all_data->input.solver;
+   glob_num_smooth_sweeps = dmem_all_data->input.num_add_smooth_sweeps;
 
    double begin = MPI_Wtime();
    while(1){
@@ -450,16 +452,14 @@ void DMEM_SyncAddCycle(void *amg_vdata,
 
 void DMEM_SyncAFACCycle(void *amg_vdata,
                         hypre_ParCSRMatrix *A,
-                        hypre_ParVector *f,
-                        hypre_ParVector *u)
+                        hypre_ParVector *b,
+                        hypre_ParVector *x)
 {
    HYPRE_Int my_id, num_procs;
    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)amg_vdata;
    int coarsest_level, coarse_level, fine_level;
-
-   hypre_ParVector *x;
 
    HYPRE_Int num_rows;
 
@@ -483,133 +483,130 @@ void DMEM_SyncAFACCycle(void *amg_vdata,
    v_local_data = hypre_VectorData(hypre_ParVectorLocalVector(Vtemp));
 
    A_array[0] = A;
-   F_array[0] = f;
+   F_array[0] = b;
 
    num_rows = hypre_ParCSRMatrixNumRows(A_array[0]);
-   HYPRE_Real *u_accum = (HYPRE_Real *)calloc(num_rows, sizeof(HYPRE_Real));
 
    HYPRE_Int smoother = hypre_ParAMGDataGridRelaxType(amg_data)[1];
    HYPRE_Real add_rlx_wt = hypre_ParAMGDataAddRelaxWt(amg_data); 
    HYPRE_Int simple = hypre_ParAMGDataSimple(amg_data);
 
-  // hypre_ParVector *e = dmem_all_data->vector_fine.e;
-  // HYPRE_Real *e_local_data = hypre_VectorData(hypre_ParVectorLocalVector(e));
-  // hypre_ParVectorSetConstantValues(e, 0.0);
+   for (int level = 0; level < num_levels; level++){
+      hypre_ParVectorSetConstantValues(U_array[level], 0.0);
+   }
+
+   for (int level = 0; level < num_levels-2; level++){
+      HYPRE_Int fine_grid = level;
+      HYPRE_Int coarse_grid = level + 1;
+
+      hypre_ParCSRMatrixMatvecT(1.0,
+                                R_array_afacj[fine_grid],
+                                F_array[fine_grid],
+                                0.0,
+                                F_array[coarse_grid]);
+   }
 
    for (int level = 0; level < num_levels; level++){
-      for (int interp_level = 0; interp_level < level; interp_level++){
-         HYPRE_Int fine_grid = interp_level;
-         HYPRE_Int coarse_grid = interp_level + 1;
+      HYPRE_Int fine_grid = level - 1;
+      HYPRE_Int coarse_grid = level;
 
+      hypre_ParVector* Utemp =
+         hypre_ParVectorCreate(hypre_ParCSRMatrixComm(A_array[level]),
+                               hypre_ParCSRMatrixGlobalNumRows(A_array[level]),
+                               hypre_ParCSRMatrixRowStarts(A_array[level]));
+      hypre_ParVectorInitialize(Utemp);
+      hypre_ParVectorSetPartitioningOwner(Utemp, 0);
+      hypre_ParVectorSetConstantValues(Utemp, 0.0);
+
+      hypre_ParVector* Ftemp =
+         hypre_ParVectorCreate(hypre_ParCSRMatrixComm(A_array[level]),
+                               hypre_ParCSRMatrixGlobalNumRows(A_array[level]),
+                               hypre_ParCSRMatrixRowStarts(A_array[level]));
+      hypre_ParVectorInitialize(Ftemp);
+      hypre_ParVectorSetPartitioningOwner(Ftemp, 0);
+
+      hypre_ParVector *F_coarse;
+
+      if (fine_grid >= 0){
          hypre_ParCSRMatrix *R;
-         if (fine_grid == level-1 &&
-             cycle_type == SYNC_AFACJ){
+         if (cycle_type == SYNC_AFACJ){
             R = R_array[fine_grid];
          }
          else {
             R = R_array_afacj[fine_grid];
          }
 
+         if (level == num_levels-1){
+            F_coarse = F_array[coarse_grid];
+         }
+         else {
+            F_coarse = Ftemp;
+         }
          hypre_ParCSRMatrixMatvecT(1.0,
                                    R,
                                    F_array[fine_grid],
                                    0.0,
-                                   F_array[coarse_grid]);
+                                   F_coarse);
+      }
+      else {
+         F_coarse = Ftemp;
+         hypre_ParVectorCopy(F_array[0], F_coarse);
       }
 
       if (level == num_levels-1){
          hypre_GaussElimSolve(amg_data, level, 99);
+         hypre_ParVectorCopy(U_array[level], Utemp);
       }
       else {
-         hypre_ParVectorSetConstantValues(U_array[level], 0.0);
-         int num_smooth_sweeps = 2;
-         for (int i = 0; i < num_smooth_sweeps; i++){
+         HYPRE_Real *l1_norms;
+         if (smoother == 18){
+            l1_norms = hypre_ParAMGDataL1Norms(amg_data)[level];
+         }
+         else {
+            l1_norms = NULL;
+         }
+         for (int i = 0; i < glob_num_smooth_sweeps; i++){
             hypre_BoomerAMGRelax(A_array[level],
-                                 F_array[level],
+                                 F_coarse,
                                  NULL,
                                  0,
                                  0,
                                  add_rlx_wt,
                                  1.0,
-                                 NULL,
-                                 U_array[level],
+                                 l1_norms,
+                                 Utemp,
                                  Vtemp,
                                  Ztemp);
          }
-//         A_data = hypre_CSRMatrixData(hypre_ParCSRMatrixDiag(A_array[level]));
-//         A_i = hypre_CSRMatrixI(hypre_ParCSRMatrixDiag(A_array[level]));
-//         num_rows = hypre_ParCSRMatrixNumRows(A_array[level]);
-//         u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[level]));
-//         f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[level]));
-//         HYPRE_Real *l1_norms = hypre_ParAMGDataL1Norms(amg_data)[level];
-//         if (smoother == 18){
-//            DMEM_HypreParVector_Ivaxpy(U_array[level], F_array[level], l1_norms, num_rows);
-//         }
-//         else {
-//            for (int i = 0; i < num_rows; i++){
-//               u_local_data[i] = f_local_data[i] * add_rlx_wt / A_data[A_i[i]];
-//            }
-//         }
-//        // if (smoother == 18){
-//        //    DMEM_HypreParVector_Ivaxpy(U_array[level], F_array[level], dmem_all_data->matrix.L1_row_norm_fine[level], num_rows);
-//        // }
-//        // else {
-//        //    DMEM_HypreParVector_Ivaxpy(U_array[level], F_array[level], dmem_all_data->matrix.wJacobi_scale_fine[level], num_rows);
-//        // }
-//
-//         
-//         if (simple == -1){
-//            hypre_ParCSRMatrixMatvec(1.0,
-//                                     A_array[level],
-//                                     U_array[level],
-//                                     0.0,
-//                                     Vtemp);
-//            DMEM_HypreParVector_Scale(U_array[level], 2.0, num_rows);
-//            if (smoother == 18){
-//               DMEM_HypreParVector_Ivaxpy(U_array[level], Vtemp, l1_norms, num_rows);
-//            }
-//            else {
-//               for (int i = 0; i < num_rows; i++){
-//                  u_local_data[i] -= v_local_data[i] * add_rlx_wt / A_data[A_i[i]];
-//               }
-//            }
-//           // if (smoother == L1_JACOBI){
-//           //    DMEM_HypreParVector_Ivaxpy(U_array[level], Vtemp, dmem_all_data->matrix.symmL1_row_norm_fine[level], num_rows);
-//           // }
-//           // else {
-//           //    DMEM_HypreParVector_Ivaxpy(U_array[level], Vtemp, dmem_all_data->matrix.symmwJacobi_scale_fine[level], num_rows);
-//           // }
-//         }
       }
 
-      for (int interp_level = level; interp_level > 0; interp_level--){
-         HYPRE_Int fine_grid = interp_level - 1;
-         HYPRE_Int coarse_grid = interp_level;
-         
+      if (fine_grid >= 0){
          hypre_ParCSRMatrix *P;
-         if (fine_grid == level-1){
-            P = P_array[fine_grid];
-         }
-         else {
-            P = P_array_afacj[fine_grid];
-         }
- 
+         P = P_array[fine_grid]; 
          hypre_ParCSRMatrixMatvec(1.0,
                                   P,
-                                  U_array[coarse_grid],
-                                  0.0,
+                                  Utemp,
+                                  1.0,
                                   U_array[fine_grid]);
       }
+      else {
+         DMEM_HypreParVector_Axpy(U_array[0], Utemp, 1.0, num_rows);
+      }
 
-      num_rows = hypre_ParCSRMatrixNumRows(A_array[0]);
-      u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[0]));
-      DMEM_HypreRealArray_Axpy(u_accum, u_local_data, 1.0, num_rows);
-     // DMEM_HypreParVector_Axpy(e, U_array[0], 1.0, num_rows);
+      hypre_ParVectorDestroy(Utemp);  
+      hypre_ParVectorDestroy(Ftemp);
    }
 
-   num_rows = hypre_ParCSRMatrixNumRows(A_array[0]);
-   u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(u));
-   DMEM_HypreRealArray_Axpy(u_local_data, u_accum, 1.0, num_rows);
+   for (int level = num_levels-2; level > 0; level--){
+      HYPRE_Int fine_grid = level - 1;
+      HYPRE_Int coarse_grid = level;
 
-   free(u_accum);
+      hypre_ParCSRMatrixMatvec(1.0,
+                               P_array_afacj[fine_grid],
+                               U_array[coarse_grid],
+                               1.0,
+                               U_array[fine_grid]);
+   }
+
+   DMEM_HypreParVector_Axpy(x, U_array[0], 1.0, num_rows);
 }

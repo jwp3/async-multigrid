@@ -232,14 +232,19 @@ double Norm2(double *x, int n)
    return sqrt(sum);
 }
 
-double Parfor_Norm2(double *x, int n)
+double Parfor_InnerProd(double *x, int n)
 {
    double sum = 0;
    #pragma omp parallel for reduction(+:sum)
    for (int i = 0; i < n; i++){
       sum += pow(x[i], 2.0);
    }
-   return sqrt(sum);
+   return sum;
+}
+
+double Parfor_Norm2(double *x, int n)
+{
+   return sqrt(Parfor_InnerProd(x, n));
 }
 
 void Par_Norm2(AllData *all_data,
@@ -477,11 +482,18 @@ int SMEM_SRCLevelBarrier(AllData *all_data,
 
 void InitVectors(AllData *all_data)
 {
-   if (all_data->input.solver != EXTENDED_SYSTEM_MULTIGRID){
-      if (all_data->input.thread_part_type == ALL_LEVELS &&
-          all_data->input.num_threads > 1){
+   if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
+      if (all_data->input.thread_part_type == ALL_LEVELS/* &&
+          all_data->input.num_threads > 1*/){
          for (int level = 0; level < all_data->grid.num_levels; level++){
-            for (int inner_level = 0; inner_level < level+2; inner_level++){
+            int coarsest_level;
+            if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+               coarsest_level = all_data->grid.num_levels;
+            }
+            else {
+               coarsest_level = level+2;
+            }
+            for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
                if (inner_level < all_data->grid.num_levels){
                   int n = all_data->grid.n[inner_level];
                   for (int i = 0; i < n; i++){
@@ -497,15 +509,30 @@ void InitVectors(AllData *all_data)
                      all_data->level_vector[level].r_coarse[inner_level][i] = 0;
                      all_data->level_vector[level].r_fine[inner_level][i] = 0;
                      all_data->level_vector[level].e[inner_level][i] = 0;
+                     all_data->level_vector[level].z[inner_level][i] = 0;
+                     all_data->level_vector[level].z1[inner_level][i] = 0;
+                     all_data->level_vector[level].z2[inner_level][i] = 0;
                   }
                }
             }
-            if (level == 0){
-               int n = all_data->grid.n[level];
+            int n = all_data->grid.n[level];
+            if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
                for (int i = 0; i < n; i++){
                   all_data->vector.r[level][i] = 0;
                   all_data->vector.u[level][i] = 0;
                   all_data->vector.y[level][i] = 0;
+                  all_data->vector.u_prev[level][i] = 0;
+                  all_data->vector.e[level][i] = 0;
+                  all_data->vector.z[level][i] = 0;
+               }
+            }
+            else {
+               if (level == 0){
+                  for (int i = 0; i < n; i++){
+                     all_data->vector.r[level][i] = 0;
+                     all_data->vector.u[level][i] = 0;
+                     all_data->vector.y[level][i] = 0;
+                  }
                }
             }
          }
@@ -552,7 +579,7 @@ void InitSolve(AllData *all_data)
    all_data->grid.global_num_correct = 0;
    all_data->grid.global_cycle_num_correct = 0;
    
-   if (all_data->input.solver != EXTENDED_SYSTEM_MULTIGRID){
+   if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
       for (int level = 0; level < all_data->grid.num_levels; level++){
          all_data->grid.num_smooth_wait[level] = 0;
          all_data->grid.local_num_res_compute[level] = 0;

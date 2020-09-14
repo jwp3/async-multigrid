@@ -29,12 +29,12 @@ int main (int argc, char *argv[])
    all_data.matrix.ny = all_data.matrix.n;
    all_data.matrix.nz = all_data.matrix.n;
    /* Hypre parameters */
-   all_data.hypre.max_levels = 20;
+   all_data.hypre.max_levels = 25;
    all_data.hypre.agg_num_levels = 0;
-   all_data.hypre.coarsen_type = 8;
+   all_data.hypre.coarsen_type = 9;
    all_data.hypre.interp_type = 6;
    all_data.hypre.print_level = 0;
-   all_data.hypre.strong_threshold = .25;
+   all_data.hypre.strong_threshold = .5;
    all_data.hypre.num_functions = 1;
    all_data.hypre.P_max_elmts = 0;
    int solver_id = 0;
@@ -195,11 +195,18 @@ int main (int argc, char *argv[])
             all_data.input.solver = ASYNC_AFACX;
             all_data.input.async_flag = 1;
          }
-         else if (strcmp(argv[arg_index], "ebpx") == 0){
-            all_data.input.solver = EXTENDED_SYSTEM_MULTIGRID;
+         else if (strcmp(argv[arg_index], "eebpx") == 0){
+            all_data.input.solver = EXPLICIT_EXTENDED_SYSTEM_BPX;
          }
-         else if (strcmp(argv[arg_index], "async_ebpx") == 0){
-            all_data.input.solver = EXTENDED_SYSTEM_MULTIGRID; 
+         else if (strcmp(argv[arg_index], "async_eebpx") == 0){
+            all_data.input.solver = EXPLICIT_EXTENDED_SYSTEM_BPX; 
+            all_data.input.async_flag = 1;
+         }
+         else if (strcmp(argv[arg_index], "iebpx") == 0){
+            all_data.input.solver = IMPLICIT_EXTENDED_SYSTEM_BPX;
+         }
+         else if (strcmp(argv[arg_index], "async_iebpx") == 0){
+            all_data.input.solver = IMPLICIT_EXTENDED_SYSTEM_BPX;
             all_data.input.async_flag = 1;
          }
       }
@@ -461,7 +468,7 @@ int main (int argc, char *argv[])
    }
 
    if (all_data.input.solver == MULT ||
-       all_data.input.solver == EXTENDED_SYSTEM_MULTIGRID){
+       all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
       all_data.input.thread_part_type = ONE_LEVEL;
    }
    else{
@@ -470,7 +477,8 @@ int main (int argc, char *argv[])
    if (all_data.input.solver == MULT ||
        all_data.input.solver == MULTADD ||
        all_data.input.solver == AFACX ||
-       all_data.input.solver == ASYNC_AFACX){
+       all_data.input.solver == ASYNC_AFACX ||
+       all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
       all_data.input.res_compute_type = LOCAL; 
    }
    
@@ -608,8 +616,11 @@ int main (int argc, char *argv[])
       all_data.input.num_cycles = cycle;
       for (int run = 1; run <= num_runs; run++){
          InitSolve(&all_data);
-         if (all_data.input.solver == EXTENDED_SYSTEM_MULTIGRID){
+         if (all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
             SMEM_ExtendedSystemSolve(&all_data);
+         }
+         else if (all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+            SMEM_ImplicitExtendedSystemSolve(&all_data);
          }
          else {
             SMEM_Solve(&all_data);

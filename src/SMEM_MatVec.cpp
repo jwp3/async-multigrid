@@ -172,3 +172,28 @@ void SMEM_JacobiIterMat_MatVec(AllData *all_data,
 //      }
 //   }
 //}
+
+
+void SMEM_MatVec2(AllData *all_data,
+                 hypre_CSRMatrix *A,
+                 HYPRE_Real *x,
+                 HYPRE_Real *y,
+                 int ns, int ne,
+                 double alpha, double beta)
+{
+   double Axi;
+
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+   HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
+
+   for (int i = ns; i < ne; i++){
+      Axi = 0.0;
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
+      {
+         Axi += A_data[jj] * x[A_j[jj]];
+      }
+      y[i] = beta * x[i] + alpha * Axi;
+   }
+}

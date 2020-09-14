@@ -4,6 +4,12 @@
 #include "Main.hpp"
 #include "DMEM_Main.hpp"
 
+void DMEM_Build5pt(DMEM_AllData *dmem_all_data,
+                   HYPRE_ParCSRMatrix *A_ptr,
+                   HYPRE_ParVector *rhs_ptr,
+                   MPI_Comm comm,
+                   HYPRE_Int nx, HYPRE_Int ny);
+
 void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
                            HYPRE_ParCSRMatrix *A_ptr,
                            HYPRE_ParVector *rhs_ptr,

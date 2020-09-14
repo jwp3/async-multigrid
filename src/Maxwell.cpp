@@ -33,9 +33,10 @@
 //
 //               We recommend viewing examples 1-2 before viewing this example.
 #include "Main.hpp"
-#include "mfem.hpp"
 #include <fstream>
 #include <iostream>
+
+#ifdef USE_MFEM
 
 using namespace std;
 using namespace mfem;
@@ -129,8 +130,9 @@ void MFEM_Maxwell(AllData *all_data,
          B[i] = 1.0;
       }
 
-      GSSmoother M(A);
-      PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
+      // TODO: fix PCG
+     // GSSmoother M(A);
+     // PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
 
       all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double));
       for (int i = 0; i < A.Height(); i++){
@@ -204,3 +206,5 @@ void f_exact(const Vector &x, Vector &f)
       if (x.Size() == 3) { f(2) = 0.0; }
    }
 }
+
+#endif

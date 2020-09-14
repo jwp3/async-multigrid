@@ -9,7 +9,7 @@ double RandDouble(double low, double high);
 
 double Norm2(double *x, int n);
 
-double Parfor_Norm2(double *x, int n, double sum);
+double Parfor_InnerProd(double *x, int n);
 
 double Parfor_Norm2(double *x, int n);
 

@@ -33,6 +33,139 @@ static inline HYPRE_Int sign_double(HYPRE_Real a)
    return ((0.0 < a) - (0.0 > a));
 }
 
+void DMEM_Build5pt(DMEM_AllData *dmem_all_data,
+                   HYPRE_ParCSRMatrix *A_ptr,
+                   HYPRE_ParVector *rhs_ptr,
+                   MPI_Comm comm,
+                   HYPRE_Int nx, HYPRE_Int ny)
+{
+   int i;
+   int myid, num_procs;
+   int N, n;
+
+   int ilower, iupper;
+   int local_size, extra;
+
+   int solver_id;
+   int vis, print_system;
+
+   double h, h2;
+
+   HYPRE_IJMatrix A;
+   HYPRE_ParCSRMatrix parcsr_A;
+   HYPRE_IJVector b;
+   HYPRE_ParVector par_b;
+   HYPRE_IJVector x;
+   HYPRE_ParVector par_x;
+
+   HYPRE_Solver solver, precond;
+
+   /* Initialize MPI */
+   MPI_Comm_rank(comm, &myid);
+   MPI_Comm_size(comm, &num_procs);
+
+   /* Preliminaries: want at least one processor per row */
+   n = nx;
+   if (n*n < num_procs) n = sqrt(num_procs) + 1;
+   N = n*n; /* global number of rows */
+   h = 1.0/(n+1); /* mesh size*/
+   h2 = h*h;
+
+   /* Each processor knows only of its own rows - the range is denoted by ilower
+    * and upper.  Here we partition the rows. We account for the fact that
+    * N may not divide evenly by the number of processors. */
+   local_size = N/num_procs;
+   extra = N - local_size*num_procs;
+
+   ilower = local_size*myid;
+   ilower += hypre_min(myid, extra);
+
+   iupper = local_size*(myid+1);
+   iupper += hypre_min(myid+1, extra);
+   iupper = iupper - 1;
+
+   /* How many rows do I have? */
+   local_size = iupper - ilower + 1;
+
+   /* Create the matrix.
+    * Note that this is a square matrix, so we indicate the row partition
+    * size twice (since number of rows = number of cols) */
+   HYPRE_IJMatrixCreate(comm, ilower, iupper, ilower, iupper, &A);
+
+   /* Choose a parallel csr format storage (see the User's Manual) */
+   HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
+
+   /* Initialize before setting coefficients */
+   HYPRE_IJMatrixInitialize(A);
+
+   /* Now go through my local rows and set the matrix entries.
+    * Each row has at most 5 entries. For example, if n=3:
+    *
+    * A = [M -I 0; -I M -I; 0 -I M]
+    * M = [4 -1 0; -1 4 -1; 0 -1 4]
+    *
+    * Note that here we are setting one row at a time, though
+    * one could set all the rows together (see the User's Manual).
+    * */
+   {
+      int nnz;
+      double values[5];
+      int cols[5];
+      for (i = ilower; i <= iupper; i++)
+      {
+         nnz = 0;
+
+         /* The left identity block:position i-n */
+         if ((i-n)>=0)
+         {
+            cols[nnz] = i-n;
+            values[nnz] = -1.0;
+            nnz++;
+         }
+
+         /* The left -1: position i-1 */
+         if (i%n)
+         {
+            cols[nnz] = i-1;
+            values[nnz] = -1.0;
+            nnz++;
+         }
+
+         /* Set the diagonal: position i */
+         cols[nnz] = i;
+         values[nnz] = 4.0;
+         nnz++;
+
+         /* The right -1: position i+1 */
+         if ((i+1)%n)
+         {
+            cols[nnz] = i+1;
+            values[nnz] = -1.0;
+            nnz++;
+         }
+
+         /* The right identity block:position i+n */
+         if ((i+n)< N)
+         {
+            cols[nnz] = i+n;
+            values[nnz] = -1.0;
+            nnz++;
+         }
+
+         /* Set the values for row i */
+         HYPRE_IJMatrixSetValues(A, 1, &nnz, &i, cols, values);
+      }
+   }
+
+   /* Assemble after setting the coefficients */
+   HYPRE_IJMatrixAssemble(A);
+
+   /* Get the parcsr matrix object to use */
+   HYPRE_IJMatrixGetObject(A, (void**) &parcsr_A);
+
+   *A_ptr = parcsr_A;
+}
+
 void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
                            HYPRE_ParCSRMatrix *A_ptr,
                            HYPRE_ParVector *rhs_ptr,
@@ -57,38 +190,38 @@ void DMEM_BuildHypreMatrix(DMEM_AllData *dmem_all_data,
 
    vector<int> divs = Divisors(num_procs);
 
-  // if (divs.size() == 2){
+   if (divs.size() == 2){
       P = 1;
       Q = num_procs;
       R = 1;      
-  // }
-  // else {
-  //    HYPRE_Int x, y, z;
-  //    int break_flag = 0;
-  //    x = y = z = 1;
-  //    for (int i = 0; i < divs.size(); i++){
-  //       for (int j = 0; j < divs.size(); j++){
-  //          for (int k = 0; k < divs.size(); k++){
-  //             if (divs[k] > nz || break_flag == 1){
-  //                break;
-  //             }
-  //             x = divs[i]; y = divs[j]; z = divs[k];
-  //             if (x*y*z == num_procs){
-  //                break_flag = 1;
-  //             }
-  //          }
-  //          if (divs[j] > ny || break_flag == 1){
-  //             break;
-  //          }
-  //       }
-  //       if (divs[i] > nx || break_flag == 1){
-  //          break;
-  //       }
-  //    }
-  //    P = x;
-  //    Q = y;
-  //    R = z;
-  // }
+   }
+   else {
+      HYPRE_Int x, y, z;
+      int break_flag = 0;
+      x = y = z = 1;
+      for (int i = 0; i < divs.size(); i++){
+         for (int j = 0; j < divs.size(); j++){
+            for (int k = 0; k < divs.size(); k++){
+               if (divs[k] > nz || break_flag == 1){
+                  break;
+               }
+               x = divs[i]; y = divs[j]; z = divs[k];
+               if (x*y*z == num_procs){
+                  break_flag = 1;
+               }
+            }
+            if (divs[j] > ny || break_flag == 1){
+               break;
+            }
+         }
+         if (divs[i] > nx || break_flag == 1){
+            break;
+         }
+      }
+      P = x;
+      Q = y;
+      R = z;
+   }
 
    /*-----------------------------------------------------------
     * Check a few things
