@@ -322,7 +322,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    SMEM_Sync_Parfor_Residual(all_data, A, b, x, z, r);
    all_data->output.r_norm2_ext_sys = Parfor_Norm2(r, n);
 
-   HYPRE_Real *u, *u_f, *u_c;
+   HYPRE_Real *u, *u_f, *u_c, *f;
    int *disp = all_data->grid.disp;
    for (int i = 0; i < all_data->grid.n[0]; i++){
       v[i] = 0.0;
@@ -347,10 +347,13 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
          v[i] += u[i];
       }
    }
+
    hypre_ParVectorCopy(V, U_array[0]);
   // for (int i = 0; i < n; i++){
-  //    printf("%e %e\n", x[i], b[i]);
+  //    printf("%e %e\n", x[i], r[i]);
   // }
+   u = hypre_VectorData(hypre_ParVectorLocalVector(U_array[0]));
+   f = hypre_VectorData(hypre_ParVectorLocalVector(F_array[0]));
    for (int i = 0; i < all_data->grid.n[0]; i++){
       printf("%e\n", u[i]);
    }
@@ -556,7 +559,7 @@ void SMEM_ImplicitExtendedSystemSolve(AllData *all_data)
    free(r_norm_thread);
   // for (int level = 0; level < num_levels; level++){
   //    for (int i = 0; i < all_data->grid.n[level]; i++){
-  //       printf("%e %e\n", all_data->vector.u[level][i], all_data->vector.f[level][i]);
+  //       printf("%e %e\n", all_data->vector.u[level][i], all_data->vector.r[level][i]);
   //    }
   // }
    for (int level = all_data->grid.num_levels-2; level >= 0; level--){

@@ -35,7 +35,10 @@ void ChebySetup(AllData *all_data)
    HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 1);
    HYPRE_BoomerAMGSetPrintLevel(all_data->hypre.solver, 0);
 
-   for (int i = 0; i < num_rows; i++) u_local_data[i] = RandDouble(-1.0, 1.0);
+   for (int i = 0; i < num_rows; i++){ 
+      u_local_data[i] = RandDouble(-1.0, 1.0);
+      all_data->vector.y[0][i] = f_local_data[i];
+   }
    eig_power_iters = 0;
    double start = omp_get_wtime();
    while (1){
@@ -101,7 +104,7 @@ void ChebySetup(AllData *all_data)
    srand(0);
    for (int i = 0; i < num_rows; i++){
       u_local_data[i] = 0.0;
-      f_local_data[i] = RandDouble(-1.0, 1.0);//1.0;
+      f_local_data[i] = all_data->vector.y[0][i];
    }  
 }
 

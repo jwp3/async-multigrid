@@ -434,6 +434,7 @@ void InitAlgebra(AllData *all_data)
       all_data->vector.rr = (HYPRE_Real *)malloc(N * sizeof(HYPRE_Real));
       all_data->vector.zz = (HYPRE_Real *)malloc(N * sizeof(HYPRE_Real));
 
+
       int *disp = all_data->grid.disp;
       int n = hypre_ParCSRMatrixNumRows(A_array[0]);
       HYPRE_Real *f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[0]));
@@ -456,6 +457,11 @@ void InitAlgebra(AllData *all_data)
             all_data->vector.bb[disp[coarse_grid]+i] = f_local_data[i];
          }
       }
+
+      n = hypre_ParCSRMatrixNumRows(A_array[0]);
+      all_data->vector.y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.y[0] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      
 
      // all_data->thread.AA_NS = (int *)calloc(all_data->input.num_threads, sizeof(int));
      // all_data->thread.AA_NE = (int *)calloc(all_data->input.num_threads, sizeof(int));
@@ -517,6 +523,7 @@ void InitAlgebra(AllData *all_data)
      // char buffer[100];
      // sprintf(buffer, "AA.txt");
      // PrintCSRMatrix(all_data->matrix.AA, buffer, 0);
+      
    }
    if (all_data->input.cheby_flag == 1){
       ChebySetup(all_data);
