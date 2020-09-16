@@ -779,7 +779,7 @@ void PartitionGrids(AllData *all_data)
       for (int level = finest_level; level < num_levels; level++){
          num_level_threads = all_data->thread.level_threads[level].size();
         // printf("level %d/%d:", level, num_levels-1);
-         for (int inner_level = 0; inner_level < level+2; inner_level++){
+         for (int inner_level = 0; inner_level < num_levels; inner_level++){
             if (inner_level < num_levels){
               // printf("\n\tlevel %d, n = %d: ", inner_level, all_data->grid.n[inner_level]);
                for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){

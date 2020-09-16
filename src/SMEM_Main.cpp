@@ -39,6 +39,7 @@ int main (int argc, char *argv[])
    all_data.hypre.P_max_elmts = 0;
    int solver_id = 0;
    int hypre_solve_flag = 0;
+   int hypre_num_threads = 1;
 
    /* mfem parameters */
    all_data.mfem.ref_levels = 2;
@@ -504,7 +505,7 @@ int main (int argc, char *argv[])
    }
 
    start = omp_get_wtime();
-   omp_set_num_threads(18);
+   omp_set_num_threads(hypre_num_threads);
   // omp_set_num_threads(all_data.input.num_threads);
    SMEM_Setup(&all_data);
    all_data.output.setup_wtime = omp_get_wtime() - start; 
@@ -616,12 +617,13 @@ int main (int argc, char *argv[])
       all_data.input.num_cycles = cycle;
       for (int run = 1; run <= num_runs; run++){
          InitSolve(&all_data);
-         if (all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
+         if (all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX ||
+             all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
             SMEM_ExtendedSystemSolve(&all_data);
          }
-         else if (all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
-            SMEM_ImplicitExtendedSystemSolve(&all_data);
-         }
+        // else if (all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+        //    SMEM_ImplicitExtendedSystemSolve(&all_data);
+        // }
          else {
             SMEM_Solve(&all_data);
            // if (all_data.input.mfem_test_error_flag == 1){
