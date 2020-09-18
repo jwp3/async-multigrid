@@ -153,6 +153,7 @@ typedef struct{
    int *smooth_relax;
    int *smooth_sweeps;
    int *cycles;
+   int num_cycles;
    double *smooth_wtime;
    double *residual_wtime;
    double *restrict_wtime;

@@ -129,7 +129,10 @@ void SMEM_Setup(AllData *all_data)
       ComputeWork(all_data);
       PartitionLevels(all_data);
       PartitionGrids(all_data);
+      //hypre_GaussElimSetup(amg_data, all_data->grid.num_levels-1, 9);
    }
+
+   all_data->output.num_cycles = 0;
 }
 
 void InitAlgebra(AllData *all_data)

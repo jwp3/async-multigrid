@@ -41,6 +41,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    double *r_norm2_glob = (double *)calloc(num_threads * cache_line, sizeof(double));
    for (int t = 0; t < num_threads; t++){
       iters[t * cache_line] = 1;
+      r_norm2_glob[t] = 100; 
    }
 
    unsigned int *usec_vec = (unsigned int *)calloc(num_threads, sizeof(unsigned int));
@@ -161,72 +162,30 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
          
          y_loc = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
          r_loc = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
-    
-        // vector <int> col_read;
-         #pragma omp for schedule(static, chunk_size)
-         for (int i = 0; i < n; i++){
-        // for (int i = ns; i < ne; i++){
-            r_loc[i-ns] = b[i];
-            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-               r_loc[i-ns] -= A_data[jj] * x[A_j[jj]];
-              // col_read.push_back(A_j[jj]);
-            }
-         }
+
         // sort(col_read.begin(), col_read.end());
         // col_read.erase(unique(col_read.begin(), col_read.end()), col_read.end());
         // int min_col = *min_element(col_read.begin(), col_read.end());
         // int max_col = *max_element(col_read.begin(), col_read.end());
         // vector<double> x_read(max_col - min_col + 1);
-   
-         r_inner_prod_loc = 0;
-         #pragma omp for schedule(static, chunk_size)
-         for (int i = 0; i < n; i++){
-        // for (int i = ns; i < ne; i++){
-            r_inner_prod_loc += pow(r_loc[i-ns], 2.0);
-         }
-         r_norm2_glob[tid * cache_line] = r_inner_prod_loc;
-   
-         srand(tid);
-         usec = 0;
-         delay_flag = 0;      
-         if (all_data->input.delay_flag == DELAY_SOME || all_data->input.delay_flag == DELAY_ALL){
-            delay_flag = 1;
-            usec = usec_vec[tid];
-         }
-         else if (tid == num_threads/2 && all_data->input.delay_flag == DELAY_ONE){
-            delay_flag = 1;
-            usec = all_data->input.delay_usec;
-         }
+      }   
+
+      srand(tid);
+      usec = 0;
+      delay_flag = 0;      
+      if (all_data->input.delay_flag == DELAY_SOME || all_data->input.delay_flag == DELAY_ALL){
+         delay_flag = 1;
+         usec = usec_vec[tid];
+      }
+      else if (tid == num_threads/2 && all_data->input.delay_flag == DELAY_ONE){
+         delay_flag = 1;
+         usec = all_data->input.delay_usec;
       }
 
       #pragma omp barrier
       double start = omp_get_wtime();
       while(1){
-         if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
-            if (all_data->input.async_flag == 0){
-               #pragma omp for schedule(static, chunk_size)
-               for (int i = 0; i < n; i++){
-              // for (int i = ns; i < ne; i++){
-                  double x_tmp = x[i]; 
-                  x[i] = y_loc[i-ns] + omega * (delta * r_loc[i-ns] / A_data[A_i[i]] + x[i] - y_loc[i-ns]);
-                  y_loc[i-ns] = x_tmp;
-               }
-            }
-            else { 
-              #pragma omp for nowait schedule(static, chunk_size)
-              for (int i = 0; i < n; i++){
-             //  for (int i = ns; i < ne; i++){
-                  double x_tmp = x[i];
-                  double x_write = y_loc[i-ns] + omega * (delta * r_loc[i-ns] / A_data[A_i[i]] + x[i] - y_loc[i-ns]);
-                 // #pragma omp atomic write
-                  x[i] = x_write;
-                  y_loc[i-ns] = x_tmp;
-               }
-            }
-           // if (all_data->input.async_flag == 0){
-           //    #pragma omp barrier
-           // }
-    
+         if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){ 
            // for (int i = 0; i < col_read.size(); i++){
            //    int j = col_read[i];
            //    x_read[j-min_col] = x[j];
@@ -242,7 +201,31 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                }
             }
 
-            if (all_data->input.check_resnorm_flag == 1){
+            if (all_data->input.async_flag == 0){
+               #pragma omp for schedule(static, chunk_size)
+               for (int i = 0; i < n; i++){
+              // for (int i = ns; i < ne; i++){
+                  double x_tmp = x[i];
+                  x[i] = y_loc[i-ns] + omega * (delta * r_loc[i-ns] / A_data[A_i[i]] + x[i] - y_loc[i-ns]);
+                  y_loc[i-ns] = x_tmp;
+               }
+            }
+            else {
+              #pragma omp for nowait schedule(static, chunk_size)
+              for (int i = 0; i < n; i++){
+             //  for (int i = ns; i < ne; i++){
+                  double x_tmp = x[i];
+                  double x_write = y_loc[i-ns] + omega * (delta * r_loc[i-ns] / A_data[A_i[i]] + x[i] - y_loc[i-ns]);
+                 // #pragma omp atomic write
+                  x[i] = x_write;
+                  y_loc[i-ns] = x_tmp;
+               }
+            }
+           // if (all_data->input.async_flag == 0){
+           //    #pragma omp barrier
+           // }
+
+            if (all_data->input.check_resnorm_flag == 1 && tid_iters > 1){
                r_inner_prod_loc = 0;
                if (all_data->input.async_flag == 0){
                   #pragma omp for schedule(static, chunk_size)
@@ -258,7 +241,6 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                      r_inner_prod_loc += pow(r_loc[i-ns], 2.0);
                   }
                }
-               r_norm2_glob[tid * cache_line] = r_inner_prod_loc;
             }
          }
          else {
@@ -341,7 +323,6 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                               z2[coarse_grid],
                               ns, ne);
                   all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                }
             }
 
@@ -358,7 +339,6 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
 
                HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[thread_level]);
                HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[thread_level]);
-               r_inner_prod_loc = 0;
                for (int i = ns; i < ne; i++){
                   z[thread_level][i] += z2[thread_level][i];
                   r[thread_level][i] = f[thread_level][i] - z[thread_level][i];
@@ -367,6 +347,12 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   double val = y[thread_level][i] + omega * (delta * r[thread_level][i] / A_data[A_i[i]] + u[thread_level][i] - y[thread_level][i]);
                   u[thread_level][i] = val;
                   y[thread_level][i] = u_prev[thread_level][i];
+               }
+               if (all_data->input.check_resnorm_flag == 1 && tid_iters > 1){
+                  r_inner_prod_loc = 0;
+                  for (int i = ns; i < ne; i++){
+                     r_inner_prod_loc += pow(r[thread_level][i], 2.0);
+                  }
                }
                SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                SMEM_MatVec(all_data,
@@ -382,7 +368,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
 
          omega = 1.0 / (1.0 - omega / mu22);
 
-         if (all_data->input.check_resnorm_flag == 1){
+         if (all_data->input.check_resnorm_flag == 1 && tid_iters > 1){
             r_norm2_glob[tid * cache_line] = r_inner_prod_loc;
          }
           
@@ -406,7 +392,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             if (tid_iters == all_data->input.num_cycles){
                break;
             }
-            if (all_data->input.check_resnorm_flag == 1){
+            if (all_data->input.check_resnorm_flag == 1 && tid_iters > 1){
                double r_inner_prod = 0;
                for (int t = 0; t < num_threads; t++){
                   r_inner_prod += r_norm2_glob[t * cache_line];
@@ -418,7 +404,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             }
          }
          else {
-            if (all_data->input.check_resnorm_flag == 1){
+            if (all_data->input.check_resnorm_flag == 1 && tid_iters > 1){
                if (tid == 0){
                   double r_inner_prod = 0;
                   for (int t = 0; t < num_threads; t++){

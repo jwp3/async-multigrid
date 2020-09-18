@@ -119,10 +119,11 @@ void PrintOutput(AllData all_data)
                         "\tMin grid wait = %e\n"
 			"\tMean grid wait / num levels = %e\n"
                         "\tMax grid wait / num levels = %e\n"
-                        "\tMin grid wait / num levels = %e\n");
+                        "\tMin grid wait / num levels = %e\n"
+                        "\tNum cycles (sync only) = %d\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %e %e %e %e %e %e %e ");
+      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %e %e %e %e %e %e %e %d ");
    }
 
    double mean_comp_time = mean_smooth_wtime + 
@@ -146,7 +147,8 @@ void PrintOutput(AllData all_data)
           min_grid_wait,
           mean_grid_wait/(double)all_data.grid.num_levels,
           max_grid_wait/(double)all_data.grid.num_levels,
-          min_grid_wait/(double)all_data.grid.num_levels);
+          min_grid_wait/(double)all_data.grid.num_levels,
+          all_data.output.num_cycles);
 
    if (all_data.input.mfem_test_error_flag == 1){
       if (all_data.input.format_output_flag == 0){
