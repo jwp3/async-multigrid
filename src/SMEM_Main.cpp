@@ -80,6 +80,7 @@ int main (int argc, char *argv[])
    all_data.input.read_type = READ_SOL;
    all_data.input.eig_power_max_iters = 1000;
    all_data.input.cheby_flag = 0;
+   all_data.input.precond_flag = 0;
    all_data.input.delay_usec = 0;
    all_data.input.delay_flag = DELAY_NONE;
    all_data.input.omp_parfor_flag = 1;
@@ -195,6 +196,12 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "async_afacx") == 0){
             all_data.input.solver = ASYNC_AFACX;
             all_data.input.async_flag = 1;
+         }
+         else if (strcmp(argv[arg_index], "bpx") == 0){
+            all_data.input.solver = BPX;
+         }
+         else if (strcmp(argv[arg_index], "par_bpx") == 0){
+            all_data.input.solver = PAR_BPX;
          }
          else if (strcmp(argv[arg_index], "eebpx") == 0){
             all_data.input.solver = EXPLICIT_EXTENDED_SYSTEM_BPX;
@@ -428,6 +435,7 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-cheby") == 0)
       {
          all_data.input.cheby_flag = 1;
+         all_data.input.precond_flag = 1;
       }
       else if (strcmp(argv[arg_index], "-only_setup") == 0)
       {
@@ -469,12 +477,15 @@ int main (int argc, char *argv[])
    }
 
    if (all_data.input.solver == MULT ||
-       all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
+       all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX ||
+       all_data.input.solver == BPX ||
+       all_data.input.solver == PAR_BPX){
       all_data.input.thread_part_type = ONE_LEVEL;
    }
    else{
       all_data.input.thread_part_type = ALL_LEVELS;
    }
+
    if (all_data.input.solver == MULT ||
        all_data.input.solver == MULTADD ||
        all_data.input.solver == AFACX ||

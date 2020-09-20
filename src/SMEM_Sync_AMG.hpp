@@ -13,4 +13,6 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data);
 
 void SMEM_Sync_Add_Vcycle(AllData *all_data);
 
+void SMEM_Sync_Parfor_BPXcycle(AllData *all_data);
+
 #endif

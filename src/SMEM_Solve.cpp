@@ -10,17 +10,41 @@
 
 void SMEM_Solve(AllData *all_data)
 {
-   int fine_grid = 0;
+   double delta = all_data->cheby.delta;
+   double mu = all_data->cheby.mu;
+   double mu22 = pow(2.0 * mu, 2.0);
+   HYPRE_Real *u_outer, *y_outer;
+   HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[0]);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[0]);
+
+   if (all_data->input.precond_flag == 1){
+      u_outer = (HYPRE_Real *)calloc(all_data->grid.n[0], sizeof(HYPRE_Real));      
+      y_outer = (HYPRE_Real *)calloc(all_data->grid.n[0], sizeof(HYPRE_Real));
+   }
+
+   int k_start = 0;
+   if (all_data->input.cheby_flag == 1){
+      k_start = 1;
+   }
+
    #pragma omp parallel
    {
+      if (all_data->input.cheby_flag == 1){
+         #pragma omp for
+         for (int i = 0; i < all_data->grid.n[0]; i++){
+            u_outer[i] = delta * all_data->vector.f[0][i] / A_data[A_i[i]];
+            y_outer[i] = 0;
+            all_data->vector.u[0][i] = u_outer[i];
+         }
+      }
       SMEM_Sync_Parfor_Residual(all_data,
-                                all_data->matrix.A[fine_grid],
-                                all_data->vector.f[fine_grid],
-                                all_data->vector.u[fine_grid],
-                                all_data->vector.y[fine_grid],
-                                all_data->vector.r[fine_grid]);
+                                all_data->matrix.A[0],
+                                all_data->vector.f[0],
+                                all_data->vector.u[0],
+                                all_data->vector.y[0],
+                                all_data->vector.r[0]);
    }
-   all_data->output.r0_norm2 = Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
+   all_data->output.r0_norm2 = Parfor_Norm2(all_data->vector.r[0], all_data->grid.n[0]);
 
    double start = omp_get_wtime();
    if (all_data->input.async_flag == 1){
@@ -34,14 +58,13 @@ void SMEM_Solve(AllData *all_data)
       #pragma omp parallel
       {
          SMEM_Sync_Parfor_Residual(all_data,
-                                   all_data->matrix.A[fine_grid],
-                                   all_data->vector.f[fine_grid],
-                                   all_data->vector.u[fine_grid],
-                                   all_data->vector.y[fine_grid],
-                                   all_data->vector.r[fine_grid]);
+                                   all_data->matrix.A[0],
+                                   all_data->vector.f[0],
+                                   all_data->vector.u[0],
+                                   all_data->vector.y[0],
+                                   all_data->vector.r[0]);
       }
-      all_data->output.r_norm2 =
-         Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
+      all_data->output.r_norm2 = Parfor_Norm2(all_data->vector.r[0], all_data->grid.n[0]);
    }
    else{
       if (all_data->input.print_reshist_flag == 1 &&
@@ -59,7 +82,8 @@ void SMEM_Solve(AllData *all_data)
       #pragma omp parallel
       {
          int tid = omp_get_thread_num();
-         for (int k = 0; k < all_data->input.num_cycles; k++){
+         double omega = 2.0;
+         for (int k = k_start; k <= all_data->input.num_cycles; k++){
             if (all_data->input.solver == MULTADD){
                if (all_data->input.thread_part_type == ALL_LEVELS){
                   SMEM_Sync_Add_Vcycle(all_data);
@@ -75,18 +99,33 @@ void SMEM_Solve(AllData *all_data)
                   SMEM_Sync_Parfor_AFACx_Vcycle(all_data);
                }
             }
+            else if (all_data->input.solver == BPX || all_data->input.solver == PAR_BPX){
+               SMEM_Sync_Parfor_BPXcycle(all_data);
+            }
             else{
                SMEM_Sync_Parfor_Vcycle(all_data);
             }
-            all_data->output.solve_wtime = omp_get_wtime() - start;
+
+            if (all_data->input.cheby_flag == 1){
+               #pragma omp for
+               for (int i = 0; i < all_data->grid.n[0]; i++){
+                  double u_outer_prev = u_outer[i];
+                  u_outer[i] = y_outer[i] + omega * (delta * all_data->vector.u[0][i] + u_outer[i] - y_outer[i]);
+                  y_outer[i] = u_outer_prev;
+                  all_data->vector.u[0][i] = u_outer[i];
+               }
+            }
+            
+            omega = 1.0 / (1.0 - omega / mu22);
+ 
             double residual_start = omp_get_wtime();
             SMEM_Sync_Parfor_Residual(all_data,
-                                      all_data->matrix.A[fine_grid],
-                                      all_data->vector.f[fine_grid],
-                                      all_data->vector.u[fine_grid],
-                                      all_data->vector.y[fine_grid],
-                                      all_data->vector.r[fine_grid]);
-            all_data->output.r_norm2 = Parfor_Norm2(all_data->vector.r[fine_grid], all_data->grid.n[fine_grid]);
+                                      all_data->matrix.A[0],
+                                      all_data->vector.f[0],
+                                      all_data->vector.u[0],
+                                      all_data->vector.y[0],
+                                      all_data->vector.r[0]);
+            all_data->output.r_norm2 = Parfor_Norm2(all_data->vector.r[0], all_data->grid.n[0]);
             all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
             if (all_data->input.print_reshist_flag){
                printf("%d\t%e\n", k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
@@ -100,7 +139,11 @@ void SMEM_Solve(AllData *all_data)
       if (all_data->input.thread_part_type == ALL_LEVELS){
          omp_destroy_lock(&(all_data->thread.lock));
       }
+      all_data->output.solve_wtime = omp_get_wtime() - start;
    }
+
+   free(u_outer);
+   free(y_outer);
 }
 
 void SMEM_Smooth(AllData *all_data,

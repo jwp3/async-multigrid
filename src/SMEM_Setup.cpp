@@ -129,7 +129,7 @@ void SMEM_Setup(AllData *all_data)
       ComputeWork(all_data);
       PartitionLevels(all_data);
       PartitionGrids(all_data);
-      //hypre_GaussElimSetup(amg_data, all_data->grid.num_levels-1, 9);
+      hypre_GaussElimSetup(amg_data, all_data->grid.num_levels-1, 9);
    }
 
    all_data->output.num_cycles = 0;
@@ -345,74 +345,30 @@ void InitAlgebra(AllData *all_data)
       for (int i = 0; i < all_data->grid.n[level]; i++){
          all_data->vector.f[level][i] = 1.0;//RandDouble(-1.0, 1.0);
       }
-   
-     // level = all_data->grid.num_levels-1;         
-     // HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
-     // HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A[level]);
-     // HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
-   
-     // all_data->pardiso.csr.n = all_data->grid.n[level];
-     // all_data->pardiso.csr.nnz = hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
-   
-     // all_data->pardiso.csr.ja = (MKL_INT *)calloc(all_data->pardiso.csr.nnz, sizeof(MKL_INT));
-     // all_data->pardiso.csr.a = (double *)calloc(all_data->pardiso.csr.nnz, sizeof(double));
-     // all_data->pardiso.csr.ia = (MKL_INT *)calloc(all_data->pardiso.csr.n+1, sizeof(MKL_INT));
-   
-     // for (int i = 0; i < all_data->pardiso.csr.nnz; i++){
-     //    all_data->pardiso.csr.ja[i] = A_j[i];
-     //    all_data->pardiso.csr.a[i] = A_data[i];
-     // }
-     // for (int i = 0; i < all_data->pardiso.csr.n+1; i++){
-     //    all_data->pardiso.csr.ia[i] = A_i[i];
-     // }
-   
-     // for (int i = 0; i < all_data->pardiso.csr.n; i++){
-     //    BubblesortPair_int_double(&all_data->pardiso.csr.ja[all_data->pardiso.csr.ia[i]],
-     //                              &all_data->pardiso.csr.a[all_data->pardiso.csr.ia[i]],
-     //                              all_data->pardiso.csr.ia[i+1] - all_data->pardiso.csr.ia[i]);
-     // }
-   
-     // for (int i = 0; i < 64; i++){
-     //    all_data->pardiso.info.iparm[i] = 0;
-     //    all_data->pardiso.info.pt[i] = 0;
-     // }
-   
-     // all_data->pardiso.info.mtype = 11;
-     // all_data->pardiso.info.nrhs = 1;
-     // all_data->pardiso.info.iparm[17] = -1;
-     // all_data->pardiso.info.iparm[18] = -1;
-     // all_data->pardiso.info.iparm[0] = 1;         /* No solver default */
-     // all_data->pardiso.info.iparm[1] = 0;         /* Fill-in reordering from METIS */
-     // all_data->pardiso.info.iparm[9] = 13;        /* Perturb the pivot elements with 1E-13 */
-     // all_data->pardiso.info.iparm[10] = 1;        /* Use nonsymmetric permutation and scaling MPS */
-     // all_data->pardiso.info.iparm[12] = 1;
-     // all_data->pardiso.info.iparm[24] = 1;
-     // all_data->pardiso.info.iparm[26] = 1;
-     // all_data->pardiso.info.iparm[34] = 1;        /* turn off 1-based indexing */
-     // all_data->pardiso.info.maxfct = 1;           /* Maximum number of numerical factorizations. */
-     // all_data->pardiso.info.mnum = 1;         /* Which factorization to use. */
-     // all_data->pardiso.info.msglvl = 0;           /* Print statistical information in file */
-     // all_data->pardiso.info.error = 0;            /* Initialize error flag */
-     // /* reordering and Symbolic factorization. this step also allocates
-     //  *all memory that is necessary for the factorization. */
-     // all_data->pardiso.info.phase = 12; 
-     // PARDISO(all_data->pardiso.info.pt,
-     //         &(all_data->pardiso.info.maxfct),
-     //         &(all_data->pardiso.info.mnum),
-     //         &(all_data->pardiso.info.mtype),
-     //         &(all_data->pardiso.info.phase),
-     //         &(all_data->pardiso.csr.n),
-     //         all_data->pardiso.csr.a,
-     //         all_data->pardiso.csr.ia,
-     //         all_data->pardiso.csr.ja,
-     //         &(all_data->pardiso.info.idum),
-     //         &(all_data->pardiso.info.nrhs),
-     //         all_data->pardiso.info.iparm,
-     //         &(all_data->pardiso.info.msglvl),
-     //         &(all_data->pardiso.info.ddum),
-     //         &(all_data->pardiso.info.ddum),
-     //         &(all_data->pardiso.info.error));
-     // all_data->pardiso.info.phase = 33; 
+
+      if (all_data->input.solver == PAR_BPX) {
+         all_data->grid.disp = (int *)malloc((all_data->grid.num_levels + 1) * sizeof(int));
+         all_data->grid.N = 0;
+         all_data->grid.disp[0] = 0;
+         for (int level = 0; level < all_data->grid.num_levels; level++){
+            int num_rows = all_data->grid.n[level];
+            all_data->grid.disp[level+1] = all_data->grid.disp[level] + num_rows;
+            all_data->grid.N += num_rows;
+         } 
+         all_data->vector.xx = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
+         all_data->vector.rr = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
+         all_data->matrix.A_diag_ext = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
+         int k = 0;
+         for (int level = 0; level < all_data->grid.num_levels; level++){
+            int num_rows = all_data->grid.n[level];
+            HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
+            HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
+            for (int i = 0; i < num_rows; i++){
+               all_data->matrix.A_diag_ext[k] = A_data[A_i[i]];
+               k++;
+            }
+         }
+      }
    }
    else {
       hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
@@ -880,88 +836,97 @@ void ComputeWork(AllData *all_data)
    }
 
    for (int level = finest_level; level < all_data->grid.num_levels; level++){
-      if (all_data->input.res_compute_type == GLOBAL){
-         all_data->grid.level_work[level] = 
-	    2*hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]) / all_data->grid.num_levels + 
-	       hypre_CSRMatrixNumRows(all_data->matrix.A[0]);
-      }
-      else{
-         all_data->grid.level_work[level] = 
-	    hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]) + hypre_CSRMatrixNumRows(all_data->matrix.A[0]);
-      }
-
-      if (all_data->input.solver == MULTADD ||
-          all_data->input.solver == ASYNC_MULTADD){
-         coarsest_level = level;
-      }
-      else if (all_data->input.solver == AFACX ||
-               all_data->input.solver == ASYNC_AFACX){
-         coarsest_level = level+1;
-      }
-
-      for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
-         fine_grid = inner_level;
-         coarse_grid = inner_level + 1;
-         if (all_data->input.solver == MULTADD ||
-             all_data->input.solver == ASYNC_MULTADD){
-            all_data->grid.level_work[level] +=
-               hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
-
+      all_data->grid.level_work[level] = 0;
+      if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+         for (int inner_level = 0; inner_level < all_data->grid.num_levels-1; inner_level++){
+            all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.R[inner_level]);
          }
-         else if (all_data->input.solver == AFACX ||
-                  all_data->input.solver == ASYNC_AFACX){
-            if (level < all_data->grid.num_levels-1){
-               all_data->grid.level_work[level] +=
-                  fine_grid * hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
-            }
-         }
-      }
-
-      fine_grid = level;
-      coarse_grid = level + 1;
-      if (level == all_data->grid.num_levels-1){
-         all_data->grid.level_work[level] += 
-	    hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+         all_data->grid.level_work[level] += 2.0 * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
       }
       else {
+         if (all_data->input.res_compute_type == GLOBAL){
+            all_data->grid.level_work[level] += 
+               2*hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]) / all_data->grid.num_levels + 
+                  hypre_CSRMatrixNumRows(all_data->matrix.A[0]);
+         }
+         else{
+            all_data->grid.level_work[level] += 
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.A[0]) + hypre_CSRMatrixNumRows(all_data->matrix.A[0]);
+         }
+
          if (all_data->input.solver == MULTADD ||
              all_data->input.solver == ASYNC_MULTADD){
-	    if (all_data->input.num_post_smooth_sweeps > 0 &&
-                all_data->input.num_pre_smooth_sweeps > 0){
+            coarsest_level = level;
+         }
+         else if (all_data->input.solver == AFACX ||
+                  all_data->input.solver == ASYNC_AFACX){
+            coarsest_level = level+1;
+         }
+
+         for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
+            fine_grid = inner_level;
+            coarse_grid = inner_level + 1;
+            if (all_data->input.solver == MULTADD ||
+                all_data->input.solver == ASYNC_MULTADD){
                all_data->grid.level_work[level] +=
-	          all_data->input.num_fine_smooth_sweeps * 
-		     (hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
-			hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]));
+                  hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
+
             }
-	    else {
-	       all_data->grid.level_work[level] += 
-		  hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]);
-	    }
+            else if (all_data->input.solver == AFACX ||
+                     all_data->input.solver == ASYNC_AFACX){
+               if (level < all_data->grid.num_levels-1){
+                  all_data->grid.level_work[level] +=
+                     fine_grid * hypre_CSRMatrixNumNonzeros(all_data->matrix.R[fine_grid]);
+               }
+            }
          }
-         else if (all_data->input.solver == AFACX ||
-                  all_data->input.solver == ASYNC_AFACX){
-            all_data->grid.level_work[level] +=
-               (all_data->input.num_coarse_smooth_sweeps-1) * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[coarse_grid]) +
-               hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]) +
-	       hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
-               (all_data->input.num_fine_smooth_sweeps-1) * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
-         }
-      }
 
-      coarsest_level = level;
-      for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
-         fine_grid = inner_level;
-         coarse_grid = inner_level + 1;
-         if (all_data->input.solver == MULTADD ||
-             all_data->input.solver == ASYNC_MULTADD){
-            all_data->grid.level_work[level] +=
-               hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
-
+         fine_grid = level;
+         coarse_grid = level + 1;
+         if (level == all_data->grid.num_levels-1){
+            all_data->grid.level_work[level] += 
+               hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
          }
-         else if (all_data->input.solver == AFACX ||
-                  all_data->input.solver == ASYNC_AFACX){
-            all_data->grid.level_work[level] +=
-               hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
+         else {
+            if (all_data->input.solver == MULTADD ||
+                all_data->input.solver == ASYNC_MULTADD){
+               if (all_data->input.num_post_smooth_sweeps > 0 &&
+                   all_data->input.num_pre_smooth_sweeps > 0){
+                  all_data->grid.level_work[level] +=
+                     all_data->input.num_fine_smooth_sweeps * 
+           	     (hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
+           		hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]));
+               }
+               else {
+                  all_data->grid.level_work[level] += 
+           	  hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]);
+               }
+            }
+            else if (all_data->input.solver == AFACX ||
+                     all_data->input.solver == ASYNC_AFACX){
+               all_data->grid.level_work[level] +=
+                  (all_data->input.num_coarse_smooth_sweeps-1) * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[coarse_grid]) +
+                  hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]) +
+                  hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]) +
+                  (all_data->input.num_fine_smooth_sweeps-1) * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[fine_grid]);
+            }
+         }
+
+         coarsest_level = level;
+         for (int inner_level = 0; inner_level < coarsest_level; inner_level++){
+            fine_grid = inner_level;
+            coarse_grid = inner_level + 1;
+            if (all_data->input.solver == MULTADD ||
+                all_data->input.solver == ASYNC_MULTADD){
+               all_data->grid.level_work[level] +=
+                  hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
+
+            }
+            else if (all_data->input.solver == AFACX ||
+                     all_data->input.solver == ASYNC_AFACX){
+               all_data->grid.level_work[level] +=
+                  hypre_CSRMatrixNumNonzeros(all_data->matrix.P[fine_grid]);
+            }
          }
       }
    }

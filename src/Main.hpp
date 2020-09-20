@@ -74,6 +74,7 @@
 #define BOOMERAMG 14
 #define BOOMERAMG_MULTADD 15
 #define IMPLICIT_EXTENDED_SYSTEM_BPX 16
+#define PAR_BPX 17
 
 #define NO_ACCEL 0
 #define CHEBY_ACCEL 1
@@ -209,6 +210,7 @@ typedef struct{
    int read_type;
    int eig_power_max_iters;
    int cheby_flag;
+   int precond_flag;
    unsigned int delay_usec; 
    int delay_flag;
    char mat_file_str[1024];
@@ -286,6 +288,7 @@ typedef struct{
    hypre_CSRMatrix **P;
    hypre_CSRMatrix **R;
    hypre_CSRMatrix *AA;
+   HYPRE_Real *A_diag_ext;
    double **L1_row_norm;
    int n;
    int nx;
@@ -317,6 +320,7 @@ typedef struct{
 typedef struct{
    int num_levels;
    int *n;
+   int N;
    int global_num_correct;
    int global_cycle_num_correct;
    int *num_smooth_wait;
