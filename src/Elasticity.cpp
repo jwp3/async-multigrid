@@ -1,6 +1,8 @@
 #include "Main.hpp"
 
 #ifdef USE_MFEM
+#include "../mfem_quartz/mfem-4.0/linalg/solvers.hpp"
+
 void MFEM_Elasticity(AllData *all_data,
                      HYPRE_IJMatrix *Aij)
 {
@@ -125,15 +127,16 @@ void MFEM_Elasticity(AllData *all_data,
       a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B, copy_interior);
       
       int cdofs = fespace.GetTrueVSize();
-     // if (cdofs >= all_data->mfem.max_amr_dofs){
+      if (cdofs >= all_data->mfem.max_amr_dofs){
          break;
-     // }
+      }
 
       // 16. Define a simple symmetric Gauss-Seidel preconditioner and use it to
       //     solve the linear system with PCG.
      // TODO: fix PCG
-     // GSSmoother M(A);
-     // PCG(A, M, B, X, 3, 2000, 1e-12, 0.0);
+      //GSSmoother M(A);
+      //PCG(A, M, B, X, 3, 2000, 1e-12, 0.0);
+      CG(A, B, X, 3, 2000, 1e-12, 0.0);
 
       // 17. After solving the linear system, reconstruct the solution as a
       //     finite element GridFunction. Constrained nodes are interpolated
@@ -164,43 +167,61 @@ void MFEM_Elasticity(AllData *all_data,
       b->Update();
    }
 
-   if (all_data->input.mfem_test_error_flag == 1){
-      for (int i = 0; i < A.Height(); i++){
-         B[i] = 1.0;
-      }
+  // if (all_data->input.mfem_test_error_flag == 1){
+  //    for (int i = 0; i < A.Height(); i++){
+  //       B[i] = 1.0;
+  //    }
 
-      // TODO: fix PCG
-     // GSSmoother M(A);
-     // PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);     
+  //    // TODO: fix PCG
+  //   // GSSmoother M(A);
+  //   // PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);     
 
-      all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double));
-      for (int i = 0; i < A.Height(); i++){
-         all_data->mfem.u[i] = X[i];
-      }
-   }
+  //    all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double));
+  //    for (int i = 0; i < A.Height(); i++){
+  //       all_data->mfem.u[i] = X[i];
+  //    }
+  // }
 
    HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, A.Height()-1, 0, A.Height()-1, Aij);
    HYPRE_IJMatrixSetObjectType(*Aij, HYPRE_PARCSR);
    HYPRE_IJMatrixInitialize(*Aij);
 
+   all_data->hypre.b_values = (HYPRE_Real *)malloc(A.Height() * sizeof(HYPRE_Real));
+
    for (int i = 0; i < A.Height(); i++){
-     // Array<int> mfem_cols;
-     // Vector mfem_srow;
-     // A.GetRow(i, mfem_cols, mfem_srow);
+      all_data->hypre.b_values[i] = B[i];
+      printf("%e\n", B[i]);
 
-     // int nnz = mfem_srow.Size();
+      Array<int> mfem_cols;
+      Vector mfem_srow;
+      A.GetRow(i, mfem_cols, mfem_srow);
 
-     // double *values = (double *)malloc(nnz * sizeof(double));
-     // int *cols = (int *)malloc(nnz * sizeof(int));
+      int nnz = mfem_srow.Size();
+      int mfem_nnz = nnz;
+
+      for (int j = 0; j < mfem_nnz; j++){
+         //if (abs(mfem_srow[j]) <= 1e-14) nnz--;
+      }
+
+      double *values = (double *)malloc(nnz * sizeof(double));
+      int *cols = (int *)malloc(nnz * sizeof(int));
+      
+      int k = 0;
+      for (int j = 0; j < mfem_nnz; j++){
+         //if (abs(mfem_srow[j]) > 1e-12){
+            cols[k] = mfem_cols[j];
+            values[k] = mfem_srow[j];
+            k++;
+         //}
+      }
+
+     // int nnz = A.RowSize(i);
+     // double *values = A.GetRowEntries(i);
+     // int *cols = A.GetRowColumns(i);
 
      // for (int j = 0; j < nnz; j++){
-     //    cols[j] = mfem_cols[j];
-     //    values[j] = mfem_srow[j];
+     //    printf("%d %d %e\n", i+1, cols[j]+1, values[j]);
      // }
-
-      int nnz = A.RowSize(i);
-      double *values = A.GetRowEntries(i);
-      int *cols = A.GetRowColumns(i);
 
       /* Set the values for row i */
       HYPRE_IJMatrixSetValues(*Aij, 1, &nnz, &i, cols, values);

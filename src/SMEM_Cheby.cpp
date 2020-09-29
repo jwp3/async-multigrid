@@ -28,8 +28,12 @@ void ChebySetup(AllData *all_data)
    hypre_ParVector *v = hypre_ParAMGDataVtemp(amg_data);
    HYPRE_Int num_rows = hypre_ParCSRMatrixNumRows(A);
 
+   HYPRE_Real *e = all_data->vector.e[0];
+   HYPRE_Real *y = all_data->vector.y[0];
+
    HYPRE_Real *u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(u));
    HYPRE_Real *f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(f));
+   HYPRE_Real *v_local_data = hypre_VectorData(hypre_ParVectorLocalVector(v));
 
    //HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, all_data->input.eig_power_MG_max_iters);
    HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 1);
@@ -37,21 +41,33 @@ void ChebySetup(AllData *all_data)
 
    for (int i = 0; i < num_rows; i++){ 
       u_local_data[i] = RandDouble(-1.0, 1.0);
-      all_data->vector.y[0][i] = f_local_data[i];
+      y[i] = f_local_data[i];
    }
    eig_power_iters = 0;
    double start = omp_get_wtime();
    while (1){
       u_norm = sqrt(hypre_ParVectorInnerProd(u, u));
       hypre_ParVectorScale(1.0/u_norm, u);
-      hypre_ParVectorCopy(u, v);
+      //hypre_ParVectorCopy(u, v);
+      #pragma omp parallel for
+      for (int i = 0; i < num_rows; i++){
+         e[i] = u_local_data[i];
+      }
       hypre_ParCSRMatrixMatvec(1.0, A, u, 0.0, f);
       hypre_ParVectorSetConstantValues(u, 0.0);
-      BPXCycle(all_data);
-     // HYPRE_BoomerAMGSolve(all_data->hypre.solver, A, f, u);
+      if (all_data->input.solver == MULT){
+         HYPRE_BoomerAMGSolve(all_data->hypre.solver, A, f, u);
+      }
+      else {
+         BPXCycle(all_data);
+      }
 
       eig_power_iters++;
       if (eig_power_iters == all_data->input.eig_power_max_iters) break;
+   }
+   #pragma omp parallel for
+   for (int i = 0; i < num_rows; i++){
+      v_local_data[i] = e[i];
    }
    eig_max = hypre_ParVectorInnerProd(v, u);
 
@@ -60,15 +76,28 @@ void ChebySetup(AllData *all_data)
    while (1){
       u_norm = sqrt(hypre_ParVectorInnerProd(u, u));
       hypre_ParVectorScale(1.0/u_norm, u);
-      hypre_ParVectorCopy(u, v);
+      //hypre_ParVectorCopy(u, v);
+      #pragma omp parallel for
+      for (int i = 0; i < num_rows; i++){
+         e[i] = u_local_data[i];
+      }
       hypre_ParCSRMatrixMatvec(1.0, A, u, 0.0, f);
       hypre_ParVectorSetConstantValues(u, 0.0);
-      BPXCycle(all_data);
-     // HYPRE_BoomerAMGSolve(all_data->hypre.solver, A, f, u);
+      if (all_data->input.solver == MULT){
+         HYPRE_BoomerAMGSolve(all_data->hypre.solver, A, f, u);
+      }
+      else {
+         BPXCycle(all_data);
+      }
 
+      #pragma omp parallel for
+      for (int i = 0; i < num_rows; i++){
+         v_local_data[i] = e[i];
+      }
       eig_power_iters++;
       if (eig_power_iters == all_data->input.eig_power_max_iters) break;
 
+      
       hypre_ParVectorAxpy(-eig_max, v, u);
    }
    eig_min = hypre_ParVectorInnerProd(v, u);

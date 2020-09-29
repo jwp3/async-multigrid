@@ -13,9 +13,7 @@ void Laplacian_3D_7pt(HYPRE_ParCSRMatrix *A_ptr,
 void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
                        int nx, int ny, int nz);
 
-#ifdef USE_MFEM
 void MFEM_Laplacian(AllData *all_data,
                     HYPRE_IJMatrix *Aij);
-#endif
 
 #endif

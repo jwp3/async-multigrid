@@ -143,17 +143,6 @@ typedef struct{
 }DMEM_InputData;
 
 typedef struct{
-   int amr_refs;
-   int ref_levels;
-   int par_ref_levels;
-   int order;
-   int max_amr_iters;
-   int max_amr_dofs;
-   char mesh_file[1000];
-   double *u;
-}DMEM_MfemData;
-
-typedef struct{
    HYPRE_Solver solver;
    HYPRE_Solver solver_gridk;
    HYPRE_Solver solver_afacj;
@@ -347,7 +336,7 @@ typedef struct{
    DMEM_InputData input;
    DMEM_OutputData output;
    DMEM_GridData grid;
-   DMEM_MfemData mfem;
+   MfemData mfem;
    DMEM_IterData iter;
    DMEM_ChebyData cheby;
 }DMEM_AllData;

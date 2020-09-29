@@ -42,11 +42,11 @@ int main (int argc, char *argv[])
    int hypre_num_threads = 1;
 
    /* mfem parameters */
-   all_data.mfem.ref_levels = 2;
+   all_data.mfem.ref_levels = 1;
    all_data.mfem.order = 1;
    strcpy(all_data.mfem.mesh_file, "./mfem_quartz/mfem-4.0/data/beam-hex.mesh");
    all_data.mfem.amr_refs = 0;
-   all_data.mfem.max_amr_dofs = 0;
+   all_data.mfem.max_amr_dofs = (int)pow((double)all_data.matrix.n, 3.0);
 
    all_data.input.test_problem = LAPLACE_2D5PT;
    all_data.input.tol = 1e-9;
@@ -141,7 +141,7 @@ int main (int argc, char *argv[])
          else if (strcmp(argv[arg_index], "mfem_elast") == 0){
             all_data.input.test_problem = MFEM_ELAST;
             strcpy(all_data.mfem.mesh_file, "./mfem_quartz/mfem-4.0/data/beam-hex.mesh");
-           // all_data.hypre.num_functions = 3;
+            all_data.hypre.num_functions = 3;
          }
 	 else if (strcmp(argv[arg_index], "mfem_maxwell") == 0){
             all_data.input.test_problem = MFEM_MAXWELL;
@@ -370,6 +370,7 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          all_data.input.num_threads = atoi(argv[arg_index]);
+         hypre_num_threads = all_data.input.num_threads;
       }
       else if (strcmp(argv[arg_index], "-num_runs") == 0)
       {
@@ -490,30 +491,16 @@ int main (int argc, char *argv[])
        all_data.input.solver == MULTADD ||
        all_data.input.solver == AFACX ||
        all_data.input.solver == ASYNC_AFACX ||
-       all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+       all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX ||
+       all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX ||
+       all_data.input.solver == BPX ||
+       all_data.input.solver == PAR_BPX){
       all_data.input.res_compute_type = LOCAL; 
    }
    
    srand(0);
    omp_set_num_threads(1);
   // mkl_set_num_threads(1);
-
-   if ((print_usage) && (myid == 0))
-   {
-      printf("\n");
-      printf("Usage: %s [<options>]\n", argv[0]);
-      printf("\n");
-      printf("  -n <n>              : problem size in each direction (default: 33)\n");
-      printf("  -solver <ID>        : solver ID\n");
-      printf("                        0  - AMG (default) \n");
-      printf("\n");
-   }
-
-   if (print_usage)
-   {
-      MPI_Finalize();
-      return 0;
-   }
 
    start = omp_get_wtime();
    omp_set_num_threads(hypre_num_threads);

@@ -66,7 +66,7 @@ void SMEM_Setup(AllData *all_data)
   // HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &pcg_solver);
   // HYPRE_PCGSetPrintLevel(pcg_solver, 0);
   // HYPRE_PCGSetTwoNorm(pcg_solver, 1);
-  // HYPRE_PCGSetMaxIter(pcg_solver, 1000);
+  // HYPRE_PCGSetMaxIter(pcg_solver, 2000);
   // HYPRE_PCGSetTol(pcg_solver, 1e-8);
   // HYPRE_PCGSetPrintLevel(pcg_solver, 0);
   // HYPRE_PCGSetPrecond(pcg_solver,
@@ -138,6 +138,7 @@ void SMEM_Setup(AllData *all_data)
 void InitAlgebra(AllData *all_data)
 {
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
+   hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
    
    hypre_ParCSRMatrix **parA;
    hypre_ParCSRMatrix **parP;
@@ -203,6 +204,7 @@ void InitAlgebra(AllData *all_data)
       }
    }
 
+   // TODO: cleanup excess memory usage
    if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
       all_data->vector.u =(HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
       all_data->vector.y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
@@ -342,8 +344,9 @@ void InitAlgebra(AllData *all_data)
          }
       }
       int level = 0;
+      HYPRE_Real *f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[0]));
       for (int i = 0; i < all_data->grid.n[level]; i++){
-         all_data->vector.f[level][i] = 1.0;//RandDouble(-1.0, 1.0);
+         all_data->vector.f[level][i] = f_local_data[i];
       }
 
       if (all_data->input.solver == PAR_BPX) {
@@ -371,8 +374,6 @@ void InitAlgebra(AllData *all_data)
       }
    }
    else {
-      hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
-      hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
       hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
       hypre_ParCSRMatrix **R_array = hypre_ParAMGDataRArray(amg_data);
       double start = omp_get_wtime();
@@ -420,6 +421,8 @@ void InitAlgebra(AllData *all_data)
       n = hypre_ParCSRMatrixNumRows(A_array[0]);
       all_data->vector.y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
       all_data->vector.y[0] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+      all_data->vector.e = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.e[0] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
       
 
      // all_data->thread.AA_NS = (int *)calloc(all_data->input.num_threads, sizeof(int));
@@ -839,9 +842,11 @@ void ComputeWork(AllData *all_data)
       all_data->grid.level_work[level] = 0;
       if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
          for (int inner_level = 0; inner_level < all_data->grid.num_levels-1; inner_level++){
-            all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.R[inner_level]);
+            all_data->grid.level_work[level] += 2 * hypre_CSRMatrixNumNonzeros(all_data->matrix.R[inner_level]);
+            all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[inner_level]);
          }
-         all_data->grid.level_work[level] += 2.0 * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
+         all_data->grid.level_work[level] += 4 * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
+         all_data->grid.level_work[level] += 8 * hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
       }
       else {
          if (all_data->input.res_compute_type == GLOBAL){
@@ -1331,7 +1336,7 @@ void SMEM_BuildMatrix(AllData *all_data)
                        all_data->matrix.nz);
    }
    else if (all_data->input.test_problem == MFEM_LAPLACE){
-#ifdef MFEM
+#ifdef USE_MFEM
       MFEM_Laplacian(all_data, &A);
 #else
       
@@ -1340,7 +1345,7 @@ void SMEM_BuildMatrix(AllData *all_data)
       HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
    else if (all_data->input.test_problem == MFEM_ELAST){
-#ifdef MFEM
+#ifdef USE_MFEM
       MFEM_Elasticity(all_data, &A);
 #else
 
@@ -1349,7 +1354,7 @@ void SMEM_BuildMatrix(AllData *all_data)
       HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
    else if (all_data->input.test_problem == MFEM_MAXWELL){
-#ifdef MFEM
+#ifdef USE_MFEM
       MFEM_Maxwell(all_data, &A);
 #else
 
@@ -1403,8 +1408,7 @@ void SMEM_SetHypreParameters(AllData *all_data)
       HYPRE_BoomerAMGSetAddRelaxType(all_data->hypre.solver, 0);
       HYPRE_BoomerAMGSetAddRelaxWt(all_data->hypre.solver, all_data->input.smooth_weight);
    }
-   HYPRE_BoomerAMGSetRelaxType(all_data->hypre.solver, 0);
-   HYPRE_BoomerAMGSetAdditive(all_data->hypre.solver, 0);
+   //HYPRE_BoomerAMGSetAdditive(all_data->hypre.solver, 0);
 
    int num_rows = hypre_ParCSRMatrixNumRows(all_data->hypre.parcsr_A);
 
@@ -1432,6 +1436,12 @@ void SMEM_SetHypreParameters(AllData *all_data)
       rhs_values[i] = 1.0;//RandDouble(-1.0, 1.0);
       x_values[i] = 0.0;
       rows[i] = i;
+   }
+
+   if (all_data->input.test_problem == MFEM_ELAST){
+      for (int i = 0; i < num_rows; i++){
+         rhs_values[i] = all_data->hypre.b_values[i];
+      }
    }
 
    HYPRE_IJVectorSetValues(b, num_rows, rows, rhs_values);

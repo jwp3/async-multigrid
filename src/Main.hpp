@@ -277,10 +277,12 @@ typedef struct{
 typedef struct{
    int amr_refs;
    int ref_levels;
+   int par_ref_levels;
    int order;
+   int max_amr_iters;
+   int max_amr_dofs;
    char mesh_file[1000];
    double *u;
-   int max_amr_dofs;
 }MfemData;
 
 typedef struct{
@@ -343,6 +345,7 @@ typedef struct{
 }GridData;
 
 typedef struct{
+   HYPRE_Real *b_values;
    HYPRE_ParCSRMatrix parcsr_A;
    HYPRE_ParVector par_b;
    HYPRE_ParVector par_x;

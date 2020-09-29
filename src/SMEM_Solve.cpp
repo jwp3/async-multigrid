@@ -16,6 +16,16 @@ void SMEM_Solve(AllData *all_data)
    HYPRE_Real *u_outer, *y_outer;
    HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[0]);
    HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[0]);
+   hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
+   hypre_ParVector **U_array = hypre_ParAMGDataUArray(amg_data);
+   hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
+   hypre_ParVector *v = hypre_ParAMGDataVtemp(amg_data);
+   hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
+   HYPRE_Real *u_local_data = hypre_VectorData(hypre_ParVectorLocalVector(U_array[0]));
+   HYPRE_Real *f_local_data = hypre_VectorData(hypre_ParVectorLocalVector(F_array[0]));
+   HYPRE_Real *v_local_data = hypre_VectorData(hypre_ParVectorLocalVector(v));
+   HYPRE_BoomerAMGSetPrintLevel(all_data->hypre.solver, 0);
+   HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 1);
 
    if (all_data->input.precond_flag == 1){
       u_outer = (HYPRE_Real *)calloc(all_data->grid.n[0], sizeof(HYPRE_Real));      
@@ -23,20 +33,20 @@ void SMEM_Solve(AllData *all_data)
    }
 
    int k_start = 0;
-   if (all_data->input.cheby_flag == 1){
-      k_start = 1;
-   }
+  // if (all_data->input.cheby_flag == 1){
+  //    k_start = 1;
+  // }
 
    #pragma omp parallel
    {
-      if (all_data->input.cheby_flag == 1){
-         #pragma omp for
-         for (int i = 0; i < all_data->grid.n[0]; i++){
-            u_outer[i] = delta * all_data->vector.f[0][i] / A_data[A_i[i]];
-            y_outer[i] = 0;
-            all_data->vector.u[0][i] = u_outer[i];
-         }
-      }
+     // if (all_data->input.cheby_flag == 1){
+     //    #pragma omp for
+     //    for (int i = 0; i < all_data->grid.n[0]; i++){
+     //       u_outer[i] = delta * all_data->vector.f[0][i] / A_data[A_i[i]];
+     //       y_outer[i] = 0;
+     //       all_data->vector.u[0][i] = u_outer[i];
+     //    }
+     // }
       SMEM_Sync_Parfor_Residual(all_data,
                                 all_data->matrix.A[0],
                                 all_data->vector.f[0],
@@ -84,6 +94,12 @@ void SMEM_Solve(AllData *all_data)
          int tid = omp_get_thread_num();
          double omega = 2.0;
          for (int k = k_start; k <= all_data->input.num_cycles; k++){
+            if (all_data->input.precond_flag == 1){
+               #pragma omp for
+               for (int i = 0; i < all_data->grid.n[0]; i++){
+                  all_data->vector.u[0][i] = 0;
+               }
+            }
             if (all_data->input.solver == MULTADD){
                if (all_data->input.thread_part_type == ALL_LEVELS){
                   SMEM_Sync_Add_Vcycle(all_data);
@@ -103,16 +119,40 @@ void SMEM_Solve(AllData *all_data)
                SMEM_Sync_Parfor_BPXcycle(all_data);
             }
             else{
-               SMEM_Sync_Parfor_Vcycle(all_data);
+               if (all_data->input.precond_flag == 1){
+                  #pragma omp for
+                  for (int i = 0; i < all_data->grid.n[0]; i++){
+                     u_local_data[i] = 0;
+                     f_local_data[i] = all_data->vector.r[0][i];
+                  }
+                  HYPRE_BoomerAMGSolve(all_data->hypre.solver, A_array[0], F_array[0], U_array[0]);
+                  #pragma omp for
+                  for (int i = 0; i < all_data->grid.n[0]; i++){
+                     all_data->vector.u[0][i] = u_local_data[i];
+                  }
+               }
+               else {   
+                  SMEM_Sync_Parfor_Vcycle(all_data);
+               }
             }
 
             if (all_data->input.cheby_flag == 1){
-               #pragma omp for
-               for (int i = 0; i < all_data->grid.n[0]; i++){
-                  double u_outer_prev = u_outer[i];
-                  u_outer[i] = y_outer[i] + omega * (delta * all_data->vector.u[0][i] + u_outer[i] - y_outer[i]);
-                  y_outer[i] = u_outer_prev;
-                  all_data->vector.u[0][i] = u_outer[i];
+               if (k == 0){
+                  #pragma omp for
+                  for (int i = 0; i < all_data->grid.n[0]; i++){
+                     u_outer[i] = delta * all_data->vector.u[0][i];
+                     y_outer[i] = 0;
+                     all_data->vector.u[0][i] = u_outer[i];
+                  }
+               }
+               else {
+                  #pragma omp for
+                  for (int i = 0; i < all_data->grid.n[0]; i++){
+                     double u_outer_prev = u_outer[i];
+                     u_outer[i] = y_outer[i] + omega * (delta * all_data->vector.u[0][i] + u_outer[i] - y_outer[i]);
+                     y_outer[i] = u_outer_prev;
+                     all_data->vector.u[0][i] = u_outer[i];
+                  }
                }
             }
             

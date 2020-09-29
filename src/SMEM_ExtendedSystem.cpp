@@ -440,15 +440,9 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             }
          }
       }
-      if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
-         iters[tid * cache_line] = loc_iters;
-      }
-      else {
-         for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
-            thread_level = all_data->thread.thread_levels[tid][q];
-            iters[thread_level * cache_line] = loc_iters;
-         }
-      }
+      if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX)
+         printf("%d %d %d\n", tid, all_data->thread.thread_levels[tid][0], loc_iters);
+      iters[tid * cache_line] = loc_iters;
       wtime[tid] = omp_get_wtime() - start;
       #pragma omp barrier
 
@@ -480,7 +474,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             }
          }
 
-         mean_relax /= (double)T;
+         mean_relax /= (double)num_threads;
          mean_wtime /= (double)num_threads;
 
          if (all_data->input.async_flag == 0){
