@@ -7,14 +7,14 @@ void PrintOutput(AllData all_data)
 {
    int mean_smooth_sweeps;
    int mean_cycles;
-   double mean_smooth_wtime;
-   double mean_restrict_wtime;
-   double mean_residual_wtime;
-   double mean_prolong_wtime;
-   double mean_correct;
-   double mean_grid_wait;
-   double max_grid_wait;
-   double min_grid_wait;
+   double mean_vec_wtime, min_vec_wtime, max_vec_wtime;
+   double mean_A_matvec_wtime, min_A_matvec_wtime, max_A_matvec_wtime;
+   double mean_smooth_wtime, min_smooth_wtime, max_smooth_wtime;
+   double mean_restrict_wtime, min_restrict_wtime, max_restrict_wtime;
+   double mean_residual_wtime, min_residual_wtime, max_residual_wtime;
+   double mean_prolong_wtime, min_prolong_wtime, max_prolong_wtime;
+   double mean_updates, min_updates, max_updates;
+   double mean_grid_wait, min_grid_wait, max_grid_wait;
 
    char print_str[1000];
 
@@ -37,25 +37,58 @@ void PrintOutput(AllData all_data)
       }
    }
 
-   mean_grid_wait =
-      SumDbl(all_data.grid.mean_grid_wait, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
-   max_grid_wait =
-      MaxDouble(&all_data.grid.max_grid_wait[finest_level], all_data.grid.num_levels);
-   min_grid_wait =
-      MinDouble(&all_data.grid.min_grid_wait[finest_level], all_data.grid.num_levels);
+   mean_smooth_sweeps = (double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads;
 
-   mean_smooth_sweeps =
-      (double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads;
-   mean_correct =
-      (double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
-   mean_smooth_wtime =
-      SumDbl(all_data.output.smooth_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
-   mean_residual_wtime =
-      SumDbl(all_data.output.residual_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
-   mean_restrict_wtime =
-      SumDbl(all_data.output.restrict_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
-   mean_prolong_wtime =
-      SumDbl(all_data.output.prolong_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
+   mean_grid_wait = SumDbl(all_data.grid.mean_grid_wait, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
+   max_grid_wait = MaxDouble(&all_data.grid.max_grid_wait[finest_level], all_data.grid.num_levels);
+   min_grid_wait = MinDouble(&all_data.grid.min_grid_wait[finest_level], all_data.grid.num_levels);
+
+   if (all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX || all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+      mean_updates = (double)SumInt(all_data.grid.local_num_correct, all_data.input.num_threads)/((double)(all_data.input.num_threads));
+   }
+   else {
+      mean_updates = (double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
+   }
+   min_updates = (double)MinInt(all_data.grid.local_num_correct, all_data.input.num_threads);
+   max_updates = (double)MaxInt(all_data.grid.local_num_correct, all_data.input.num_threads);
+
+   mean_smooth_wtime = SumDbl(all_data.output.smooth_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
+   min_smooth_wtime = MinDouble(all_data.output.smooth_wtime, all_data.input.num_threads);
+   max_smooth_wtime = MaxDouble(all_data.output.smooth_wtime, all_data.input.num_threads);
+
+   mean_residual_wtime = SumDbl(all_data.output.residual_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
+   min_residual_wtime = MinDouble(all_data.output.residual_wtime, all_data.input.num_threads);
+   max_residual_wtime = MaxDouble(all_data.output.residual_wtime, all_data.input.num_threads);
+
+   if (all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+      mean_restrict_wtime = MeanDoubleNonZero(all_data.output.restrict_wtime, all_data.input.num_threads);
+      min_restrict_wtime = MinDoubleNonZero(all_data.output.restrict_wtime, all_data.input.num_threads);
+      max_restrict_wtime = MaxDoubleNonZero(all_data.output.restrict_wtime, all_data.input.num_threads);
+   }
+   else {
+      mean_restrict_wtime = SumDbl(all_data.output.restrict_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
+      min_restrict_wtime = MinDouble(all_data.output.restrict_wtime, all_data.input.num_threads);
+      max_restrict_wtime = MaxDouble(all_data.output.restrict_wtime, all_data.input.num_threads);
+   }
+
+   if (all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+      mean_prolong_wtime = MeanDoubleNonZero(all_data.output.prolong_wtime, all_data.input.num_threads);
+      min_prolong_wtime = MinDoubleNonZero(all_data.output.prolong_wtime, all_data.input.num_threads);
+      max_prolong_wtime = MaxDoubleNonZero(all_data.output.prolong_wtime, all_data.input.num_threads);
+   }
+   else {
+      mean_prolong_wtime = SumDbl(all_data.output.prolong_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
+      min_prolong_wtime = MinDouble(all_data.output.prolong_wtime, all_data.input.num_threads);
+      max_prolong_wtime = MaxDouble(all_data.output.prolong_wtime, all_data.input.num_threads);
+   }
+
+   mean_A_matvec_wtime = SumDbl(all_data.output.A_matvec_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
+   min_A_matvec_wtime = MinDouble(all_data.output.A_matvec_wtime, all_data.input.num_threads);
+   max_A_matvec_wtime = MaxDouble(all_data.output.A_matvec_wtime, all_data.input.num_threads);
+
+   mean_vec_wtime = SumDbl(all_data.output.vec_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
+   min_vec_wtime = MinDouble(all_data.output.vec_wtime, all_data.input.num_threads);
+   max_vec_wtime = MaxDouble(all_data.output.vec_wtime, all_data.input.num_threads);
 
    if (all_data.input.print_level_stats_flag == 1){
       for (int level = 0; level < all_data.grid.num_levels; level++){
@@ -74,7 +107,7 @@ void PrintOutput(AllData all_data)
 		(double)all_data.thread.level_threads[level].size();
          if (all_data.input.format_output_flag == 0){
             strcpy(print_str, "Level %d stats:\n"
-                              "\tcorrections = %d\n"
+                              "\tupdates = %d\n"
                               "\tsmooth time = %e\n"
                               "\tresidual time = %e\n"
                               "\trestrict time = %e\n"
@@ -108,47 +141,43 @@ void PrintOutput(AllData all_data)
                         "Solve stats:\n"
                         "\tRelative Residual 2-norm = %e\n"
                         "\tTotal solve time = %e\n"
-                        "\tMean corrections = %f\n"
-		        "\tMean smooth time = %e\n" 
-			"\tMean residual time = %e\n"
-			"\tMean restrict time = %e\n"
-		        "\tMean prolong time = %e\n"
-			"\tMean computation time = %e\n"
-			"\tMean grid wait = %e\n"
-			"\tMax grid wait = %e\n"
-                        "\tMin grid wait = %e\n"
-			"\tMean grid wait / num levels = %e\n"
-                        "\tMax grid wait / num levels = %e\n"
-                        "\tMin grid wait / num levels = %e\n"
-                        "\tNum cycles (sync only) = %d\n");
+                        "\tUpdates = %f, %f, %f\n"
+		        "\tSmooth time = %e, %e, %e\n" 
+			"\tResidual time = %e, %e, %e\n"
+			"\tRestrict time = %e, %e, %e\n"
+		        "\tProlong time = %e, %e, %e\n"
+                        "\tA-matvec time = %e, %e, %e\n"
+                        "\tVec op time = %e, %e, %e\n"
+			"\tGrid wait = %e, %e, %e\n"
+			"\tGrid wait / num levels = %e, %e, %e\n");
    }
    else{
-      strcpy(print_str, "%e %e %e %e %e %f %e %e %e %e %e %e %e %e %e %e %e %d ");
+      strcpy(print_str, 
+             "%e %e %e "
+             "%e %e "
+             "%f %f %f "
+             "%e %e %e "
+             "%e %e %e "
+             "%e %e %e "
+             "%e %e %e "
+             "%e %e %e "
+             "%e %e %e "
+             "%e %e %e "
+             "%e %e %e ");
    }
 
-   double mean_comp_time = mean_smooth_wtime + 
-			   mean_residual_wtime +
-			   mean_restrict_wtime +
-			   mean_prolong_wtime;
    printf(print_str,
-          all_data.output.prob_setup_wtime,
-          all_data.output.hypre_setup_wtime,
-          all_data.output.setup_wtime,
-          all_data.output.r_norm2/all_data.output.r0_norm2,
-          all_data.output.solve_wtime,
-          mean_correct,
-          mean_smooth_wtime,
-          mean_residual_wtime,
-          mean_restrict_wtime,
-          mean_prolong_wtime,
-	  mean_comp_time,
-          mean_grid_wait,
-          max_grid_wait,
-          min_grid_wait,
-          mean_grid_wait/(double)all_data.grid.num_levels,
-          max_grid_wait/(double)all_data.grid.num_levels,
-          min_grid_wait/(double)all_data.grid.num_levels,
-          all_data.output.num_cycles);
+          all_data.output.prob_setup_wtime, all_data.output.hypre_setup_wtime, all_data.output.setup_wtime,
+          all_data.output.r_norm2/all_data.output.r0_norm2, all_data.output.solve_wtime,
+          mean_updates, min_updates, max_updates,
+          mean_smooth_wtime, min_smooth_wtime, max_smooth_wtime,
+          mean_residual_wtime, min_residual_wtime, max_residual_wtime,
+          mean_restrict_wtime, min_restrict_wtime, max_restrict_wtime,
+          mean_prolong_wtime, min_prolong_wtime, max_prolong_wtime,
+          mean_A_matvec_wtime, min_A_matvec_wtime, max_A_matvec_wtime,
+          mean_vec_wtime, min_vec_wtime, max_vec_wtime,
+          mean_grid_wait, min_grid_wait, max_grid_wait,
+          mean_grid_wait/(double)all_data.grid.num_levels, min_grid_wait/(double)all_data.grid.num_levels, max_grid_wait/(double)all_data.grid.num_levels);
 
    if (all_data.input.mfem_test_error_flag == 1){
       if (all_data.input.format_output_flag == 0){
@@ -192,6 +221,28 @@ int MaxInt(int *x, int n)
    int max_val = x[0];
    for (int i = 1; i < n; i++){
       if (x[i] > max_val){
+         max_val = x[i];
+      }
+   }
+   return max_val;
+}
+
+double MinDoubleNonZero(double *x, int n)
+{
+   double min_val = DBL_MAX;
+   for(int i = 0; i < n; i++){
+      if(x[i] < min_val && x[i] > 0.0){
+         min_val = x[i];
+      }
+   }
+   return min_val;
+}
+
+double MaxDoubleNonZero(double *x, int n)
+{
+   double max_val = 0.0;
+   for(int i = 0; i < n; i++){
+      if(x[i] > max_val && x[i] > 0.0){
          max_val = x[i];
       }
    }
@@ -284,6 +335,19 @@ double SumDbl(double *x, int n)
      sum += x[i];
    }
    return sum;
+}
+
+double MeanDoubleNonZero(double *x, int n)
+{
+   double sum = 0;
+   double count = 0;
+   for (int i = 0; i < n; i++){
+      if (x[i] > 0.0){
+         sum += x[i];
+         count++;
+      }
+   }
+   return sum/count;
 }
 
 void SwapInt(int *xp, int *yp)
@@ -581,30 +645,31 @@ void InitSolve(AllData *all_data)
    all_data->grid.global_num_correct = 0;
    all_data->grid.global_cycle_num_correct = 0;
    
-   if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
-      for (int level = 0; level < all_data->grid.num_levels; level++){
-         all_data->grid.num_smooth_wait[level] = 0;
-         all_data->grid.local_num_res_compute[level] = 0;
-         all_data->grid.local_num_correct[level] = 0;
-         all_data->grid.local_cycle_num_correct[level] = 0;
-         all_data->grid.last_read_correct[level] = 0;
-         all_data->grid.last_read_cycle_correct[level] = 0;
-         all_data->grid.mean_grid_wait[level] = 0;
-         all_data->grid.max_grid_wait[level] = 0;
-         all_data->grid.min_grid_wait[level] = DBL_MAX;
-      }
+   for (int level = 0; level < all_data->grid.num_levels; level++){
+      all_data->grid.num_smooth_wait[level] = 0;
+      all_data->grid.local_num_res_compute[level] = 0;
+      all_data->grid.local_num_correct[level] = 0;
+      all_data->grid.local_cycle_num_correct[level] = 0;
+      all_data->grid.last_read_correct[level] = 0;
+      all_data->grid.last_read_cycle_correct[level] = 0;
+      all_data->grid.mean_grid_wait[level] = 0;
+      all_data->grid.max_grid_wait[level] = 0;
+      all_data->grid.min_grid_wait[level] = DBL_MAX;
+   }
  
-      all_data->output.solve_wtime = 0;
-      for (int t = 0; t < all_data->input.num_threads; t++){
-         all_data->output.smooth_wtime[t] = 0;
-         all_data->output.residual_wtime[t] = 0;
-         all_data->output.restrict_wtime[t] = 0;
-         all_data->output.prolong_wtime[t] = 0;
-      }
+   all_data->output.solve_wtime = 0;
+   for (int t = 0; t < all_data->input.num_threads; t++){
+      all_data->output.smooth_wtime[t] = 0;
+      all_data->output.residual_wtime[t] = 0;
+      all_data->output.restrict_wtime[t] = 0;
+      all_data->output.prolong_wtime[t] = 0;
+      all_data->output.A_matvec_wtime[t] = 0;
+      all_data->output.vec_wtime[t] = 0;
+      all_data->output.innerprod_wtime[t] = 0;
+   }
 
-      if (all_data->input.print_grid_wait_flag == 1){
-         all_data->grid.grid_wait_hist.resize(0);
-      }
+   if (all_data->input.print_grid_wait_flag == 1){
+      all_data->grid.grid_wait_hist.resize(0);
    }
    all_data->thread.converge_flag = 0;
 }

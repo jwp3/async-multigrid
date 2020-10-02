@@ -159,6 +159,9 @@ typedef struct{
    double *residual_wtime;
    double *restrict_wtime;
    double *prolong_wtime;
+   double *A_matvec_wtime;
+   double *vec_wtime;
+   double *innerprod_wtime;
    double *correct_time;
    double setup_wtime;
    double hypre_setup_wtime;

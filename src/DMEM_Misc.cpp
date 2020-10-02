@@ -214,7 +214,6 @@ void DMEM_PrintOutput(DMEM_AllData *dmem_all_data)
                 dmem_all_data->output.setup_wtime, dmem_all_data->output.build_matrix_wtime);
          strcpy(print_str, "Relative Residual 2-norm = %e\n"
                            "Relative Error A-norm (only for rhs==0) = %e\n\n"
-                           //"Setup stats\n\n"
                            "Solve stats          \t  mean  \t   max  \t   min  \n"
                            "---------------------\t--------\t--------\t--------\n"
                            "Cycles               \t%.2f\t\t%d\t\t%d\n"

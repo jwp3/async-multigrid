@@ -637,16 +637,16 @@ int main (int argc, char *argv[])
            //       all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
            //    }
            // }
-	    if (warmup == 1){
-	       if (all_data.input.print_output_flag == 1 && run > 1){
-                  PrintOutput(all_data);
-               }
-	    }
-	    else {
-	       if (all_data.input.print_output_flag == 1){
-	          PrintOutput(all_data);
-	       }
-	    }
+         }
+         if (warmup == 1){
+            if (all_data.input.print_output_flag == 1 && run > 1){
+               PrintOutput(all_data);
+            }
+         }
+         else {
+            if (all_data.input.print_output_flag == 1){
+               PrintOutput(all_data);
+            }
          }
       }
    }

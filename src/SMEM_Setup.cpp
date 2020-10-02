@@ -49,6 +49,7 @@ void Setup(AllData *all_data);
 void SMEM_Setup(AllData *all_data)
 {
    double start;
+   int num_threads = all_data->input.num_threads;
    start = omp_get_wtime();
    SMEM_BuildMatrix(all_data);
    all_data->output.prob_setup_wtime = omp_get_wtime() - start;
@@ -107,11 +108,11 @@ void SMEM_Setup(AllData *all_data)
 
    InitAlgebra(all_data);
 
-   all_data->barrier.local_sense = (int *)calloc(all_data->input.num_threads, sizeof(int));
+   all_data->barrier.local_sense = (int *)calloc(num_threads, sizeof(int));
   // all_data->barrier.counter = (int *)calloc(all_data->grid.num_levels, sizeof(int));
   // all_data->barrier.flag = (int *)calloc(all_data->grid.num_levels, sizeof(int));
 
-   all_data->grid.global_smooth_flags = (int *)calloc(all_data->input.num_threads, sizeof(int));
+   all_data->grid.global_smooth_flags = (int *)calloc(num_threads, sizeof(int));
    all_data->grid.zero_flags = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.num_smooth_wait = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.finest_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
@@ -124,6 +125,14 @@ void SMEM_Setup(AllData *all_data)
    all_data->grid.mean_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
    all_data->grid.max_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
    all_data->grid.min_grid_wait = (double *)calloc(all_data->grid.num_levels, sizeof(double));
+
+   all_data->output.smooth_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.residual_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.restrict_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.prolong_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.A_matvec_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.vec_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.innerprod_wtime = (double *)malloc(num_threads * sizeof(double));
 
    if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
       ComputeWork(all_data);
@@ -508,11 +517,6 @@ void PartitionLevels(AllData *all_data)
    all_data->thread.barrier_root = (int *)malloc(num_levels * sizeof(int));
    all_data->thread.global_barrier_flags = (int *)calloc(num_threads, sizeof(int));
    all_data->thread.loc_sum = (double *)malloc(num_threads * sizeof(double));
-
-   all_data->output.smooth_wtime = (double *)malloc(num_threads * sizeof(double));
-   all_data->output.residual_wtime = (double *)malloc(num_threads * sizeof(double));
-   all_data->output.restrict_wtime = (double *)malloc(num_threads * sizeof(double));
-   all_data->output.prolong_wtime = (double *)malloc(num_threads * sizeof(double));
   
    if (all_data->input.thread_part_type == ALL_LEVELS){
       int tid = 0;
