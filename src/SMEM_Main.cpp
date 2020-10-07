@@ -657,6 +657,5 @@ int main (int argc, char *argv[])
   // HYPRE_IJVectorDestroy(x);
    
    MPI_Finalize();
-
    return 0;
 }

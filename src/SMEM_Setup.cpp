@@ -133,6 +133,7 @@ void SMEM_Setup(AllData *all_data)
    all_data->output.A_matvec_wtime = (double *)malloc(num_threads * sizeof(double));
    all_data->output.vec_wtime = (double *)malloc(num_threads * sizeof(double));
    all_data->output.innerprod_wtime = (double *)malloc(num_threads * sizeof(double));
+   all_data->output.smooth_sweeps = (int *)malloc(num_threads * sizeof(int));
 
    if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
       ComputeWork(all_data);

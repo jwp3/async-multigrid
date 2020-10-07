@@ -120,7 +120,6 @@ void ChebySetup(AllData *all_data)
    all_data->cheby.delta = 2.0 / (beta + alpha);
 
    double omega = 2.0 / (1.0 + sqrt(1.0 - pow(all_data->cheby.mu, -2.0)));
-   int N = hypre_CSRMatrixNumRows(all_data->matrix.AA);
    all_data->cheby.c_prev = (double *)malloc(num_threads * sizeof(double));
    all_data->cheby.c = (double *)malloc(num_threads * sizeof(double));
    all_data->cheby.omega = (double *)malloc(num_threads * sizeof(double));

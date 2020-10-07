@@ -38,7 +38,6 @@ void PrintOutput(AllData all_data)
    }
 
    mean_smooth_sweeps = (double)SumInt(all_data.output.smooth_sweeps, all_data.input.num_threads)/(double)all_data.input.num_threads;
-
    mean_grid_wait = SumDbl(all_data.grid.mean_grid_wait, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
    max_grid_wait = MaxDouble(&all_data.grid.max_grid_wait[finest_level], all_data.grid.num_levels);
    min_grid_wait = MinDouble(&all_data.grid.min_grid_wait[finest_level], all_data.grid.num_levels);
@@ -666,6 +665,7 @@ void InitSolve(AllData *all_data)
       all_data->output.A_matvec_wtime[t] = 0;
       all_data->output.vec_wtime[t] = 0;
       all_data->output.innerprod_wtime[t] = 0;
+      all_data->output.smooth_sweeps[t] = 0;
    }
 
    if (all_data->input.print_grid_wait_flag == 1){
