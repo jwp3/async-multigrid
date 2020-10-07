@@ -33,20 +33,9 @@ void SMEM_Solve(AllData *all_data)
    }
 
    int k_start = 0;
-  // if (all_data->input.cheby_flag == 1){
-  //    k_start = 1;
-  // }
 
    #pragma omp parallel
    {
-     // if (all_data->input.cheby_flag == 1){
-     //    #pragma omp for
-     //    for (int i = 0; i < all_data->grid.n[0]; i++){
-     //       u_outer[i] = delta * all_data->vector.f[0][i] / A_data[A_i[i]];
-     //       y_outer[i] = 0;
-     //       all_data->vector.u[0][i] = u_outer[i];
-     //    }
-     // }
       SMEM_Sync_Parfor_Residual(all_data,
                                 all_data->matrix.A[0],
                                 all_data->vector.f[0],
@@ -119,21 +108,7 @@ void SMEM_Solve(AllData *all_data)
                SMEM_Sync_Parfor_BPXcycle(all_data);
             }
             else{
-               if (all_data->input.precond_flag == 1){
-                  #pragma omp for
-                  for (int i = 0; i < all_data->grid.n[0]; i++){
-                     u_local_data[i] = 0;
-                     f_local_data[i] = all_data->vector.r[0][i];
-                  }
-                  HYPRE_BoomerAMGSolve(all_data->hypre.solver, A_array[0], F_array[0], U_array[0]);
-                  #pragma omp for
-                  for (int i = 0; i < all_data->grid.n[0]; i++){
-                     all_data->vector.u[0][i] = u_local_data[i];
-                  }
-               }
-               else {   
-                  SMEM_Sync_Parfor_Vcycle(all_data);
-               }
+               SMEM_Sync_Parfor_Vcycle(all_data);
             }
 
             if (all_data->input.cheby_flag == 1){
@@ -154,9 +129,8 @@ void SMEM_Solve(AllData *all_data)
                      all_data->vector.u[0][i] = u_outer[i];
                   }
                }
+               omega = 1.0 / (1.0 - omega / mu22);
             }
-            
-            omega = 1.0 / (1.0 - omega / mu22);
  
             double residual_start = omp_get_wtime();
             SMEM_Sync_Parfor_Residual(all_data,
@@ -180,10 +154,15 @@ void SMEM_Solve(AllData *all_data)
          omp_destroy_lock(&(all_data->thread.lock));
       }
       all_data->output.solve_wtime = omp_get_wtime() - start;
+      for (int level = 0; level < all_data->grid.num_levels; level++){
+         all_data->grid.local_num_correct[level] = all_data->output.num_cycles;
+      }
    }
 
-   free(u_outer);
-   free(y_outer);
+   if (all_data->input.precond_flag == 1){
+      free(u_outer);
+      free(y_outer);
+   }
 }
 
 void SMEM_Smooth(AllData *all_data,

@@ -20,16 +20,20 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
    for (int level = 0; level < all_data->grid.num_levels-1; level++){
       fine_grid = level;
       coarse_grid = level + 1;
-      all_data->grid.zero_flags[fine_grid] = 1;
-      HYPRE_Real *f_fine = all_data->vector.f[fine_grid];
-      if (level == 0 && all_data->input.precond_flag == 1){
-         all_data->grid.zero_flags[fine_grid] = 0;
-         f_fine = all_data->vector.r[fine_grid];
-         #pragma omp for
-         for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
-            all_data->vector.u[fine_grid][i] = 0;
-         }
+
+       all_data->grid.zero_flags[level] = 1;
+      if (level == 0 && all_data->input.precond_flag == 0){
+         all_data->grid.zero_flags[level] = 0;
       }
+  
+      HYPRE_Real *f_fine;
+      if (fine_grid == 0 && all_data->input.precond_flag == 1){
+         f_fine = all_data->vector.r[fine_grid];
+      }
+      else {
+         f_fine = all_data->vector.f[fine_grid];
+      }
+
       smooth_start = omp_get_wtime();
       SMEM_Smooth(all_data,
                   all_data->matrix.A[fine_grid],
@@ -47,12 +51,12 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                 f_fine,
                                 all_data->vector.u[fine_grid],
                                 all_data->vector.y[fine_grid],
-                                all_data->vector.r[fine_grid]);
+                                all_data->vector.r_fine[fine_grid]);
       all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
       restrict_start = omp_get_wtime();
       SMEM_Sync_Parfor_MatVec(all_data,
                               all_data->matrix.R[fine_grid],
-                              all_data->vector.r[fine_grid],
+                              all_data->vector.r_fine[fine_grid],
                               all_data->vector.f[coarse_grid]);
       all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
       #pragma omp for
@@ -74,10 +78,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
    for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
       all_data->vector.u[coarsest_level][i] = hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataUArray(amg_data)[coarsest_level]))[i];
    }
-   for (int t = 0; t < all_data->input.num_threads; t++){
-      all_data->output.smooth_wtime[t] += omp_get_wtime() - smooth_start;
-   }
-   all_data->grid.local_num_correct[coarsest_level]++;
+   all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
 
    for (int level = all_data->grid.num_levels-2; level > -1; level--){
       all_data->grid.zero_flags[level] = 0;
@@ -94,9 +95,16 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
          all_data->vector.u[fine_grid][i] += all_data->vector.e[fine_grid][i];
       }
       smooth_start = omp_get_wtime();
+      HYPRE_Real *f_fine;
+      if (fine_grid == 0 && all_data->input.precond_flag == 1){
+         f_fine = all_data->vector.r[fine_grid];
+      }
+      else {
+         f_fine = all_data->vector.f[fine_grid];
+      }
       SMEM_Smooth(all_data,
                   all_data->matrix.A[fine_grid],
-                  all_data->vector.f[fine_grid],
+                  f_fine,
                   all_data->vector.u[fine_grid],
                   all_data->vector.u_prev[fine_grid],
                   all_data->vector.y[fine_grid],
@@ -104,9 +112,6 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                   fine_grid,
                   0, 0);
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
-      if (tid == 0){
-         all_data->grid.local_num_correct[level]++;
-      }
    }
 }
 
