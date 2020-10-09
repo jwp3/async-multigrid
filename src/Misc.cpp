@@ -44,12 +44,14 @@ void PrintOutput(AllData all_data)
 
    if (all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX || all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
       mean_updates = (double)SumInt(all_data.grid.local_num_correct, all_data.input.num_threads)/((double)(all_data.input.num_threads));
+      min_updates = (double)MinInt(all_data.grid.local_num_correct, all_data.input.num_threads);
+      max_updates = (double)MaxInt(all_data.grid.local_num_correct, all_data.input.num_threads);
    }
    else {
       mean_updates = (double)SumInt(all_data.grid.local_num_correct, all_data.grid.num_levels)/((double)(all_data.grid.num_levels-finest_level));
+      min_updates = (double)MinInt(all_data.grid.local_num_correct, all_data.grid.num_levels);
+      max_updates = (double)MaxInt(all_data.grid.local_num_correct, all_data.grid.num_levels);
    }
-   min_updates = (double)MinInt(all_data.grid.local_num_correct, all_data.input.num_threads);
-   max_updates = (double)MaxInt(all_data.grid.local_num_correct, all_data.input.num_threads);
 
    mean_smooth_wtime = SumDbl(all_data.output.smooth_wtime, all_data.input.num_threads)/(double)all_data.input.num_threads;
    min_smooth_wtime = MinDouble(all_data.output.smooth_wtime, all_data.input.num_threads);
