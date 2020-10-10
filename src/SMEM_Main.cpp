@@ -370,7 +370,11 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          all_data.input.num_threads = atoi(argv[arg_index]);
-         hypre_num_threads = all_data.input.num_threads;
+      }
+      else if (strcmp(argv[arg_index], "-hypre_num_threads") == 0)
+      {
+         arg_index++;
+         hypre_num_threads = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-num_runs") == 0)
       {

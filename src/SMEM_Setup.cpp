@@ -106,7 +106,9 @@ void SMEM_Setup(AllData *all_data)
   // }
   // return;
 
+   start = omp_get_wtime();   
    InitAlgebra(all_data);
+   //printf("InitAlgebra %e\n", omp_get_wtime() - start);
 
    all_data->barrier.local_sense = (int *)calloc(num_threads, sizeof(int));
   // all_data->barrier.counter = (int *)calloc(all_data->grid.num_levels, sizeof(int));
@@ -117,7 +119,12 @@ void SMEM_Setup(AllData *all_data)
    all_data->grid.num_smooth_wait = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.finest_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.local_num_res_compute = (int *)calloc(all_data->grid.num_levels, sizeof(int));
-   all_data->grid.local_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX || all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+      all_data->grid.local_num_correct = (int *)calloc(all_data->input.num_threads, sizeof(int));
+   }
+   else {
+      all_data->grid.local_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
+   }
    all_data->grid.local_cycle_num_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.last_read_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
    all_data->grid.last_read_cycle_correct = (int *)calloc(all_data->grid.num_levels, sizeof(int));
@@ -136,10 +143,21 @@ void SMEM_Setup(AllData *all_data)
    all_data->output.smooth_sweeps = (int *)malloc(num_threads * sizeof(int));
 
    if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
+      start = omp_get_wtime();
       ComputeWork(all_data);
+      //printf("ComputeWork %e\n", omp_get_wtime() - start);
+
+      start = omp_get_wtime();
       PartitionLevels(all_data);
+      //printf("PartitionLevels %e\n", omp_get_wtime() - start);
+
+      start = omp_get_wtime();
       PartitionGrids(all_data);
+      //printf("InitAlgebra %e\n", omp_get_wtime() - start);
+      
+      start = omp_get_wtime();
       hypre_GaussElimSetup(amg_data, all_data->grid.num_levels-1, 9);
+      //printf("GaussElim %e\n", omp_get_wtime() - start);
    }
 
    all_data->output.num_cycles = 0;
@@ -147,6 +165,7 @@ void SMEM_Setup(AllData *all_data)
 
 void InitAlgebra(AllData *all_data)
 {
+   double start;
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
    hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
    
