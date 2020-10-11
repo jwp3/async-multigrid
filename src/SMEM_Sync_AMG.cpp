@@ -21,7 +21,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
       fine_grid = level;
       coarse_grid = level + 1;
 
-       all_data->grid.zero_flags[level] = 1;
+      all_data->grid.zero_flags[level] = 1;
       if (level == 0 && all_data->input.precond_flag == 0){
          all_data->grid.zero_flags[level] = 0;
       }
@@ -59,41 +59,47 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                               all_data->vector.r_fine[fine_grid],
                               all_data->vector.f[coarse_grid]);
       all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
-      #pragma omp for
-      for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
-         all_data->vector.u[coarse_grid][i] = 0;
-      }
+     // #pragma omp for
+     // for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
+     //    all_data->vector.u[coarse_grid][i] = 0;
+     // }
    }
    int coarsest_level = all_data->grid.num_levels-1;
-   #pragma omp for
-   for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
-      hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataFArray(amg_data)[coarsest_level]))[i] = all_data->vector.f[coarsest_level][i];
-   }
-   smooth_start = omp_get_wtime();
    if (tid == 0){
+      smooth_start = omp_get_wtime();
+      for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
+         hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataFArray(amg_data)[coarsest_level]))[i] = all_data->vector.f[coarsest_level][i];
+      }
       hypre_GaussElimSolve(amg_data, coarsest_level, 9);
+      for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
+         all_data->vector.u[coarsest_level][i] = hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataUArray(amg_data)[coarsest_level]))[i];
+      }
+      all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
    }
    #pragma omp barrier
-   #pragma omp for
-   for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
-      all_data->vector.u[coarsest_level][i] = hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataUArray(amg_data)[coarsest_level]))[i];
-   }
-   all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
 
    for (int level = all_data->grid.num_levels-2; level > -1; level--){
       all_data->grid.zero_flags[level] = 0;
       fine_grid = level;
       coarse_grid = level + 1;
+     // prolong_start = omp_get_wtime();
+     // SMEM_Sync_Parfor_MatVec(all_data,
+     //                         all_data->matrix.P[fine_grid],
+     //                         all_data->vector.u[coarse_grid],
+     //                         all_data->vector.e[fine_grid]);
+     // all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
+     // #pragma omp for
+     // for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
+     //    all_data->vector.u[fine_grid][i] += all_data->vector.e[fine_grid][i];
+     // }
       prolong_start = omp_get_wtime();
-      SMEM_Sync_Parfor_MatVec(all_data,
+      SMEM_Sync_Parfor_SpGEMV(all_data,
                               all_data->matrix.P[fine_grid],
                               all_data->vector.u[coarse_grid],
-                              all_data->vector.e[fine_grid]);
+                              all_data->vector.u[fine_grid],
+                              1.0, 1.0,
+                              all_data->vector.u[fine_grid]);
       all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
-      #pragma omp for
-      for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
-         all_data->vector.u[fine_grid][i] += all_data->vector.e[fine_grid][i];
-      }
       smooth_start = omp_get_wtime();
       HYPRE_Real *f_fine;
       if (fine_grid == 0 && all_data->input.precond_flag == 1){
@@ -129,22 +135,22 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
 
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
 
-   if (all_data->input.precond_flag == 1){
-      if (all_data->input.solver == PAR_BPX){
-         #pragma omp for
-         for (int i = 0; i < all_data->grid.n[0]; i++){
-            all_data->vector.u[0][i] = 0;
-            all_data->vector.xx[i] = 0;
-            all_data->vector.rr[i] = all_data->vector.r[0][i];
-         }
-      }
-      else {
-         #pragma omp for
-         for (int i = 0; i < all_data->grid.n[0]; i++){
-            all_data->vector.u[0][i] = 0;
-         }
-      }
-   }
+  // if (all_data->input.precond_flag == 1){
+  //    if (all_data->input.solver == PAR_BPX){
+  //       #pragma omp for
+  //       for (int i = 0; i < all_data->grid.n[0]; i++){
+  //          all_data->vector.u[0][i] = 0;
+  //          all_data->vector.xx[i] = 0;
+  //          //all_data->vector.rr[i] = all_data->vector.r[0][i];
+  //       }
+  //    }
+  //    else {
+  //       #pragma omp for
+  //       for (int i = 0; i < all_data->grid.n[0]; i++){
+  //          all_data->vector.u[0][i] = 0;
+  //       }
+  //    }
+  // }
 
    restrict_start = omp_get_wtime();
    for (int level = 0; level < all_data->grid.num_levels-1; level++){
@@ -152,7 +158,12 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
       coarse_grid = level + 1;
       HYPRE_Real *r_fine, *r_coarse;
       if (all_data->input.solver == PAR_BPX){
-         r_fine = &(all_data->vector.rr[disp[fine_grid]]);
+         if (level == 0){
+            r_fine = &(all_data->vector.rr[disp[fine_grid]]);
+         }
+         else {
+            r_fine = &(all_data->vector.rr[disp[fine_grid]]);
+         }
          r_coarse = &(all_data->vector.rr[disp[coarse_grid]]);
       }
       else {
@@ -177,10 +188,6 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
    else {
       for (int level = 0; level < all_data->grid.num_levels; level++){
          all_data->grid.zero_flags[level] = 1;
-         #pragma omp for
-         for (int i = 0; i < all_data->grid.n[level]; i++){
-            all_data->vector.e[level][i] = 0;
-         }
         // if (level == all_data->grid.num_levels-1){
         //    if (tid == 0){
         //       hypre_GaussElimSolve(amg_data, coarsest_level, 9);
@@ -214,27 +221,41 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
          e_fine = all_data->vector.e[fine_grid];
          e_coarse = all_data->vector.e[coarse_grid];
       }
-      SMEM_Sync_Parfor_MatVec(all_data,
+     // SMEM_Sync_Parfor_MatVec(all_data,
+     //                         all_data->matrix.P[fine_grid],
+     //                         e_coarse,
+     //                         all_data->vector.y[fine_grid]);
+     // #pragma omp for
+     // for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
+     //    e_fine[i] += all_data->vector.y[fine_grid][i];
+     // }
+      SMEM_Sync_Parfor_SpGEMV(all_data,
                               all_data->matrix.P[fine_grid],
                               e_coarse,
-                              all_data->vector.y[fine_grid]);
-      #pragma omp for
-      for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
-         e_fine[i] += all_data->vector.y[fine_grid][i];
-      }
+                              e_fine,
+                              1.0, 1.0,
+                              e_fine);
    }
    all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
 
+
+   HYPRE_Real *e;
    if (all_data->input.solver == PAR_BPX){
+      e = all_data->vector.xx;
+   }
+   else {
+      e = all_data->vector.e[0];
+   }
+   if (all_data->input.precond_flag == 1){
       #pragma omp for
       for (int i = 0; i < all_data->grid.n[0]; i++){
-         all_data->vector.u[0][i] += all_data->vector.xx[i];
+         all_data->vector.u[0][i] = e[i];
       }
    }
    else {
       #pragma omp for
       for (int i = 0; i < all_data->grid.n[0]; i++){
-         all_data->vector.u[0][i] += all_data->vector.e[0][i];
+         all_data->vector.u[0][i] += e[i];
       }
    }
 }

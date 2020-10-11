@@ -27,6 +27,14 @@ void SMEM_Solve(AllData *all_data)
    HYPRE_BoomerAMGSetPrintLevel(all_data->hypre.solver, 0);
    HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 1);
 
+   HYPRE_Real *r;
+   if (all_data->input.solver == PAR_BPX){
+      r = &(all_data->vector.rr[0]);
+   }
+   else {
+      r = all_data->vector.r[0];
+   }
+
    if (all_data->input.precond_flag == 1){
       u_outer = (HYPRE_Real *)calloc(all_data->grid.n[0], sizeof(HYPRE_Real));      
       y_outer = (HYPRE_Real *)calloc(all_data->grid.n[0], sizeof(HYPRE_Real));
@@ -41,9 +49,9 @@ void SMEM_Solve(AllData *all_data)
                                 all_data->vector.f[0],
                                 all_data->vector.u[0],
                                 all_data->vector.y[0],
-                                all_data->vector.r[0]);
+                                r);
    }
-   all_data->output.r0_norm2 = Parfor_Norm2(all_data->vector.r[0], all_data->grid.n[0]);
+   all_data->output.r0_norm2 = Parfor_Norm2(r, all_data->grid.n[0]);
 
    double start = omp_get_wtime();
    if (all_data->input.async_flag == 1){
@@ -61,9 +69,9 @@ void SMEM_Solve(AllData *all_data)
                                    all_data->vector.f[0],
                                    all_data->vector.u[0],
                                    all_data->vector.y[0],
-                                   all_data->vector.r[0]);
+                                   r);
       }
-      all_data->output.r_norm2 = Parfor_Norm2(all_data->vector.r[0], all_data->grid.n[0]);
+      all_data->output.r_norm2 = Parfor_Norm2(r, all_data->grid.n[0]);
    }
    else{
       if (all_data->input.print_reshist_flag == 1 &&
@@ -138,8 +146,8 @@ void SMEM_Solve(AllData *all_data)
                                       all_data->vector.f[0],
                                       all_data->vector.u[0],
                                       all_data->vector.y[0],
-                                      all_data->vector.r[0]);
-            all_data->output.r_norm2 = Parfor_Norm2(all_data->vector.r[0], all_data->grid.n[0]);
+                                      r);
+            all_data->output.r_norm2 = Parfor_Norm2(r, all_data->grid.n[0]);
             all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
             if (all_data->input.print_reshist_flag){
                printf("%d\t%e\n", k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
