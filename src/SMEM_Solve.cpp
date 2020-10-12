@@ -92,12 +92,6 @@ void SMEM_Solve(AllData *all_data)
          int tid = omp_get_thread_num();
          double omega = 2.0;
          for (int k = k_start; k <= all_data->input.num_cycles; k++){
-            if (all_data->input.precond_flag == 1){
-               #pragma omp for
-               for (int i = 0; i < all_data->grid.n[0]; i++){
-                  all_data->vector.u[0][i] = 0;
-               }
-            }
             if (all_data->input.solver == MULTADD){
                if (all_data->input.thread_part_type == ALL_LEVELS){
                   SMEM_Sync_Add_Vcycle(all_data);

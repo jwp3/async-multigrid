@@ -235,7 +235,7 @@ void InitAlgebra(AllData *all_data)
 
    // TODO: cleanup excess memory usage
    if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
-      all_data->vector.u =(HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.u = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
       all_data->vector.y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
       all_data->vector.r = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
       all_data->vector.f = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
