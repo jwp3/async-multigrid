@@ -13,6 +13,7 @@ void SMEM_Solve(AllData *all_data)
    double delta = all_data->cheby.delta;
    double mu = all_data->cheby.mu;
    double mu22 = pow(2.0 * mu, 2.0);
+   double sum;
    HYPRE_Real *u_outer, *y_outer;
    HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[0]);
    HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[0]);
@@ -147,14 +148,25 @@ void SMEM_Solve(AllData *all_data)
                                       all_data->vector.u[0],
                                       all_data->vector.y[0],
                                       r);
-            all_data->output.r_norm2 = Parfor_Norm2(r, all_data->grid.n[0]);
-            all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
-            if (all_data->input.print_reshist_flag){
-               printf("%d\t%e\n", k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
+            if (all_data->input.check_resnorm_flag == 1){
+               if (tid == 0) sum = 0;
+               #pragma omp barrier
+               #pragma omp parallel for reduction(+:sum)
+               for (int i = 0; i < all_data->grid.n[0]; i++){
+                  sum += pow(r[i], 2.0);
+               }
+               all_data->output.r_norm2 = sqrt(sum);
+               all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
+               if (all_data->output.r_norm2/all_data->output.r0_norm2 < all_data->input.tol){
+                  break;
+               }
+            }
+            else {
+               all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
             }
             all_data->output.num_cycles = k;
-            if (all_data->output.r_norm2/all_data->output.r0_norm2 < all_data->input.tol){
-               break;
+            if (all_data->input.print_reshist_flag){
+               printf("%d\t%e\n", k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
             }
          }
       }
@@ -164,6 +176,9 @@ void SMEM_Solve(AllData *all_data)
       all_data->output.solve_wtime = omp_get_wtime() - start;
       for (int level = 0; level < all_data->grid.num_levels; level++){
          all_data->grid.local_num_correct[level] = all_data->output.num_cycles;
+      }
+      if (all_data->input.check_resnorm_flag == 0){
+          all_data->output.r_norm2 = Parfor_Norm2(r, all_data->grid.n[0]); 
       }
    }
 
