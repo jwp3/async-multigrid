@@ -145,7 +145,7 @@ void SMEM_Solve(AllData *all_data)
             if (all_data->input.check_resnorm_flag == 1){
                if (tid == 0) sum = 0;
                #pragma omp barrier
-               #pragma omp parallel for reduction(+:sum)
+               #pragma omp for reduction(+:sum)
                for (int i = 0; i < all_data->grid.n[0]; i++){
                   sum += pow(r[i], 2.0);
                }
