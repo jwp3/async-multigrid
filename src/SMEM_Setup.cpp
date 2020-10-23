@@ -62,6 +62,15 @@ void SMEM_Setup(AllData *all_data)
                         all_data->hypre.par_x);
    all_data->output.hypre_setup_wtime = omp_get_wtime() - start;
 
+   start = omp_get_wtime();
+   HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 50);
+   HYPRE_BoomerAMGSetTol(all_data->hypre.solver, 0);
+   HYPRE_BoomerAMGSolve(all_data->hypre.solver,
+                        all_data->hypre.parcsr_A,
+                        all_data->hypre.par_b,
+                        all_data->hypre.par_x);
+   printf("Hypre solve time = %e\n", omp_get_wtime() - start);
+
   // HYPRE_Solver pcg_solver;
   // HYPRE_BoomerAMGSetMaxIter( all_data->hypre.solver, 1);
   // HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &pcg_solver);

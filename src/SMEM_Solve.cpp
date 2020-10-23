@@ -13,7 +13,7 @@ void SMEM_Solve(AllData *all_data)
    double delta = all_data->cheby.delta;
    double mu = all_data->cheby.mu;
    double mu22 = pow(2.0 * mu, 2.0);
-   double sum;
+   double sum, r_inner_prod;
    HYPRE_Real *u_outer, *y_outer;
    HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[0]);
    HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[0]);
@@ -139,6 +139,7 @@ void SMEM_Solve(AllData *all_data)
             }
  
             double residual_start = omp_get_wtime();
+            if (tid == 0) r_inner_prod = 0;
             SMEM_Sync_Parfor_Residual(all_data,
                                       all_data->matrix.A[0],
                                       all_data->vector.f[0],
@@ -146,38 +147,40 @@ void SMEM_Solve(AllData *all_data)
                                       all_data->vector.y[0],
                                       r);
             if (all_data->input.check_resnorm_flag == 1){
-              // if (tid == 0) sum = 0;
-              // #pragma omp barrier
-              // #pragma omp for reduction(+:sum)
-              // for (int i = 0; i < all_data->grid.n[0]; i++){
-              //    sum += pow(r[i], 2.0);
-              // }
-              // all_data->output.r_norm2 = sqrt(sum);
-               r_norm_loc[tid] = 0;
-               #pragma omp for
+               #pragma omp for reduction(+:r_inner_prod)
                for (int i = 0; i < all_data->grid.n[0]; i++){
-                  r_norm_loc[tid] += pow(r[i], 2.0);
+                   r_inner_prod += r[i] * r[i];
                }
-               if (tid == 0){
-                  sum = 0;
-                  for (int t = 0; t < all_data->input.num_threads; t++){
-                     sum += r_norm_loc[t];
-                  }
-                  all_data->output.r_norm2 = sqrt(sum);
-               }
-               #pragma omp barrier
+               double r_norm2 = sqrt(r_inner_prod);
+              // r_norm_loc[tid] = 0;
+              // #pragma omp for
+              // for (int i = 0; i < all_data->grid.n[0]; i++){
+              //    r_norm_loc[tid] += pow(r[i], 2.0);
+              // }
+              // if (tid == 0){
+              //    sum = 0;
+              //    for (int t = 0; t < all_data->input.num_threads; t++){
+              //       sum += r_norm_loc[t];
+              //    }
+              //    all_data->output.r_norm2 = sqrt(sum);
+              // }
+              // #pragma omp barrier
                all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
-               if (all_data->output.r_norm2/all_data->output.r0_norm2 < all_data->input.tol){
+               if (tid == 0){
+                  all_data->output.num_cycles = k;
+                  all_data->output.r_norm2 = r_norm2;
+               }
+               if (r_norm2/all_data->output.r0_norm2 < all_data->input.tol){
                   break;
                }
             }
             else {
                all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
+               if (tid == 0){
+                  all_data->output.num_cycles = k;
+               }
             }
-            if (tid == 0){
-               all_data->output.num_cycles = k;
-            }
-            if (all_data->input.print_reshist_flag){
+            if (all_data->input.print_reshist_flag && tid == 0){
                printf("%d\t%e\n", k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
             }
          }
