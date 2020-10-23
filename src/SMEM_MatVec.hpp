@@ -8,6 +8,12 @@ void SMEM_Sync_Parfor_MatVec(AllData *all_data,
                              HYPRE_Real *x_data,
                              HYPRE_Real *y_data);
 
+void SMEM_Sync_Parfor_MatVecT(AllData *all_data,
+                              hypre_CSRMatrix *A,
+                              HYPRE_Real *x,
+                              HYPRE_Real *y,
+                              HYPRE_Real *y_expand);
+
 void SMEM_Sync_Parfor_SpGEMV(AllData *all_data,
                              hypre_CSRMatrix *A,
                              HYPRE_Real *x,

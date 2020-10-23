@@ -34,7 +34,7 @@ int main (int argc, char *argv[])
    all_data.hypre.coarsen_type = 9;
    all_data.hypre.interp_type = 6;
    all_data.hypre.print_level = 0;
-   all_data.hypre.strong_threshold = .5;
+   all_data.hypre.strong_threshold = .25;
    all_data.hypre.num_functions = 1;
    all_data.hypre.P_max_elmts = 0;
    int solver_id = 0;
@@ -44,7 +44,6 @@ int main (int argc, char *argv[])
    /* mfem parameters */
    all_data.mfem.ref_levels = 1;
    all_data.mfem.order = 1;
-   strcpy(all_data.mfem.mesh_file, "./mfem_quartz/mfem-4.0/data/beam-hex.mesh");
    all_data.mfem.amr_refs = 0;
    all_data.mfem.max_amr_dofs = (int)pow((double)all_data.matrix.n, 3.0);
 
@@ -78,13 +77,14 @@ int main (int argc, char *argv[])
    all_data.input.print_level_stats_flag = 0;
    all_data.input.print_reshist_flag = 0;
    all_data.input.read_type = READ_SOL;
-   all_data.input.eig_power_max_iters = 1000;
+   all_data.input.eig_power_max_iters = 50;
    all_data.input.cheby_flag = 0;
    all_data.input.precond_flag = 0;
    all_data.input.delay_usec = 0;
    all_data.input.delay_flag = DELAY_NONE;
    all_data.input.omp_parfor_flag = 1;
    all_data.input.delay_frac = 0.0;
+   all_data.input.construct_R_flag = 0;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
@@ -136,11 +136,11 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "mfem_laplace") == 0){
             all_data.input.test_problem = MFEM_LAPLACE;
-            strcpy(all_data.mfem.mesh_file, "./mfem_quartz/mfem-4.0/data/ball-nurbs.mesh");
+            strcpy(all_data.mfem.mesh_file, "./mfem_haswell/mfem-4.0/data/ball-nurbs.mesh");
          }
          else if (strcmp(argv[arg_index], "mfem_elast") == 0){
             all_data.input.test_problem = MFEM_ELAST;
-            strcpy(all_data.mfem.mesh_file, "./mfem_quartz/mfem-4.0/data/beam-hex.mesh");
+            strcpy(all_data.mfem.mesh_file, "./mfem_haswell/mfem-4.0/data/beam-hex.mesh");
             all_data.hypre.num_functions = 3;
          }
 	 else if (strcmp(argv[arg_index], "mfem_maxwell") == 0){
@@ -442,17 +442,14 @@ int main (int argc, char *argv[])
          all_data.input.cheby_flag = 1;
          all_data.input.precond_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-only_setup") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-only_setup") == 0){
          only_setup_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-eig_power_max_iters") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-eig_power_max_iters") == 0){
          arg_index++;
          all_data.input.eig_power_max_iters = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-warmup") == 0)
-      {
+      else if (strcmp(argv[arg_index], "-warmup") == 0){
          warmup = 1;
       }
       else if (strcmp(argv[arg_index], "-delay_one") == 0){
@@ -473,10 +470,14 @@ int main (int argc, char *argv[])
          all_data.input.delay_flag = DELAY_ALL;
          all_data.input.delay_frac = 1.0;
       }
-      else if (strcmp(argv[arg_index], "-help") == 0)
-      {
-         print_usage = 1;
-         break;
+      else if (strcmp(argv[arg_index], "-delay_all") == 0){
+         arg_index++;
+         all_data.input.delay_usec = atoi(argv[arg_index]);
+         all_data.input.delay_flag = DELAY_ALL;
+         all_data.input.delay_frac = 1.0;
+      }
+      else if (strcmp(argv[arg_index], "-construct_R") == 0){
+         all_data.input.construct_R_flag = 1;
       }
       arg_index++;
    }

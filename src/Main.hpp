@@ -219,6 +219,7 @@ typedef struct{
    char mat_file_str[1024];
    int omp_parfor_flag;
    double delay_frac;
+   int construct_R_flag;
 }InputData;
 
 typedef struct{
@@ -230,6 +231,7 @@ typedef struct{
    HYPRE_Real **u_coarse;
    HYPRE_Real **u_coarse_prev;
    HYPRE_Real **y;
+   HYPRE_Real **y_extend;
    HYPRE_Real **r;
    HYPRE_Real **r_fine;
    HYPRE_Real **r_coarse;

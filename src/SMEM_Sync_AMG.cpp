@@ -4,7 +4,13 @@
 #include "Misc.hpp"
 #include "SMEM_Solve.hpp"
 
-//TODO: fix Mult-Cheby
+
+void SMEM_Sync_Parfor_Restrict(AllData *all_data,
+                               hypre_CSRMatrix *R,
+                               HYPRE_Real *v_fine,
+                               HYPRE_Real *v_coarse,
+                               int fine_grid, int coarse_grid);
+
 void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
 {
    int fine_grid, coarse_grid;
@@ -54,10 +60,11 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                 all_data->vector.r_fine[fine_grid]);
       all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
       restrict_start = omp_get_wtime();
-      SMEM_Sync_Parfor_MatVec(all_data,
-                              all_data->matrix.R[fine_grid],
-                              all_data->vector.r_fine[fine_grid],
-                              all_data->vector.f[coarse_grid]);
+      SMEM_Sync_Parfor_Restrict(all_data,
+                                all_data->matrix.R[fine_grid],
+                                all_data->vector.r_fine[fine_grid],
+                                all_data->vector.f[coarse_grid],
+                                fine_grid, coarse_grid);
       all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
      // #pragma omp for
      // for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
@@ -170,10 +177,11 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
          r_fine = all_data->vector.r[fine_grid];
          r_coarse = all_data->vector.r[coarse_grid];
       }
-      SMEM_Sync_Parfor_MatVec(all_data,
-                              all_data->matrix.R[fine_grid],
-                              r_fine,
-                              r_coarse);
+      SMEM_Sync_Parfor_Restrict(all_data,
+                                all_data->matrix.R[fine_grid],
+                                r_fine,
+                                r_coarse,
+                                fine_grid, coarse_grid);
    }
    all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
 
@@ -277,10 +285,11 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
    for (int level = 0; level < all_data->grid.num_levels-1; level++){
       fine_grid = level;
       coarse_grid = level + 1;
-      SMEM_Sync_Parfor_MatVec(all_data,
-                              all_data->matrix.R[fine_grid],
-                              all_data->vector.r[fine_grid],
-                              all_data->vector.r[coarse_grid]);
+      SMEM_Sync_Parfor_Restrict(all_data,
+                                all_data->matrix.R[fine_grid],
+                                all_data->vector.r[fine_grid],
+                                all_data->vector.r[coarse_grid],
+                                fine_grid, coarse_grid);
    }
    all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
 
@@ -577,5 +586,20 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
       if (tid == all_data->thread.barrier_root[thread_level]){
          all_data->grid.local_num_correct[thread_level]++;
       }
+   }
+}
+
+
+void SMEM_Sync_Parfor_Restrict(AllData *all_data,
+                               hypre_CSRMatrix *R,
+                               HYPRE_Real *v_fine,
+                               HYPRE_Real *v_coarse,
+                               int fine_grid, int coarse_grid)
+{
+   if (all_data->input.construct_R_flag == 1){
+      SMEM_Sync_Parfor_MatVec(all_data, R, v_fine, v_coarse);
+   }
+   else {
+      SMEM_Sync_Parfor_MatVecT(all_data, R, v_fine, v_coarse, all_data->vector.y_extend[fine_grid]);
    }
 }

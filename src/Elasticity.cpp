@@ -1,7 +1,7 @@
 #include "Main.hpp"
 
 #ifdef USE_MFEM
-#include "../mfem_quartz/mfem-4.0/linalg/solvers.hpp"
+//#include "../mfem_quartz/mfem-4.0/linalg/solvers.hpp"
 
 void MFEM_Elasticity(AllData *all_data,
                      HYPRE_IJMatrix *Aij)
@@ -190,7 +190,6 @@ void MFEM_Elasticity(AllData *all_data,
 
    for (int i = 0; i < A.Height(); i++){
       all_data->hypre.b_values[i] = B[i];
-      printf("%e\n", B[i]);
 
       Array<int> mfem_cols;
       Vector mfem_srow;

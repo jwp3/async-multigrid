@@ -23,6 +23,39 @@ void SMEM_Sync_Parfor_MatVec(AllData *all_data,
    }
 }
 
+void SMEM_Sync_Parfor_MatVecT(AllData *all_data,
+                              hypre_CSRMatrix *A,
+                              HYPRE_Real *x,
+                              HYPRE_Real *y,
+                              HYPRE_Real *y_expand)
+{
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+   HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
+   HYPRE_Int num_cols = hypre_CSRMatrixNumCols(A);
+
+   int tid = omp_get_thread_num();
+   int offset = num_cols * tid;
+
+   #pragma omp for
+   for (int i = 0; i < num_rows; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         y_expand[offset + A_j[jj]] += A_data[jj] * x[i];
+      }
+   }
+
+   #pragma omp for
+   for (int i = 0; i < num_cols; i++){
+      y[i] = 0;
+      for (int j = 0; j < all_data->input.num_threads; j++){
+         int jj = j*num_cols + i;
+         y[i] += y_expand[jj];
+         y_expand[jj] = 0;
+      }
+   }
+}
+
 void SMEM_Sync_Parfor_Residual(AllData *all_data,
                                hypre_CSRMatrix *A,
                                HYPRE_Real *b,

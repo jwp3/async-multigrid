@@ -54,8 +54,9 @@ void SMEM_Solve(AllData *all_data)
    }
    all_data->output.r0_norm2 = Parfor_Norm2(r, all_data->grid.n[0]);
 
-   double start = omp_get_wtime();
+   double start;
    if (all_data->input.async_flag == 1){
+      start = omp_get_wtime();
       if (all_data->input.num_threads == 1){
          SEQ_Add_Vcycle_SimRand(all_data);
 	 all_data->output.solve_wtime = omp_get_wtime() - start;
@@ -75,6 +76,7 @@ void SMEM_Solve(AllData *all_data)
       all_data->output.r_norm2 = Parfor_Norm2(r, all_data->grid.n[0]);
    }
    else{
+      double *r_norm_loc = (double *)calloc(all_data->input.num_threads, sizeof(double));
       if (all_data->input.print_reshist_flag == 1 &&
           all_data->input.format_output_flag == 0){
          printf("\nIters\tRel. Res. 2-norm\n"
@@ -87,6 +89,7 @@ void SMEM_Solve(AllData *all_data)
       if (all_data->input.thread_part_type == ALL_LEVELS){ 
          omp_init_lock(&(all_data->thread.lock));
       }
+      start = omp_get_wtime();
       #pragma omp parallel
       {
          int tid = omp_get_thread_num();
@@ -143,13 +146,26 @@ void SMEM_Solve(AllData *all_data)
                                       all_data->vector.y[0],
                                       r);
             if (all_data->input.check_resnorm_flag == 1){
-               if (tid == 0) sum = 0;
-               #pragma omp barrier
-               #pragma omp for reduction(+:sum)
+              // if (tid == 0) sum = 0;
+              // #pragma omp barrier
+              // #pragma omp for reduction(+:sum)
+              // for (int i = 0; i < all_data->grid.n[0]; i++){
+              //    sum += pow(r[i], 2.0);
+              // }
+              // all_data->output.r_norm2 = sqrt(sum);
+               r_norm_loc[tid] = 0;
+               #pragma omp for
                for (int i = 0; i < all_data->grid.n[0]; i++){
-                  sum += pow(r[i], 2.0);
+                  r_norm_loc[tid] += pow(r[i], 2.0);
                }
-               all_data->output.r_norm2 = sqrt(sum);
+               if (tid == 0){
+                  sum = 0;
+                  for (int t = 0; t < all_data->input.num_threads; t++){
+                     sum += r_norm_loc[t];
+                  }
+                  all_data->output.r_norm2 = sqrt(sum);
+               }
+               #pragma omp barrier
                all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
                if (all_data->output.r_norm2/all_data->output.r0_norm2 < all_data->input.tol){
                   break;
@@ -158,7 +174,9 @@ void SMEM_Solve(AllData *all_data)
             else {
                all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
             }
-            all_data->output.num_cycles = k;
+            if (tid == 0){
+               all_data->output.num_cycles = k;
+            }
             if (all_data->input.print_reshist_flag){
                printf("%d\t%e\n", k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
             }
@@ -193,7 +211,7 @@ void SMEM_Smooth(AllData *all_data,
                  int ns, int ne)
 {
    int tid = omp_get_thread_num();
-   if (all_data->input.num_threads > 1){
+   //if (all_data->input.num_threads > 1){
       if (all_data->input.thread_part_type == ALL_LEVELS){
          if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
             SMEM_Sync_HybridJacobiGaussSeidel(all_data, A, f, u, y, num_sweeps, level, ns, ne);
@@ -257,35 +275,35 @@ void SMEM_Smooth(AllData *all_data,
             SMEM_Sync_Parfor_Jacobi(all_data, A, f, u, y, num_sweeps, level);
          }
       }
-   }
-   else{
-      if (all_data->input.smoother == GAUSS_SEIDEL ||
-          all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
-         SEQ_GaussSeidel(all_data, A, f, u, num_sweeps);
-      }
-      else if (all_data->input.smoother == L1_JACOBI){
-         if ((all_data->input.solver == MULTADD ||
-              all_data->input.solver == ASYNC_MULTADD)
-	      &&
-             (all_data->input.num_post_smooth_sweeps > 0 &&
-              all_data->input.num_pre_smooth_sweeps > 0)){
-            SEQ_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level);
-         }
-         else{
-            SEQ_L1Jacobi(all_data, A, f, u, y, all_data->matrix.L1_row_norm[level], num_sweeps, level);
-         }
-      }
-      else {
-         if ((all_data->input.solver == MULTADD ||
-              all_data->input.solver == ASYNC_MULTADD)
-	      &&
-	     (all_data->input.num_post_smooth_sweeps > 0 &&
-              all_data->input.num_pre_smooth_sweeps > 0)){
-            SEQ_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level);
-         }
-         else {
-            SEQ_Jacobi(all_data, A, f, u, y, num_sweeps, level);
-         }
-      }
-   }
+  // }
+  // else{
+  //    if (all_data->input.smoother == GAUSS_SEIDEL ||
+  //        all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
+  //       SEQ_GaussSeidel(all_data, A, f, u, num_sweeps);
+  //    }
+  //    else if (all_data->input.smoother == L1_JACOBI){
+  //       if ((all_data->input.solver == MULTADD ||
+  //            all_data->input.solver == ASYNC_MULTADD)
+  //            &&
+  //           (all_data->input.num_post_smooth_sweeps > 0 &&
+  //            all_data->input.num_pre_smooth_sweeps > 0)){
+  //          SEQ_SymmetricL1Jacobi(all_data, A, f, u, y, r, num_sweeps, level);
+  //       }
+  //       else{
+  //          SEQ_L1Jacobi(all_data, A, f, u, y, all_data->matrix.L1_row_norm[level], num_sweeps, level);
+  //       }
+  //    }
+  //    else {
+  //       if ((all_data->input.solver == MULTADD ||
+  //            all_data->input.solver == ASYNC_MULTADD)
+  //            &&
+  //           (all_data->input.num_post_smooth_sweeps > 0 &&
+  //            all_data->input.num_pre_smooth_sweeps > 0)){
+  //          SEQ_SymmetricJacobi(all_data, A, f, u, y, r, num_sweeps, level);
+  //       }
+  //       else {
+  //          SEQ_Jacobi(all_data, A, f, u, y, num_sweeps, level);
+  //       }
+  //    }
+  // }
 }

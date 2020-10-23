@@ -168,6 +168,7 @@ void InitAlgebra(AllData *all_data)
    double start;
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
    hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
+   int num_threads = all_data->input.num_threads;
    
    hypre_ParCSRMatrix **parA;
    hypre_ParCSRMatrix **parP;
@@ -188,6 +189,7 @@ void InitAlgebra(AllData *all_data)
    all_data->matrix.R =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
    all_data->matrix.L1_row_norm = (double **)malloc(all_data->grid.num_levels * sizeof(double *));
+   all_data->vector.y_extend = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
       all_data->matrix.A[level] = hypre_ParCSRMatrixDiag(parA[level]);
@@ -226,8 +228,15 @@ void InitAlgebra(AllData *all_data)
          }
          else {
             all_data->matrix.P[level] = hypre_ParCSRMatrixDiag(parP[level]);
-            all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
-            hypre_CSRMatrixTranspose(hypre_ParCSRMatrixDiag(parR[level]), &(all_data->matrix.R[level]), 1);
+            if (all_data->input.construct_R_flag == 1){
+               all_data->matrix.R[level] = (hypre_CSRMatrix *)malloc(sizeof(hypre_CSRMatrix));
+               hypre_CSRMatrixTranspose(hypre_ParCSRMatrixDiag(parR[level]), &(all_data->matrix.R[level]), 1);
+            }
+            else {
+               all_data->matrix.R[level] = all_data->matrix.P[level];
+               int num_cols = hypre_CSRMatrixNumCols(all_data->matrix.R[level]);
+               all_data->vector.y_extend[level] = (HYPRE_Real *)calloc(num_threads * num_cols, sizeof(HYPRE_Real));
+            }
            // CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
          }
       }
@@ -863,14 +872,20 @@ void ComputeWork(AllData *all_data)
    }
 
    for (int level = finest_level; level < all_data->grid.num_levels; level++){
+      coarsest_level = all_data->grid.num_levels-1;
+      finest_level = 0;
       all_data->grid.level_work[level] = 0;
       if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
-         for (int inner_level = 0; inner_level < all_data->grid.num_levels-1; inner_level++){
-            all_data->grid.level_work[level] += 2 * hypre_CSRMatrixNumNonzeros(all_data->matrix.R[inner_level]);
+         for (int inner_level = coarsest_level-1; inner_level >= level; inner_level--){
+            all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.P[inner_level]);
             all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[inner_level]);
          }
-         all_data->grid.level_work[level] += 4 * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
-         all_data->grid.level_work[level] += 8 * hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+         for (int inner_level = finest_level; inner_level < level; inner_level++){
+            all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.R[inner_level]);
+            all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[inner_level]);
+         }
+         all_data->grid.level_work[level] += 2 * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
+         all_data->grid.level_work[level] += 7 * hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
       }
       else {
          if (all_data->input.res_compute_type == GLOBAL){
