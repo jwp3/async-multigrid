@@ -100,12 +100,12 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
      //    all_data->vector.u[fine_grid][i] += all_data->vector.e[fine_grid][i];
      // }
       prolong_start = omp_get_wtime();
-      SMEM_Sync_Parfor_SpGEMV(all_data,
-                              all_data->matrix.P[fine_grid],
-                              all_data->vector.u[coarse_grid],
-                              all_data->vector.u[fine_grid],
-                              1.0, 1.0,
-                              all_data->vector.u[fine_grid]);
+      SMEM_Sync_SpGEMV(all_data,
+                       all_data->matrix.P[fine_grid],
+                       all_data->vector.u[coarse_grid],
+                       all_data->vector.u[fine_grid],
+                       1.0, 1.0,
+                       all_data->vector.u[fine_grid]);
       all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
       smooth_start = omp_get_wtime();
       HYPRE_Real *f_fine;
@@ -237,12 +237,12 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
      // for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
      //    e_fine[i] += all_data->vector.y[fine_grid][i];
      // }
-      SMEM_Sync_Parfor_SpGEMV(all_data,
-                              all_data->matrix.P[fine_grid],
-                              e_coarse,
-                              e_fine,
-                              1.0, 1.0,
-                              e_fine);
+      SMEM_Sync_SpGEMV(all_data,
+                       all_data->matrix.P[fine_grid],
+                       e_coarse,
+                       e_fine,
+                       1.0, 1.0,
+                       e_fine);
    }
    all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
 

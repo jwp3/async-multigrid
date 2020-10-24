@@ -57,16 +57,6 @@ void SMEM_Sync_Parfor_MatVecT(AllData *all_data,
    }
 }
 
-void SMEM_Sync_Parfor_Residual(AllData *all_data,
-                               hypre_CSRMatrix *A,
-                               HYPRE_Real *b,
-                               HYPRE_Real *x,
-                               HYPRE_Real *y,
-                               HYPRE_Real *r)
-{
-   SMEM_Sync_Parfor_SpGEMV(all_data, A, x, b, -1.0, 1.0, r);
-}
-
 void SMEM_Sync_Parfor_SpGEMV(AllData *all_data,
                              hypre_CSRMatrix *A,
                              HYPRE_Real *x,
@@ -75,21 +65,60 @@ void SMEM_Sync_Parfor_SpGEMV(AllData *all_data,
                              HYPRE_Real beta,
                              HYPRE_Real *y)
 {
-  // double Axi;
-  // HYPRE_Int *A_i = hypre_CSRMatrixI(A);
-  // HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
-  // HYPRE_Real *A_data = hypre_CSRMatrixData(A);
-  // HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
+   double Axi;
 
-  // #pragma omp for
-  // for (int i = 0; i < num_rows; i++){
-  //    Axi = 0.0;
-  //    for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-  //       Axi += A_data[jj] * x[A_j[jj]];
-  //    }
-  //    y[i] = beta*b[i] + alpha*Axi;
-  // }
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+   HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
 
+   #pragma omp for
+   for (int i = 0; i < num_rows; i++){
+      Axi = 0.0;
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         Axi += A_data[jj] * x[A_j[jj]];
+      }
+      y[i] = beta*b[i] + alpha*Axi;
+   }
+}
+
+void SMEM_Sync_Parfor_Residual(AllData *all_data,
+                               hypre_CSRMatrix *A,
+                               HYPRE_Real *b,
+                               HYPRE_Real *x,
+                               HYPRE_Real *y,
+                               HYPRE_Real *r)
+{
+   SMEM_Sync_SpGEMV(all_data, A, x, b, -1.0, 1.0, r);
+}
+
+
+void SMEM_Sync_SpGEMV(AllData *all_data,
+                      hypre_CSRMatrix *A,
+                      HYPRE_Real *x,
+                      HYPRE_Real *b,
+                      HYPRE_Real alpha,
+                      HYPRE_Real beta,
+                      HYPRE_Real *y)
+{
+   HYPRE_Int iBegin = hypre_CSRMatrixGetLoadBalancedPartitionBegin(A);
+   HYPRE_Int iEnd = hypre_CSRMatrixGetLoadBalancedPartitionEnd(A);
+   
+   SMEM_SpGEMV(all_data, A, x, b, alpha, beta, y, iBegin, iEnd);   
+
+   #pragma omp barrier
+}
+
+
+void SMEM_SpGEMV(AllData *all_data,
+                 hypre_CSRMatrix *A,
+                 HYPRE_Real *x,
+                 HYPRE_Real *b,
+                 HYPRE_Real alpha, 
+                 HYPRE_Real beta,
+                 HYPRE_Real *y,
+                 int iBegin, int iEnd)
+{
    HYPRE_Int *A_i = hypre_CSRMatrixI(A);
    HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
    HYPRE_Real *A_data = hypre_CSRMatrixData(A);
@@ -101,182 +130,122 @@ void SMEM_Sync_Parfor_SpGEMV(AllData *all_data,
    HYPRE_Real xpar = 0.7;
    HYPRE_Real temp = beta / alpha;
 
-
-  // if (num_rownnz < xpar * num_rows) {
-  //     HYPRE_Int *A_rownnz = hypre_CSRMatrixRownnz(A);
-  //    /*-----------------------------------------------------------------------
-  //     * y = (beta/alpha)*y
-  //     *-----------------------------------------------------------------------*/
-
-  //    if (temp != 1.0){
-  //       if (temp == 0.0){
-  //          #pragma omp for HYPRE_SMP_SCHEDULE
-  //          for (int i = 0; i < num_rows; i++){
-  //             y[i] = 0.0;
-  //          }
-  //       }
-  //       else {
-  //          #pragma omp for HYPRE_SMP_SCHEDULE
-  //          for (int i = 0; i < num_rows; i++){
-  //             y[i] = b[i] * temp;
-  //          }
-  //       }
-  //    }
-  //    else {
-  //       #pragma omp for HYPRE_SMP_SCHEDULE
-  //       for (int i = 0; i < num_rows; i++){
-  //          y[i] = b[i];
-  //       }
-  //    }
-
-
-  //    /*-----------------------------------------------------------------
-  //     * y += A*x
-  //     *-----------------------------------------------------------------*/
-
-  //    #pragma omp for HYPRE_SMP_SCHEDULE
-  //    for (int i = 0; i < num_rownnz; i++){
-  //       m = A_rownnz[i];
-  //       tempx = 0;
-  //       for (int jj = A_i[m]; jj < A_i[m+1]; jj++){
-  //          tempx += A_data[jj] * x[A_j[jj]];
-  //       }
-  //       y[m] += tempx;
-  //    }
-
-  //    /*-----------------------------------------------------------------
-  //     * y = alpha*y
-  //     *-----------------------------------------------------------------*/
-
-  //    if (alpha != 1.0){
-  //       #pragma omp for HYPRE_SMP_SCHEDULE
-  //       for (int i = 0; i < num_rows; i++){
-  //          y[i] *= alpha;
-  //       }
-  //    }
-  // }
-  // else {
-      HYPRE_Int iBegin = hypre_CSRMatrixGetLoadBalancedPartitionBegin(A);
-      HYPRE_Int iEnd = hypre_CSRMatrixGetLoadBalancedPartitionEnd(A);
-
-      if (temp == 0){
-         if (alpha == 1){
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = 0.0;
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
+   if (temp == 0){
+      if (alpha == 1){
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = 0.0;
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
             }
-         } // y = A*x
-         else if (alpha == -1){
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = 0.0;
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx -= A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
+            y[i] = tempx;
+         }
+      } // y = A*x
+      else if (alpha == -1){
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = 0.0;
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx -= A_data[jj] * x[A_j[jj]];
             }
-         } // y = -A*x
-         else {
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = 0.0;
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = alpha*tempx;
-            }
-         } // y = alpha*A*x
-      } // temp == 0
-      else if (temp == -1){ // beta == -alpha
-         if (alpha == 1){
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = -b[i];
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
-            }
-         } // y = A*x - y
-         else if (alpha == -1) {
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = b[i];
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx -= A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
-            }
-         } // y = -A*x + y
-         else {
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = -b[i];
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = alpha*tempx;
-            }
-         } // y = alpha*(A*x - y)
-      } // temp == -1
-      else if (temp == 1){
-         if (alpha == 1){
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = b[i];
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
-            }
-         } // y = A*x + y
-         else if (alpha == -1){
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = -b[i];
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx -= A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
-            }
-         } // y = -A*x - y
-         else {
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = b[i];
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = alpha*tempx;
-            }
-         } // y = alpha*(A*x + y)
-      }
+            y[i] = tempx;
+         }
+      } // y = -A*x
       else {
-         if (alpha == 1) {
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = b[i]*temp;
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = 0.0;
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
             }
-         } // y = A*x + temp*y
-         else if (alpha == -1){
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = -b[i]*temp;
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx -= A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = tempx;
+            y[i] = alpha*tempx;
+         }
+      } // y = alpha*A*x
+   } // temp == 0
+   else if (temp == -1){ // beta == -alpha
+      if (alpha == 1){
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = -b[i];
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
             }
-         } // y = -A*x - temp*y
-         else{
-            for (int i = iBegin; i < iEnd; i++){
-               tempx = b[i]*temp;
-               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                  tempx += A_data[jj] * x[A_j[jj]];
-               }
-               y[i] = alpha*tempx;
+            y[i] = tempx;
+         }
+      } // y = A*x - y
+      else if (alpha == -1) {
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = b[i];
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx -= A_data[jj] * x[A_j[jj]];
             }
-         } // y = alpha*(A*x + temp*y)
-      } // temp != 0 && temp != -1 && temp != 1
-   //}
-   #pragma omp barrier
+            y[i] = tempx;
+         }
+      } // y = -A*x + y
+      else {
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = -b[i];
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
+            }
+            y[i] = alpha*tempx;
+         }
+      } // y = alpha*(A*x - y)
+   } // temp == -1
+   else if (temp == 1){
+      if (alpha == 1){
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = b[i];
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
+            }
+            y[i] = tempx;
+         }
+      } // y = A*x + y
+      else if (alpha == -1){
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = -b[i];
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx -= A_data[jj] * x[A_j[jj]];
+            }
+            y[i] = tempx;
+         }
+      } // y = -A*x - y
+      else {
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = b[i];
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
+            }
+            y[i] = alpha*tempx;
+         }
+      } // y = alpha*(A*x + y)
+   }
+   else {
+      if (alpha == 1) {
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = b[i]*temp;
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
+            }
+            y[i] = tempx;
+         }
+      } // y = A*x + temp*y
+      else if (alpha == -1){
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = -b[i]*temp;
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx -= A_data[jj] * x[A_j[jj]];
+            }
+            y[i] = tempx;
+         }
+      } // y = -A*x - temp*y
+      else{
+         for (int i = iBegin; i < iEnd; i++){
+            tempx = b[i]*temp;
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               tempx += A_data[jj] * x[A_j[jj]];
+            }
+            y[i] = alpha*tempx;
+         }
+      } // y = alpha*(A*x + temp*y)
+   } // temp != 0 && temp != -1 && temp != 1
 }
 
 void SMEM_Async_Parfor_MatVec(AllData *all_data,
