@@ -782,51 +782,75 @@ void PartitionGrids(AllData *all_data)
 
       for (int level = finest_level; level < num_levels; level++){
          num_level_threads = all_data->thread.level_threads[level].size();
-        // printf("level %d/%d:", level, num_levels-1);
          for (int inner_level = 0; inner_level < num_levels; inner_level++){
             if (inner_level < num_levels){
-              // printf("\n\tlevel %d, n = %d: ", inner_level, all_data->grid.n[inner_level]);
+               HYPRE_Int n, nnz, nnz_per_thread;
                for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
-                  int n = all_data->grid.n[inner_level];
                   int t = all_data->thread.level_threads[level][i];
-		  int size, rest;
+                  int rest, size;
+                  int shift_t = t - all_data->thread.level_threads[level][0];
+                  n = all_data->grid.n[inner_level];
 
-		  int shift_t = t - all_data->thread.level_threads[level][0];
-                  
-                  size = n/num_level_threads;
-                  rest = n - size*num_level_threads;
-                  if (shift_t < rest){
-                     all_data->thread.A_ns[inner_level][t] = shift_t*size + shift_t;
-                     all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
-                  }
-                  else{
-                     all_data->thread.A_ns[inner_level][t] = shift_t*size + rest;
-                     all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + rest;
-                  }
+                 // size = n/num_level_threads;
+                 // rest = n - size*num_level_threads;
+                 // if (shift_t < rest){
+                 //    all_data->thread.A_ns[inner_level][t] = shift_t*size + shift_t;
+                 //    all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
+                 // }
+                 // else{
+                 //    all_data->thread.A_ns[inner_level][t] = shift_t*size + rest;
+                 //    all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + rest;
+                 // }
+
+                  hypre_CSRMatrix *A = all_data->matrix.A[inner_level];
+                  nnz = hypre_CSRMatrixNumNonzeros(A);
+                  n = hypre_CSRMatrixNumRows(A);
+                  HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+                  nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                  all_data->thread.A_ns[inner_level][t] = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * shift_t) - A_i;
+                  all_data->thread.A_ne[inner_level][t] = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * (shift_t+1)) - A_i;
+                  printf("%d %d: %d %d %d\n", t, inner_level, all_data->thread.A_ns[inner_level][t], all_data->thread.A_ne[inner_level][t], n);
+
                   if (inner_level < num_levels-1){
-                     n = hypre_CSRMatrixNumRows(all_data->matrix.P[inner_level]);
-                     size = n/num_level_threads;
-                     rest = n - size*num_level_threads;
-                     if (shift_t < rest){
-                        all_data->thread.P_ns[inner_level][t] = shift_t*size + shift_t;
-                        all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
-                     }
-                     else{
-                        all_data->thread.P_ns[inner_level][t] = shift_t*size + rest;
-                        all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + rest;
-                     }
+                    // n = hypre_CSRMatrixNumRows(all_data->matrix.P[inner_level]);
+                    // size = n/num_level_threads;
+                    // rest = n - size*num_level_threads;
+                    // if (shift_t < rest){
+                    //    all_data->thread.P_ns[inner_level][t] = shift_t*size + shift_t;
+                    //    all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
+                    // }
+                    // else{
+                    //    all_data->thread.P_ns[inner_level][t] = shift_t*size + rest;
+                    //    all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + rest;
+                    // }
  
-                     n = hypre_CSRMatrixNumRows(all_data->matrix.R[inner_level]);
-                     size = n/num_level_threads;
-                     rest = n - size*num_level_threads;
-                     if (shift_t < rest){
-                        all_data->thread.R_ns[inner_level][t] = shift_t*size + shift_t;
-                        all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
-                     }
-                     else{
-                        all_data->thread.R_ns[inner_level][t] = shift_t*size + rest;
-                        all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + rest;
-                     }
+                    // n = hypre_CSRMatrixNumRows(all_data->matrix.R[inner_level]);
+                    // size = n/num_level_threads;
+                    // rest = n - size*num_level_threads;
+                    // if (shift_t < rest){
+                    //    all_data->thread.R_ns[inner_level][t] = shift_t*size + shift_t;
+                    //    all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
+                    // }
+                    // else{
+                    //    all_data->thread.R_ns[inner_level][t] = shift_t*size + rest;
+                    //    all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + rest;
+                    // }
+
+                     hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
+                     nnz = hypre_CSRMatrixNumNonzeros(P);
+                     n = hypre_CSRMatrixNumRows(P);
+                     HYPRE_Int *P_i = hypre_CSRMatrixI(P);
+                     nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                     all_data->thread.P_ns[inner_level][t] = hypre_LowerBound(P_i, P_i + n, nnz_per_thread * shift_t) - P_i;
+                     all_data->thread.P_ne[inner_level][t] = hypre_LowerBound(P_i, P_i + n, nnz_per_thread * (shift_t+1)) - P_i;
+
+                     hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
+                     nnz = hypre_CSRMatrixNumNonzeros(R);
+                     n = hypre_CSRMatrixNumRows(R);
+                     HYPRE_Int *R_i = hypre_CSRMatrixI(R);
+                     nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                     all_data->thread.R_ns[inner_level][t] = hypre_LowerBound(R_i, R_i + n, nnz_per_thread * shift_t) - R_i;
+                     all_data->thread.R_ne[inner_level][t] = hypre_LowerBound(R_i, R_i + n, nnz_per_thread * (shift_t+1)) - R_i;
                   }
                  // printf(" (%d,%d,%d)", shift_t, all_data->thread.A_ns[inner_level][t], all_data->thread.A_ne[inner_level][t]);
                }

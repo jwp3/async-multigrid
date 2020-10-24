@@ -45,7 +45,7 @@ void SMEM_Solve(AllData *all_data)
 
    #pragma omp parallel
    {
-      SMEM_Sync_Parfor_Residual(all_data,
+      SMEM_Sync_Residual(all_data,
                                 all_data->matrix.A[0],
                                 all_data->vector.f[0],
                                 all_data->vector.u[0],
@@ -66,7 +66,7 @@ void SMEM_Solve(AllData *all_data)
       }
       #pragma omp parallel
       {
-         SMEM_Sync_Parfor_Residual(all_data,
+         SMEM_Sync_Residual(all_data,
                                    all_data->matrix.A[0],
                                    all_data->vector.f[0],
                                    all_data->vector.u[0],
@@ -140,7 +140,7 @@ void SMEM_Solve(AllData *all_data)
  
             double residual_start = omp_get_wtime();
             if (tid == 0) r_inner_prod = 0;
-            SMEM_Sync_Parfor_Residual(all_data,
+            SMEM_Sync_Residual(all_data,
                                       all_data->matrix.A[0],
                                       all_data->vector.f[0],
                                       all_data->vector.u[0],

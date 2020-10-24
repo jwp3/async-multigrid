@@ -98,7 +98,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                                          F_array[0],
                                          V);
       all_data->output.r0_norm2 = Parfor_Norm2(v, all_data->grid.n[0]);
-      SMEM_Sync_Parfor_Residual(all_data, A, b, x, z, r);
+      SMEM_Sync_Residual(all_data, A, b, x, z, r);
       all_data->output.r0_norm2_ext_sys = Parfor_Norm2(r, n);
       #pragma omp parallel for
       for (int i = 0; i < n; i++){
@@ -556,7 +556,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    all_data->output.solve_wtime = omp_get_wtime() - start;
 
    if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
-      SMEM_Sync_Parfor_Residual(all_data, A, b, x, z, r);
+      SMEM_Sync_Residual(all_data, A, b, x, z, r);
       all_data->output.r_norm2_ext_sys = Parfor_Norm2(r, n);
    
       HYPRE_Real *u, *u_f, *u_c, *f;
@@ -633,7 +633,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
      // for (int i = 0; i < all_data->grid.n[0]; i++){
      //    printf("%e\n", all_data->vector.u[0][i]);
      // }
-      SMEM_Sync_Parfor_Residual(all_data,
+      SMEM_Sync_Residual(all_data,
                                 all_data->matrix.A[0],
                                 all_data->vector.f[0],
                                 all_data->vector.u[0],

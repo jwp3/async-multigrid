@@ -52,7 +52,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                   0, 0);
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
       residual_start = omp_get_wtime();
-      SMEM_Sync_Parfor_Residual(all_data,
+      SMEM_Sync_Residual(all_data,
                                 all_data->matrix.A[fine_grid],
                                 f_fine,
                                 all_data->vector.u[fine_grid],
@@ -333,7 +333,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                                  all_data->matrix.P[fine_grid],
                                  all_data->vector.u_coarse[coarse_grid],
                                  all_data->vector.e[fine_grid]);
-         SMEM_Sync_Parfor_Residual(all_data,
+         SMEM_Sync_Residual(all_data,
                                    all_data->matrix.A[fine_grid],
                                    all_data->vector.r[fine_grid],
                                    all_data->vector.e[fine_grid],
