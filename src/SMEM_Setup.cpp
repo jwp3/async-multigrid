@@ -63,7 +63,7 @@ void SMEM_Setup(AllData *all_data)
    all_data->output.hypre_setup_wtime = omp_get_wtime() - start;
 
    start = omp_get_wtime();
-   HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 50);
+   HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 20);
    HYPRE_BoomerAMGSetTol(all_data->hypre.solver, 0);
    HYPRE_BoomerAMGSolve(all_data->hypre.solver,
                         all_data->hypre.parcsr_A,
