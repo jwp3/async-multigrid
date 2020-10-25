@@ -318,8 +318,6 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                               z1[fine_grid],
                               ns, ne);
                   all_data->output.prolong_wtime[tid] += omp_get_wtime() - prolong_start;
-                  ns = A_ns[fine_grid][tid];
-                  ne = A_ne[fine_grid][tid];
                   vec_start = omp_get_wtime();
                   for (int i = ns; i < ne; i++){
                      double ui_read;
@@ -345,8 +343,6 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                for (int level = finest_level; level < thread_level; level++){
                   fine_grid = level;
                   coarse_grid = level + 1;
-                  ns = A_ns[fine_grid][tid];
-                  ne = A_ne[fine_grid][tid];
                   vec_start = omp_get_wtime();
                   if (level == finest_level){
                      for (int i = ns; i < ne; i++){
@@ -363,9 +359,9 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                      }
                   }
                   all_data->output.vec_wtime[tid] += omp_get_wtime() - vec_start;
+                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                   ns = R_ns[fine_grid][tid];
                   ne = R_ne[fine_grid][tid];
-                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                   restrict_start = omp_get_wtime();
                   SMEM_MatVec(all_data,
                               R[fine_grid],
@@ -375,9 +371,14 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
                }
             }
+
             if (all_data->input.async_flag == 0){
                #pragma omp barrier
             }
+            else {
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+            }
+
             for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){ 
                thread_level = all_data->thread.thread_levels[tid][q];
                HYPRE_Real **z1 = all_data->level_vector[thread_level].z1;
@@ -422,6 +423,13 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   all_data->output.innerprod_wtime[tid] += omp_get_wtime() - innerprod_start;
                   all_data->output.vec_wtime[tid] += omp_get_wtime() - innerprod_start;
                }
+            }
+
+            if (all_data->input.async_flag == 0){
+               #pragma omp barrier
+            }
+            else {
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             }
          }
 
@@ -633,7 +641,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
      // for (int i = 0; i < all_data->grid.n[0]; i++){
      //    printf("%e\n", all_data->vector.u[0][i]);
      // }
-      SMEM_Sync_Residual(all_data,
+      SMEM_Sync_Parfor_Residual(all_data,
                                 all_data->matrix.A[0],
                                 all_data->vector.f[0],
                                 all_data->vector.u[0],

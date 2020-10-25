@@ -57,6 +57,16 @@ void SMEM_Sync_Parfor_MatVecT(AllData *all_data,
    }
 }
 
+void SMEM_Sync_Parfor_Residual(AllData *all_data,
+                               hypre_CSRMatrix *A,
+                               HYPRE_Real *b,
+                               HYPRE_Real *x,
+                               HYPRE_Real *y,
+                               HYPRE_Real *r)
+{
+   SMEM_Sync_Parfor_SpGEMV(all_data, A, x, b, -1.0, 1.0, r);
+}
+
 void SMEM_Sync_Parfor_SpGEMV(AllData *all_data,
                              hypre_CSRMatrix *A,
                              HYPRE_Real *x,
@@ -296,6 +306,7 @@ void SMEM_MatVec(AllData *all_data,
                  int ns, int ne)
 {
    double Axi;
+   int tid = omp_get_thread_num();
 
    HYPRE_Int *A_i = hypre_CSRMatrixI(A);
    HYPRE_Int *A_j = hypre_CSRMatrixJ(A);

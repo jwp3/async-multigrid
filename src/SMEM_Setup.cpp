@@ -735,6 +735,32 @@ void PartitionLevels(AllData *all_data)
    }
 }
 
+void SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(AllData *all_data,
+                                                    hypre_CSRMatrix *A,
+                                                    int num_threads, int t,
+                                                    int *ns, int *ne)
+{
+   int n, nnz, nnz_per_thread;
+
+   nnz = hypre_CSRMatrixNumNonzeros(A);
+   n = hypre_CSRMatrixNumRows(A);
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   nnz_per_thread = (nnz + num_threads - 1)/num_threads;
+   if (t == 0){
+      *ns = 0;
+   }
+   else {
+      *ns = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * t) - A_i;
+   }
+
+   if (t == num_threads-1){
+      *ne = n;
+   }
+   else {
+      *ne = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * (t+1)) - A_i;
+   }
+}
+
 void PartitionGrids(AllData *all_data)
 {
    int num_level_threads;
@@ -785,78 +811,29 @@ void PartitionGrids(AllData *all_data)
          for (int inner_level = 0; inner_level < num_levels; inner_level++){
             if (inner_level < num_levels){
                HYPRE_Int n, nnz, nnz_per_thread;
-               for (int i = 0; i < all_data->thread.level_threads[level].size(); i++){
+               for (int i = 0; i < num_level_threads; i++){
                   int t = all_data->thread.level_threads[level][i];
                   int rest, size;
                   int shift_t = t - all_data->thread.level_threads[level][0];
-                  n = all_data->grid.n[inner_level];
 
-                 // size = n/num_level_threads;
-                 // rest = n - size*num_level_threads;
-                 // if (shift_t < rest){
-                 //    all_data->thread.A_ns[inner_level][t] = shift_t*size + shift_t;
-                 //    all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
-                 // }
-                 // else{
-                 //    all_data->thread.A_ns[inner_level][t] = shift_t*size + rest;
-                 //    all_data->thread.A_ne[inner_level][t] = (shift_t + 1)*size + rest;
-                 // }
 
                   hypre_CSRMatrix *A = all_data->matrix.A[inner_level];
-                  nnz = hypre_CSRMatrixNumNonzeros(A);
-                  n = hypre_CSRMatrixNumRows(A);
-                  HYPRE_Int *A_i = hypre_CSRMatrixI(A);
-                  nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                  all_data->thread.A_ns[inner_level][t] = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * shift_t) - A_i;
-                  all_data->thread.A_ne[inner_level][t] = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * (shift_t+1)) - A_i;
-                  printf("%d %d: %d %d %d\n", t, inner_level, all_data->thread.A_ns[inner_level][t], all_data->thread.A_ne[inner_level][t], n);
+                  SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, num_level_threads, shift_t, 
+                                                                 &(all_data->thread.A_ns[inner_level][t]), &(all_data->thread.A_ne[inner_level][t]));
 
                   if (inner_level < num_levels-1){
-                    // n = hypre_CSRMatrixNumRows(all_data->matrix.P[inner_level]);
-                    // size = n/num_level_threads;
-                    // rest = n - size*num_level_threads;
-                    // if (shift_t < rest){
-                    //    all_data->thread.P_ns[inner_level][t] = shift_t*size + shift_t;
-                    //    all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
-                    // }
-                    // else{
-                    //    all_data->thread.P_ns[inner_level][t] = shift_t*size + rest;
-                    //    all_data->thread.P_ne[inner_level][t] = (shift_t + 1)*size + rest;
-                    // }
- 
-                    // n = hypre_CSRMatrixNumRows(all_data->matrix.R[inner_level]);
-                    // size = n/num_level_threads;
-                    // rest = n - size*num_level_threads;
-                    // if (shift_t < rest){
-                    //    all_data->thread.R_ns[inner_level][t] = shift_t*size + shift_t;
-                    //    all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + shift_t + 1;
-                    // }
-                    // else{
-                    //    all_data->thread.R_ns[inner_level][t] = shift_t*size + rest;
-                    //    all_data->thread.R_ne[inner_level][t] = (shift_t + 1)*size + rest;
-                    // }
+                      hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
+                      SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, P, num_level_threads, shift_t,
+                                                                     &(all_data->thread.P_ns[inner_level][t]), &(all_data->thread.P_ne[inner_level][t]));
 
-                     hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
-                     nnz = hypre_CSRMatrixNumNonzeros(P);
-                     n = hypre_CSRMatrixNumRows(P);
-                     HYPRE_Int *P_i = hypre_CSRMatrixI(P);
-                     nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                     all_data->thread.P_ns[inner_level][t] = hypre_LowerBound(P_i, P_i + n, nnz_per_thread * shift_t) - P_i;
-                     all_data->thread.P_ne[inner_level][t] = hypre_LowerBound(P_i, P_i + n, nnz_per_thread * (shift_t+1)) - P_i;
+                      hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
+                      SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, R, num_level_threads, shift_t,
+                                                                     &(all_data->thread.R_ns[inner_level][t]), &(all_data->thread.R_ne[inner_level][t]));
 
-                     hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
-                     nnz = hypre_CSRMatrixNumNonzeros(R);
-                     n = hypre_CSRMatrixNumRows(R);
-                     HYPRE_Int *R_i = hypre_CSRMatrixI(R);
-                     nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                     all_data->thread.R_ns[inner_level][t] = hypre_LowerBound(R_i, R_i + n, nnz_per_thread * shift_t) - R_i;
-                     all_data->thread.R_ne[inner_level][t] = hypre_LowerBound(R_i, R_i + n, nnz_per_thread * (shift_t+1)) - R_i;
                   }
-                 // printf(" (%d,%d,%d)", shift_t, all_data->thread.A_ns[inner_level][t], all_data->thread.A_ne[inner_level][t]);
                }
             }
          }
-        // printf("\n");
       } 
    }
    else{
