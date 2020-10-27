@@ -315,12 +315,48 @@ void SMEM_MatVec(AllData *all_data,
 
    for (int i = ns; i < ne; i++){
       Axi = 0.0;
-      for (int jj = A_i[i]; jj < A_i[i+1]; jj++)
-      {
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
          Axi += A_data[jj] * x[A_j[jj]];
       }
       y[i] = Axi;
    }
+}
+
+void SMEM_MatVecT(AllData *all_data,
+                  hypre_CSRMatrix *A,
+                  HYPRE_Real *x,
+                  HYPRE_Real *y,
+                  HYPRE_Real *y_expand,
+                  int ns_row, int ne_row,
+                  int ns_col, int ne_col,
+                  int t, int level)
+{
+   HYPRE_Int *A_i = hypre_CSRMatrixI(A);
+   HYPRE_Int *A_j = hypre_CSRMatrixJ(A);
+   HYPRE_Real *A_data = hypre_CSRMatrixData(A);
+   HYPRE_Int num_rows = hypre_CSRMatrixNumRows(A);
+   HYPRE_Int num_cols = hypre_CSRMatrixNumCols(A);
+
+   int offset = num_cols * t;
+
+   for (int i = ns_row; i < ne_row; i++){
+      for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+         y_expand[offset + A_j[jj]] += A_data[jj] * x[i];
+      }
+   }
+
+   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
+
+   for (int i = ns_col; i < ne_col; i++){
+      y[i] = 0;
+      for (int j = 0; j < all_data->thread.level_threads[level].size(); j++){
+         int jj = j*num_cols + i;
+         y[i] += y_expand[jj];
+         y_expand[jj] = 0;
+      }
+   }
+
+   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 }
 
 void SMEM_Residual(AllData *all_data,
@@ -338,5 +374,35 @@ void SMEM_Residual(AllData *all_data,
    for (int i = ns; i < ne; i++){
       double ri = b[i] - y[i];
       r[i] = ri;
+   }
+}
+
+void SMEM_Sync_Parfor_Restrict(AllData *all_data,
+                               hypre_CSRMatrix *R,
+                               HYPRE_Real *v_fine,
+                               HYPRE_Real *v_coarse,
+                               int fine_grid, int coarse_grid)
+{
+   if (all_data->input.construct_R_flag == 1){
+      SMEM_Sync_Parfor_MatVec(all_data, R, v_fine, v_coarse);
+   }
+   else {
+      SMEM_Sync_Parfor_MatVecT(all_data, R, v_fine, v_coarse, all_data->vector.y_expand[fine_grid]);
+   }
+}
+
+void SMEM_Restrict(AllData *all_data,
+                   hypre_CSRMatrix *R,
+                   HYPRE_Real *v_fine,
+                   HYPRE_Real *v_coarse,
+                   int fine_grid, int coarse_grid,
+                   int ns_row, int ne_row, int ns_col, int ne_col,
+                   int t, int level)
+{
+   if (all_data->input.construct_R_flag == 1){
+      SMEM_MatVec(all_data, R, v_fine, v_coarse, ns_row, ne_row);
+   }
+   else {
+      SMEM_MatVecT(all_data, R, v_fine, v_coarse, all_data->level_vector[level].y_expand[fine_grid], ns_row, ne_row, ns_col, ne_col, t, level);
    }
 }

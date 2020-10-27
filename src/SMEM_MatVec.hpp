@@ -71,6 +71,15 @@ void SMEM_MatVec(AllData *all_data,
                  HYPRE_Real *y,
                  int ns, int ne);
 
+void SMEM_MatVecT(AllData *all_data,
+                  hypre_CSRMatrix *A,
+                  HYPRE_Real *x,
+                  HYPRE_Real *y,
+                  HYPRE_Real *y_expand,
+                  int ns_row, int ne_row,
+                  int ns_col, int ne_col,
+                  int t, int level);
+
 void SMEM_Residual(AllData *all_data,
                    hypre_CSRMatrix *A,
                    HYPRE_Real *b,
@@ -78,5 +87,19 @@ void SMEM_Residual(AllData *all_data,
                    HYPRE_Real *y,
                    HYPRE_Real *r,
                    int ns, int ne);
+
+void SMEM_Sync_Parfor_Restrict(AllData *all_data,
+                               hypre_CSRMatrix *R,
+                               HYPRE_Real *v_fine,
+                               HYPRE_Real *v_coarse,
+                               int fine_grid, int coarse_grid);
+
+void SMEM_Restrict(AllData *all_data,
+                   hypre_CSRMatrix *R,
+                   HYPRE_Real *v_fine,
+                   HYPRE_Real *v_coarse,
+                   int fine_grid, int coarse_grid,
+                   int ns_row, int ne_row, int ns_col, int ne_col,
+                   int t, int level);
 
 #endif

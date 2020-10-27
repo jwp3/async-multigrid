@@ -5,12 +5,6 @@
 #include "SMEM_Solve.hpp"
 
 
-void SMEM_Sync_Parfor_Restrict(AllData *all_data,
-                               hypre_CSRMatrix *R,
-                               HYPRE_Real *v_fine,
-                               HYPRE_Real *v_coarse,
-                               int fine_grid, int coarse_grid);
-
 void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
 {
    int fine_grid, coarse_grid;
@@ -586,20 +580,5 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
       if (tid == all_data->thread.barrier_root[thread_level]){
          all_data->grid.local_num_correct[thread_level]++;
       }
-   }
-}
-
-
-void SMEM_Sync_Parfor_Restrict(AllData *all_data,
-                               hypre_CSRMatrix *R,
-                               HYPRE_Real *v_fine,
-                               HYPRE_Real *v_coarse,
-                               int fine_grid, int coarse_grid)
-{
-   if (all_data->input.construct_R_flag == 1){
-      SMEM_Sync_Parfor_MatVec(all_data, R, v_fine, v_coarse);
-   }
-   else {
-      SMEM_Sync_Parfor_MatVecT(all_data, R, v_fine, v_coarse, all_data->vector.y_extend[fine_grid]);
    }
 }

@@ -112,10 +112,11 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
       for (int level = 0; level < num_levels-1; level++){
          int fine_grid = level;
          int coarse_grid = level + 1;
-         SMEM_Sync_Parfor_MatVec(all_data,
-                                 all_data->matrix.R[fine_grid],
-                                 all_data->vector.f[fine_grid],
-                                 all_data->vector.f[coarse_grid]);
+         SMEM_Sync_Parfor_Restrict(all_data,
+                                   all_data->matrix.R[fine_grid],
+                                   all_data->vector.f[fine_grid],
+                                   all_data->vector.f[coarse_grid],
+                                   fine_grid, coarse_grid);
          all_data->output.r0_norm2_ext_sys += Parfor_InnerProd(all_data->vector.f[coarse_grid], all_data->grid.n[coarse_grid]);
       }
       all_data->output.r0_norm2_ext_sys = sqrt(all_data->output.r0_norm2_ext_sys);
@@ -137,7 +138,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    #pragma omp parallel
    { 
       int tid = omp_get_thread_num();
-      int ns, ne, n_loc;
+      int ns, ne, ns_col, ne_col, n_loc;
       int fine_grid, coarse_grid;
       int finest_level, coarsest_level;
       int thread_level;
@@ -291,6 +292,9 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             int **R_ne = all_data->thread.R_ne;
             int **A_ns = all_data->thread.A_ns;
             int **A_ne = all_data->thread.A_ne;
+            int **row_ns = all_data->thread.row_ns;
+            int **row_ne = all_data->thread.row_ne;
+
             r_inner_prod_loc = 0;
             for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
                thread_level = all_data->thread.thread_levels[tid][q];
@@ -327,19 +331,10 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   }
                   all_data->output.vec_wtime[tid] += omp_get_wtime() - vec_start;
                }
-               ns = A_ns[thread_level][tid];
-               ne = A_ne[thread_level][tid];
-               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-               A_matvec_start = omp_get_wtime(); 
-               SMEM_MatVec(all_data,
-                           A[thread_level],
-                           z1[thread_level],
-                           z[thread_level],
-                           ns, ne);
-               all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
+
                finest_level = 0;
-               ns = A_ns[finest_level][tid];
-               ne = A_ne[finest_level][tid];
+               ns = row_ns[finest_level][tid];
+               ne = row_ne[finest_level][tid];
                for (int level = finest_level; level < thread_level; level++){
                   fine_grid = level;
                   coarse_grid = level + 1;
@@ -362,29 +357,53 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                   ns = R_ns[fine_grid][tid];
                   ne = R_ne[fine_grid][tid];
+                  ns_col = row_ns[coarse_grid][tid];
+                  ne_col = row_ne[coarse_grid][tid];
+                  int shift_t = tid - all_data->thread.level_threads[thread_level][0];
                   restrict_start = omp_get_wtime();
-                  SMEM_MatVec(all_data,
-                              R[fine_grid],
-                              z2[fine_grid],
-                              z2[coarse_grid],
-                              ns, ne);
+                  SMEM_Restrict(all_data,
+                                R[fine_grid],
+                                z2[fine_grid],
+                                z2[coarse_grid],
+                                fine_grid, coarse_grid,
+                                ns, ne, ns_col, ne_col,
+                                shift_t, thread_level); 
                   all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
+                  if (all_data->input.construct_R_flag == 1){
+                     ns = R_ns[fine_grid][tid];
+                     ne = R_ne[fine_grid][tid];
+                  }
+                  else {
+                     ns = row_ns[coarse_grid][tid];
+                     ne = row_ne[coarse_grid][tid];
+                  }
+               }
+
+               if (all_data->input.async_flag == 1){
+                  SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
                }
             }
 
             if (all_data->input.async_flag == 0){
                #pragma omp barrier
             }
-            else {
-               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-            }
+
 
             for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){ 
                thread_level = all_data->thread.thread_levels[tid][q];
                HYPRE_Real **z1 = all_data->level_vector[thread_level].z1;
                HYPRE_Real **z2 = all_data->level_vector[thread_level].z2;
+
                ns = A_ns[thread_level][tid];
                ne = A_ne[thread_level][tid];
+               A_matvec_start = omp_get_wtime();
+               SMEM_MatVec(all_data,
+                           A[thread_level],
+                           z1[thread_level],
+                           z[thread_level],
+                           ns, ne);
+               all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
+
                HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[thread_level]);
                HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[thread_level]);
                vec_start = omp_get_wtime();
@@ -423,13 +442,6 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   all_data->output.innerprod_wtime[tid] += omp_get_wtime() - innerprod_start;
                   all_data->output.vec_wtime[tid] += omp_get_wtime() - innerprod_start;
                }
-            }
-
-            if (all_data->input.async_flag == 0){
-               #pragma omp barrier
-            }
-            else {
-               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             }
          }
 
@@ -518,48 +530,6 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
          }
       }
       all_data->grid.local_num_correct[tid] = loc_iters;
-    //  printf("%d %d %d\n", tid, all_data->thread.thread_levels[tid][0], all_data->grid.local_num_correct[tid]);
-    // // if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX)
-    // //    printf("%d %d %d\n", tid, all_data->thread.thread_levels[tid][0], loc_iters);
-    //  iters[tid * cache_line] = loc_iters;
-    //  wtime[tid] = omp_get_wtime() - start;
-    //  #pragma omp barrier
-
-    // // for (int t = 0; t < num_threads; t++){
-    // //    if (tid == t){
-    // //       printf("%d %d %d\n", tid, sched_getcpu(), thread::hardware_concurrency());
-    // //    }
-    // //    #pragma omp barrier
-    // // }
-
-    //  if (tid == 0){
-    //     min_relax = iters[0];
-    //     min_wtime = wtime[0];
-    //     for (int t = 0; t < num_threads; t++){
-    //        mean_relax += (double)iters[t * cache_line];
-    //        if (iters[t * cache_line] <= min_relax){
-    //           min_relax = iters[t * cache_line];
-    //        }
-    //        if (iters[t * cache_line] >= max_relax){
-    //           max_relax = iters[t * cache_line];
-    //        }
-
-    //        mean_wtime += wtime[t];
-    //        if (wtime[t] <= min_wtime){
-    //           min_wtime = wtime[t];
-    //        }
-    //        if (wtime[t] >= max_wtime){
-    //           max_wtime = wtime[t];
-    //        }
-    //     }
-
-    //     mean_relax /= (double)num_threads;
-    //     mean_wtime /= (double)num_threads;
-
-    //     if (all_data->input.async_flag == 0){
-    //       mean_relax = min_relax = max_relax = loc_iters;
-    //     }
-    //  }
    }
    all_data->output.solve_wtime = omp_get_wtime() - start;
 
@@ -725,10 +695,11 @@ void ExtendedSystemImplicitMatVec(AllData *all_data)
             for (int i = 0; i < all_data->grid.n[fine_grid]; i++){
                z2[fine_grid][i] += e[fine_grid][i];
             }
-            SMEM_Sync_Parfor_MatVec(all_data,
-                                    R[fine_grid],
-                                    z2[fine_grid],
-                                    z2[coarse_grid]);
+            SMEM_Sync_Parfor_Restrict(all_data,
+                                      R[fine_grid],
+                                      z2[fine_grid],
+                                      z2[coarse_grid],
+                                      fine_grid, coarse_grid);
          }
       }
    }

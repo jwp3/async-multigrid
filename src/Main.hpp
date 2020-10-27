@@ -231,7 +231,7 @@ typedef struct{
    HYPRE_Real **u_coarse;
    HYPRE_Real **u_coarse_prev;
    HYPRE_Real **y;
-   HYPRE_Real **y_extend;
+   HYPRE_Real **y_expand;
    HYPRE_Real **r;
    HYPRE_Real **r_fine;
    HYPRE_Real **r_coarse;
@@ -321,6 +321,10 @@ typedef struct{
    int **P_ne;
    int *AA_NS;
    int *AA_NE;
+   int **row_ns;
+   int **row_ne;
+   int **col_ns;
+   int **col_ne;
    int converge_flag;
 }ThreadData;
 

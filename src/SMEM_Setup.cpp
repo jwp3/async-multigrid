@@ -169,6 +169,19 @@ void SMEM_Setup(AllData *all_data)
       //printf("GaussElim %e\n", omp_get_wtime() - start);
    }
 
+
+   if (all_data->input.thread_part_type == ALL_LEVELS && all_data->input.construct_R_flag == 0){
+      for (int level = 0; level < all_data->grid.num_levels; level++){
+         int num_level_threads = all_data->thread.level_threads[level].size();
+         int coarsest_level = all_data->grid.num_levels;
+         all_data->level_vector[level].y_expand = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+         for (int inner_level = 0; inner_level < coarsest_level-1; inner_level++){
+            int num_cols = hypre_CSRMatrixNumCols(all_data->matrix.R[inner_level]);
+            all_data->level_vector[level].y_expand[inner_level] = (HYPRE_Real *)calloc(num_level_threads * num_cols, sizeof(HYPRE_Real));
+         }
+      }
+   }
+
    all_data->output.num_cycles = 0;
 }
 
@@ -198,7 +211,7 @@ void InitAlgebra(AllData *all_data)
    all_data->matrix.R =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
    all_data->matrix.L1_row_norm = (double **)malloc(all_data->grid.num_levels * sizeof(double *));
-   all_data->vector.y_extend = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+   all_data->vector.y_expand = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
       all_data->matrix.A[level] = hypre_ParCSRMatrixDiag(parA[level]);
@@ -244,7 +257,7 @@ void InitAlgebra(AllData *all_data)
             else {
                all_data->matrix.R[level] = all_data->matrix.P[level];
                int num_cols = hypre_CSRMatrixNumCols(all_data->matrix.R[level]);
-               all_data->vector.y_extend[level] = (HYPRE_Real *)calloc(num_threads * num_cols, sizeof(HYPRE_Real));
+               all_data->vector.y_expand[level] = (HYPRE_Real *)calloc(num_threads * num_cols, sizeof(HYPRE_Real));
             }
            // CSR_Transpose(hypre_ParCSRMatrixDiag(parR[level]), all_data->matrix.R[level]);
          }
@@ -737,27 +750,26 @@ void PartitionLevels(AllData *all_data)
 
 void SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(AllData *all_data,
                                                     hypre_CSRMatrix *A,
+                                                    int size_per_thread,
                                                     int num_threads, int t,
                                                     int *ns, int *ne)
 {
-   int n, nnz, nnz_per_thread;
+   int n, nnz;
 
-   nnz = hypre_CSRMatrixNumNonzeros(A);
    n = hypre_CSRMatrixNumRows(A);
    HYPRE_Int *A_i = hypre_CSRMatrixI(A);
-   nnz_per_thread = (nnz + num_threads - 1)/num_threads;
    if (t == 0){
       *ns = 0;
    }
    else {
-      *ns = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * t) - A_i;
+      *ns = hypre_LowerBound(A_i, A_i + n, size_per_thread * t) - A_i;
    }
 
    if (t == num_threads-1){
       *ne = n;
    }
    else {
-      *ne = hypre_LowerBound(A_i, A_i + n, nnz_per_thread * (t+1)) - A_i;
+      *ne = hypre_LowerBound(A_i, A_i + n, size_per_thread * (t+1)) - A_i;
    }
 }
 
@@ -765,6 +777,7 @@ void PartitionGrids(AllData *all_data)
 {
    int num_level_threads;
    int num_levels =  all_data->grid.num_levels;
+   int num_rows, num_cols;
 
    if (all_data->input.thread_part_type == ALL_LEVELS){
       all_data->thread.A_ns = (int **)malloc(num_levels * sizeof(int *));
@@ -773,6 +786,8 @@ void PartitionGrids(AllData *all_data)
       all_data->thread.R_ne = (int **)malloc(num_levels * sizeof(int *));
       all_data->thread.P_ns = (int **)malloc(num_levels * sizeof(int *));
       all_data->thread.P_ne = (int **)malloc(num_levels * sizeof(int *));
+      all_data->thread.row_ns = (int **)malloc(num_levels * sizeof(int *));
+      all_data->thread.row_ne = (int **)malloc(num_levels * sizeof(int *));
      
       for (int level = 0; level < num_levels; level++){
          all_data->thread.A_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
@@ -781,6 +796,8 @@ void PartitionGrids(AllData *all_data)
          all_data->thread.R_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
          all_data->thread.P_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
          all_data->thread.P_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+         all_data->thread.row_ns[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
+         all_data->thread.row_ne[level] = (int *)malloc(all_data->input.num_threads * sizeof(int));
       }
 
       int finest_level;
@@ -810,26 +827,40 @@ void PartitionGrids(AllData *all_data)
          num_level_threads = all_data->thread.level_threads[level].size();
          for (int inner_level = 0; inner_level < num_levels; inner_level++){
             if (inner_level < num_levels){
-               HYPRE_Int n, nnz, nnz_per_thread;
+               HYPRE_Int n, nnz, nnz_per_thread, n_per_thread;
                for (int i = 0; i < num_level_threads; i++){
                   int t = all_data->thread.level_threads[level][i];
                   int rest, size;
                   int shift_t = t - all_data->thread.level_threads[level][0];
-
-
+                  
                   hypre_CSRMatrix *A = all_data->matrix.A[inner_level];
-                  SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, num_level_threads, shift_t, 
+                  nnz = hypre_CSRMatrixNumNonzeros(A);
+                  n = hypre_CSRMatrixNumRows(A);
+                  nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                  SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, nnz_per_thread, num_level_threads, shift_t, 
                                                                  &(all_data->thread.A_ns[inner_level][t]), &(all_data->thread.A_ne[inner_level][t]));
+
+                  n_per_thread = (n + num_level_threads - 1)/num_level_threads;
+                  SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, n_per_thread, num_level_threads, shift_t,
+                                                                 &(all_data->thread.row_ns[inner_level][t]), &(all_data->thread.row_ne[inner_level][t]));
 
                   if (inner_level < num_levels-1){
                       hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
-                      SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, P, num_level_threads, shift_t,
+                      nnz = hypre_CSRMatrixNumNonzeros(P);
+                      nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                      SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, P, nnz_per_thread, num_level_threads, shift_t,
                                                                      &(all_data->thread.P_ns[inner_level][t]), &(all_data->thread.P_ne[inner_level][t]));
-
-                      hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
-                      SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, R, num_level_threads, shift_t,
-                                                                     &(all_data->thread.R_ns[inner_level][t]), &(all_data->thread.R_ne[inner_level][t]));
-
+                      if (all_data->input.construct_R_flag == 1){
+                         hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
+                         nnz = hypre_CSRMatrixNumNonzeros(R);
+                         nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                         SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, R, nnz_per_thread, num_level_threads, shift_t,
+                                                                        &(all_data->thread.R_ns[inner_level][t]), &(all_data->thread.R_ne[inner_level][t]));
+                      }
+                      else {
+                         all_data->thread.R_ns[inner_level][t] = all_data->thread.P_ns[inner_level][t];
+                         all_data->thread.R_ne[inner_level][t] = all_data->thread.P_ne[inner_level][t];
+                      }
                   }
                }
             }
@@ -850,13 +881,11 @@ void PartitionGrids(AllData *all_data)
          for (int t = 0; t < num_threads; t++){
             int size = n/num_threads;
             int rest = n - size*num_threads;
-            if (t < rest)
-            {
+            if (t < rest){
                all_data->thread.A_ns[level][t] = t*size + t;
                all_data->thread.A_ne[level][t] = (t + 1)*size + t + 1;
             }
-            else
-            {
+            else {
                all_data->thread.A_ns[level][t] = t*size + rest;
                all_data->thread.A_ne[level][t] = (t + 1)*size + rest;
             }

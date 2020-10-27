@@ -212,12 +212,10 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "iebpx") == 0){
             all_data.input.solver = IMPLICIT_EXTENDED_SYSTEM_BPX;
-            all_data.input.construct_R_flag = 1;
          }
          else if (strcmp(argv[arg_index], "async_iebpx") == 0){
             all_data.input.solver = IMPLICIT_EXTENDED_SYSTEM_BPX;
             all_data.input.async_flag = 1;
-            all_data.input.construct_R_flag = 1;
          }
       }
       else if (strcmp(argv[arg_index], "-smooth_interp") == 0)
