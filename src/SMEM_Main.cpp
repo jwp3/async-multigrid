@@ -84,7 +84,7 @@ int main (int argc, char *argv[])
    all_data.input.delay_flag = DELAY_NONE;
    all_data.input.omp_parfor_flag = 1;
    all_data.input.delay_frac = 0.0;
-   all_data.input.construct_R_flag = 0;
+   all_data.input.construct_R_flag = 1;
 
    int num_cycles = 20;
    int start_cycle = num_cycles;
@@ -476,8 +476,8 @@ int main (int argc, char *argv[])
          all_data.input.delay_flag = DELAY_ALL;
          all_data.input.delay_frac = 1.0;
       }
-      else if (strcmp(argv[arg_index], "-construct_R") == 0){
-         all_data.input.construct_R_flag = 1;
+      else if (strcmp(argv[arg_index], "-no_construct_R") == 0){
+         all_data.input.construct_R_flag = 0;
       }
       arg_index++;
    }
