@@ -840,27 +840,28 @@ void PartitionGrids(AllData *all_data)
                   SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, nnz_per_thread, num_level_threads, shift_t, 
                                                                  &(all_data->thread.A_ns[inner_level][t]), &(all_data->thread.A_ne[inner_level][t]));
 
+                  // TODO: better row balancing
                   n_per_thread = (n + num_level_threads - 1)/num_level_threads;
                   SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, n_per_thread, num_level_threads, shift_t,
                                                                  &(all_data->thread.row_ns[inner_level][t]), &(all_data->thread.row_ne[inner_level][t]));
 
                   if (inner_level < num_levels-1){
-                      hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
-                      nnz = hypre_CSRMatrixNumNonzeros(P);
-                      nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                      SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, P, nnz_per_thread, num_level_threads, shift_t,
-                                                                     &(all_data->thread.P_ns[inner_level][t]), &(all_data->thread.P_ne[inner_level][t]));
-                      if (all_data->input.construct_R_flag == 1){
-                         hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
-                         nnz = hypre_CSRMatrixNumNonzeros(R);
-                         nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                         SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, R, nnz_per_thread, num_level_threads, shift_t,
-                                                                        &(all_data->thread.R_ns[inner_level][t]), &(all_data->thread.R_ne[inner_level][t]));
-                      }
-                      else {
-                         all_data->thread.R_ns[inner_level][t] = all_data->thread.P_ns[inner_level][t];
-                         all_data->thread.R_ne[inner_level][t] = all_data->thread.P_ne[inner_level][t];
-                      }
+                     hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
+                     nnz = hypre_CSRMatrixNumNonzeros(P);
+                     nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                     SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, P, nnz_per_thread, num_level_threads, shift_t,
+                                                                    &(all_data->thread.P_ns[inner_level][t]), &(all_data->thread.P_ne[inner_level][t]));
+                     if (all_data->input.construct_R_flag == 1){
+                        hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
+                        nnz = hypre_CSRMatrixNumNonzeros(R);
+                        nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+                        SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, R, nnz_per_thread, num_level_threads, shift_t,
+                                                                       &(all_data->thread.R_ns[inner_level][t]), &(all_data->thread.R_ne[inner_level][t]));
+                     }
+                     else {
+                        all_data->thread.R_ns[inner_level][t] = all_data->thread.P_ns[inner_level][t];
+                        all_data->thread.R_ne[inner_level][t] = all_data->thread.P_ne[inner_level][t];
+                     }
                   }
                }
             }

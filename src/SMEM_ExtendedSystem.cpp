@@ -186,18 +186,15 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
       else {
          y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          r = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
-         z = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
             thread_level = all_data->thread.thread_levels[tid][q];
-            ns = all_data->thread.A_ns[thread_level][tid];
-            ne = all_data->thread.A_ne[thread_level][tid];
+            ns = all_data->thread.row_ns[thread_level][tid];
+            ne = all_data->thread.row_ne[thread_level][tid];
             int n_loc = ne - ns + 1;
             int n = all_data->grid.n[thread_level]; 
             y[thread_level] = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
             r[thread_level] = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
-            z[thread_level] = (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
-         }
-         
+         }         
       }
 
       srand(tid);
@@ -279,9 +276,9 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             HYPRE_Real **u = all_data->vector.u;
             HYPRE_Real **f = all_data->vector.f;
             HYPRE_Real **e = all_data->vector.e;
+            HYPRE_Real **z = all_data->vector.z;
             //HYPRE_Real **y = all_data->vector.y;
             //HYPRE_Real **r = all_data->vector.r;
-            //HYPRE_Real **z = all_data->vector.z;
 
             hypre_CSRMatrix **P = all_data->matrix.P;
             hypre_CSRMatrix **R = all_data->matrix.R;
@@ -404,8 +401,12 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                            ns, ne);
                all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
 
+               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+
                HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[thread_level]);
                HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[thread_level]);
+               ns = row_ns[thread_level][tid];
+               ne = row_ne[thread_level][tid];
                vec_start = omp_get_wtime();
                for (int i = ns; i < ne; i++){
                   int ii = i-ns;
@@ -418,7 +419,11 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   y[thread_level][ii] = u_prev;
                }
                all_data->output.vec_wtime[tid] += omp_get_wtime() - vec_start;
+
                SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+
+               ns = A_ns[thread_level][tid];
+               ne = A_ne[thread_level][tid];
                A_matvec_start = omp_get_wtime();
                SMEM_MatVec(all_data,
                            A[thread_level],
@@ -433,6 +438,8 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                }
                all_data->output.vec_wtime[tid] += omp_get_wtime() - vec_start;
                if (all_data->input.check_resnorm_flag == 1 && loc_iters > 1){
+                  ns = row_ns[thread_level][tid];
+                  ne = row_ne[thread_level][tid];
                   innerprod_start = omp_get_wtime();
                   for (int i = ns; i < ne; i++){
                      int ii = i-ns;
