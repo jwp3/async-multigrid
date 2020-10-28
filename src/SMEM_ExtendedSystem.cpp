@@ -188,8 +188,10 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
          r = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
          for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
             thread_level = all_data->thread.thread_levels[tid][q];
-            ns = all_data->thread.row_ns[thread_level][tid];
-            ne = all_data->thread.row_ne[thread_level][tid];
+            // ns = row_ns[thread_level][tid];
+            // ne = row_ne[thread_level][tid];
+            ns = all_data->thread.A_ns[thread_level][tid];
+            ne = all_data->thread.A_ne[thread_level][tid];
             int n_loc = ne - ns + 1;
             int n = all_data->grid.n[thread_level]; 
             y[thread_level] = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
@@ -391,26 +393,35 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                HYPRE_Real **z1 = all_data->level_vector[thread_level].z1;
                HYPRE_Real **z2 = all_data->level_vector[thread_level].z2;
 
+              // ns = A_ns[thread_level][tid];
+              // ne = A_ne[thread_level][tid];
+              // A_matvec_start = omp_get_wtime();
+              // SMEM_MatVec(all_data,
+              //             A[thread_level],
+              //             z1[thread_level],
+              //             z[thread_level],
+              //             ns, ne);
+              // all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
+              // SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+
+              // ns = row_ns[thread_level][tid];
+              // ne = row_ne[thread_level][tid];
+
                ns = A_ns[thread_level][tid];
                ne = A_ne[thread_level][tid];
-               A_matvec_start = omp_get_wtime();
-               SMEM_MatVec(all_data,
-                           A[thread_level],
-                           z1[thread_level],
-                           z[thread_level],
-                           ns, ne);
-               all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
-
-               SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-
                HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[thread_level]);
+               HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A[thread_level]);
                HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[thread_level]);
-               ns = row_ns[thread_level][tid];
-               ne = row_ne[thread_level][tid];
                vec_start = omp_get_wtime();
                for (int i = ns; i < ne; i++){
-                  int ii = i-ns;
-                  z[thread_level][i] += z2[thread_level][i];
+                  double Axi = 0.0;
+                  for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+                     Axi += A_data[jj] * z1[thread_level][A_j[jj]];
+                  }
+                  z[thread_level][i] = Axi + z2[thread_level][i];
+
+                  int ii = i-ns; 
+                 // z[thread_level][i] += z2[thread_level][i];
                   r[thread_level][ii] = f[thread_level][i] - z[thread_level][i];
                   double u_prev = u[thread_level][i];
                   double ui = y[thread_level][ii] + omega * (delta * r[thread_level][ii] / A_data[A_i[i]] + u[thread_level][i] - y[thread_level][ii]);

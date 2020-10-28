@@ -826,45 +826,64 @@ void PartitionGrids(AllData *all_data)
       for (int level = finest_level; level < num_levels; level++){
          num_level_threads = all_data->thread.level_threads[level].size();
          for (int inner_level = 0; inner_level < num_levels; inner_level++){
-            if (inner_level < num_levels){
-               HYPRE_Int n, nnz, nnz_per_thread, n_per_thread;
-               for (int i = 0; i < num_level_threads; i++){
-                  int t = all_data->thread.level_threads[level][i];
-                  int rest, size;
-                  int shift_t = t - all_data->thread.level_threads[level][0];
-                  
-                  hypre_CSRMatrix *A = all_data->matrix.A[inner_level];
-                  nnz = hypre_CSRMatrixNumNonzeros(A);
-                  n = hypre_CSRMatrixNumRows(A);
+            HYPRE_Int n, nnz, nnz_per_thread, n_per_thread;
+            for (int i = 0; i < num_level_threads; i++){
+               int t = all_data->thread.level_threads[level][i];
+               int rest, size;
+               int shift_t = t - all_data->thread.level_threads[level][0];
+               
+               hypre_CSRMatrix *A = all_data->matrix.A[inner_level];
+               nnz = hypre_CSRMatrixNumNonzeros(A);
+               n = hypre_CSRMatrixNumRows(A);
+               nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
+               SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, nnz_per_thread, num_level_threads, shift_t, 
+                                                              &(all_data->thread.A_ns[inner_level][t]), &(all_data->thread.A_ne[inner_level][t]));
+
+               if (inner_level < num_levels-1){
+                  hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
+                  nnz = hypre_CSRMatrixNumNonzeros(P);
                   nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                  SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, nnz_per_thread, num_level_threads, shift_t, 
-                                                                 &(all_data->thread.A_ns[inner_level][t]), &(all_data->thread.A_ne[inner_level][t]));
-
-                  // TODO: better row balancing
-                  n_per_thread = (n + num_level_threads - 1)/num_level_threads;
-                  SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, A, n_per_thread, num_level_threads, shift_t,
-                                                                 &(all_data->thread.row_ns[inner_level][t]), &(all_data->thread.row_ne[inner_level][t]));
-
-                  if (inner_level < num_levels-1){
-                     hypre_CSRMatrix *P = all_data->matrix.P[inner_level];
-                     nnz = hypre_CSRMatrixNumNonzeros(P);
+                  SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, P, nnz_per_thread, num_level_threads, shift_t,
+                                                                 &(all_data->thread.P_ns[inner_level][t]), &(all_data->thread.P_ne[inner_level][t]));
+                  if (all_data->input.construct_R_flag == 1){
+                     hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
+                     nnz = hypre_CSRMatrixNumNonzeros(R);
                      nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                     SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, P, nnz_per_thread, num_level_threads, shift_t,
-                                                                    &(all_data->thread.P_ns[inner_level][t]), &(all_data->thread.P_ne[inner_level][t]));
-                     if (all_data->input.construct_R_flag == 1){
-                        hypre_CSRMatrix *R = all_data->matrix.R[inner_level];
-                        nnz = hypre_CSRMatrixNumNonzeros(R);
-                        nnz_per_thread = (nnz + num_level_threads - 1)/num_level_threads;
-                        SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, R, nnz_per_thread, num_level_threads, shift_t,
-                                                                       &(all_data->thread.R_ns[inner_level][t]), &(all_data->thread.R_ne[inner_level][t]));
-                     }
-                     else {
-                        all_data->thread.R_ns[inner_level][t] = all_data->thread.P_ns[inner_level][t];
-                        all_data->thread.R_ne[inner_level][t] = all_data->thread.P_ne[inner_level][t];
-                     }
+                     SMEM_CSRMatrixGetLoadBalancedPartitionBoundary(all_data, R, nnz_per_thread, num_level_threads, shift_t,
+                                                                    &(all_data->thread.R_ns[inner_level][t]), &(all_data->thread.R_ne[inner_level][t]));
+                  }
+                  else {
+                     all_data->thread.R_ns[inner_level][t] = all_data->thread.P_ns[inner_level][t];
+                     all_data->thread.R_ne[inner_level][t] = all_data->thread.P_ne[inner_level][t];
                   }
                }
             }
+
+            int *parts = (int *)calloc(num_level_threads, sizeof(int));
+            int *disps = (int *)calloc(num_level_threads, sizeof(int));
+            int count = 0;
+            hypre_CSRMatrix *A = all_data->matrix.A[inner_level];
+            n = hypre_CSRMatrixNumRows(A);
+            while (count < n){
+               for (int i = 0; i < num_level_threads; i++){
+                  parts[i]++;
+                  count++;
+                  if (count == n){
+                     break;
+                  }
+               }
+            }
+            disps[0] = 0;
+            for (int i = 0; i < num_level_threads; i++){
+               disps[i+1] = disps[i] + parts[i]; 
+            }
+            for (int i = 0; i < num_level_threads; i++){
+               int t = all_data->thread.level_threads[level][i];
+               all_data->thread.row_ns[inner_level][t] = disps[i];
+               all_data->thread.row_ne[inner_level][t] = disps[i+1];
+            }
+            free(parts);
+            free(disps);
          }
       } 
    }
