@@ -941,10 +941,10 @@ void ComputeWork(AllData *all_data)
          }
          for (int inner_level = finest_level; inner_level < level; inner_level++){
             all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.R[inner_level]);
-            all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[inner_level]);
+            all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[inner_level+1]);
          }
          all_data->grid.level_work[level] += 2 * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
-         all_data->grid.level_work[level] += 7 * hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+         all_data->grid.level_work[level] += 10 * hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
       }
       else {
          if (all_data->input.res_compute_type == GLOBAL){
