@@ -860,7 +860,7 @@ void PartitionGrids(AllData *all_data)
             }
 
             int *parts = (int *)calloc(num_level_threads, sizeof(int));
-            int *disps = (int *)calloc(num_level_threads, sizeof(int));
+            int *disps = (int *)calloc(num_level_threads+1, sizeof(int));
             int count = 0;
             hypre_CSRMatrix *A = all_data->matrix.A[inner_level];
             n = hypre_CSRMatrixNumRows(A);
