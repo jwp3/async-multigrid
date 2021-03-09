@@ -137,6 +137,7 @@
 #define DELAY_ONE 1
 #define DELAY_SOME 2
 #define DELAY_ALL 3
+#define FAIL_ONE 4
 
 using namespace std;
 #ifdef USE_MFEM
@@ -220,6 +221,8 @@ typedef struct{
    int omp_parfor_flag;
    double delay_frac;
    int construct_R_flag;
+   int hypre_solver_flag;
+   int fail_iter;
 }InputData;
 
 typedef struct{

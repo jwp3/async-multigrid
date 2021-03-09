@@ -138,7 +138,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    #pragma omp parallel
    { 
       int tid = omp_get_thread_num();
-      int ns, ne, ns_col, ne_col, n_loc;
+      int ns, ne, ns_col, ne_col, n_loc, nnz_loc;
       int fine_grid, coarse_grid;
       int finest_level, coarsest_level;
       int thread_level;
@@ -156,32 +156,71 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
       double mu22 = pow(2.0 * mu, 2.0);
       double omega = 2.0;
 
-      int loc_iters = 1;
+      int i_loc, jj_loc, loc_iters = 1;
       iters[tid * cache_line] = 1; 
       unsigned int usec;
       int delay_flag;
       
-      HYPRE_Real *y_loc, *r_loc, **y, **r, **z;
+      HYPRE_Real *A_data_loc, *y_loc, *r_loc, **y, **r, **z, *b_loc;
+      HYPRE_Int *A_i_loc, *A_j_loc;
 
       if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
-         ne = all_data->thread.AA_NE[tid];
          if (all_data->input.omp_parfor_flag == 1){
-            ns = 0;
-            n_loc = n;
+            n_loc = 0;
+            nnz_loc = 0;
+            #pragma omp for nowait schedule(static, chunk_size)
+            for (int i = 0; i < n; i++){
+               n_loc++;
+               nnz_loc += A_i[i+1] - A_i[i] + 1;
+            }
          }
          else {
             ns = all_data->thread.AA_NS[tid];
+            ne = all_data->thread.AA_NE[tid];
             n_loc = ne - ns + 1;
+            for (int i = ns; i < ne; i++){
+               nnz_loc += A_i[i+1] - A_i[i] + 1;
+            }
          }
          
          y_loc = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
          r_loc = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
+         b_loc = (HYPRE_Real *)calloc(n_loc, sizeof(HYPRE_Real));
+         A_i_loc = (HYPRE_Int *)calloc(n_loc+1, sizeof(HYPRE_Real));
+         A_j_loc = (HYPRE_Int *)calloc(nnz_loc, sizeof(HYPRE_Real));
+         A_data_loc = (HYPRE_Real *)calloc(nnz_loc, sizeof(HYPRE_Real));
 
-        // sort(col_read.begin(), col_read.end());
-        // col_read.erase(unique(col_read.begin(), col_read.end()), col_read.end());
-        // int min_col = *min_element(col_read.begin(), col_read.end());
-        // int max_col = *max_element(col_read.begin(), col_read.end());
-        // vector<double> x_read(max_col - min_col + 1);
+         if (all_data->input.omp_parfor_flag == 1){
+            i_loc = 0;
+            jj_loc = 0;
+            #pragma omp for nowait schedule(static, chunk_size)
+            for (int i = 0; i < n; i++){
+               b_loc[i_loc] = b[i];
+               A_i_loc[i_loc] = A_i[i];
+               A_i_loc[i_loc+1] = A_i[i+1];
+               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+                  A_data_loc[jj_loc] = A_data[jj];
+                  A_j_loc[jj_loc] = A_j[jj];
+                  jj_loc++;
+               }
+               i_loc++;
+            }
+         }
+         else {
+            i_loc = 0;
+            jj_loc = 0;
+            for (int i = ns; i < ne; i++){
+               b_loc[i_loc] = b[i];
+               A_i_loc[i_loc] = A_i[i];
+               A_i_loc[i_loc+1] = A_i[i+1];
+               for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+                  A_data_loc[jj_loc] = A_data[jj];
+                  A_j_loc[jj_loc] = A_j[jj];
+                  jj_loc++;
+               }
+               i_loc++;
+            }
+         }
       }
       else {
          y = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
@@ -202,12 +241,16 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
       srand(tid);
       usec = 0;
       delay_flag = 0;      
+      int delayed_thread = num_threads-1;
       if (all_data->input.delay_flag == DELAY_SOME || all_data->input.delay_flag == DELAY_ALL){
          delay_flag = 1;
          usec = usec_vec[tid];
       }
-      else if (tid == num_threads/2 && all_data->input.delay_flag == DELAY_ONE){
+      else if (tid == delayed_thread && all_data->input.delay_flag == DELAY_ONE){
          delay_flag = 1;
+         usec = all_data->input.delay_usec;
+      }
+      else if (tid == delayed_thread && all_data->input.delay_flag == FAIL_ONE){
          usec = all_data->input.delay_usec;
       }
 
@@ -215,64 +258,106 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
       double start = omp_get_wtime();
       if (all_data->input.num_cycles > 1)
       while(1){
-         if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){ 
-           // for (int i = 0; i < col_read.size(); i++){
-           //    int j = col_read[i];
-           //    x_read[j-min_col] = x[j];
-           // }
-  
+         if (tid == delayed_thread && all_data->input.delay_flag == FAIL_ONE){
+            if (loc_iters == all_data->input.fail_iter){
+               delay_flag = 1;
+            }
+            else {
+               delay_flag = 0;
+            }
+         }
+
+         if (delay_flag == 1){
+#ifdef WINDOWS
+            this_thread::sleep_for(chrono::microseconds(usec));
+#else
+            usleep(usec);
+#endif
+         }
+
+         if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){  
             A_matvec_start = omp_get_wtime();
-            if (all_data->input.async_flag == 0){
-               #pragma omp for schedule(static, chunk_size)
+            i_loc = 0;
+            if (all_data->input.omp_parfor_flag == 1){
+               #pragma omp for schedule(static, chunk_size) nowait
                for (int i = 0; i < n; i++){
-             // for (int i = ns; i < ne; i++){
-                  r_loc[i-ns] = b[i];
+                  r_loc[i_loc] = b_loc[i_loc];
                   for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                     r_loc[i-ns] -= A_data[jj] * x[A_j[jj]];
-                    // r_loc[i-ns] -= A_data[jj] * x_read[A_j[jj]-min_col];
+                     r_loc[i_loc] -= A_data[jj] * x[A_j[jj]];
                   }
+                  i_loc++;
                } 
             }
-            else { 
-               #pragma omp for nowait schedule(static, chunk_size)
-               for (int i = 0; i < n; i++){
-             // for (int i = ns; i < ne; i++){
-                  r_loc[i-ns] = b[i];
+            else {
+               for (int i = ns; i < ne; i++){
+                  r_loc[i_loc] = b_loc[i_loc];
                   for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                     r_loc[i-ns] -= A_data[jj] * x[A_j[jj]];
-                    // r_loc[i-ns] -= A_data[jj] * x_read[A_j[jj]-min_col];
+                     r_loc[i_loc] -= A_data[jj] * x[A_j[jj]];
                   }
+                  i_loc++;
                }
             }
             all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
 
             vec_start = omp_get_wtime();
-            if (all_data->input.check_resnorm_flag == 1 && loc_iters > 1){
-               r_inner_prod_loc = 0;
-               #pragma omp for nowait schedule(static, chunk_size)
-               for (int i = 0; i < n; i++){
-             //  for (int i = ns; i < ne; i++){
-                  double x_tmp = x[i];
-                  double x_write = y_loc[i-ns] + omega * (delta * r_loc[i-ns] / A_data[A_i[i]] + x[i] - y_loc[i-ns]);
-                 // #pragma omp atomic write
-                  x[i] = x_write;
-                  y_loc[i-ns] = x_tmp;
-                  r_inner_prod_loc += pow(r_loc[i-ns], 2.0);
+            i_loc = 0;
+            if (all_data->input.omp_parfor_flag == 1){
+               if (all_data->input.check_resnorm_flag == 1 && loc_iters > 1){
+                  r_inner_prod_loc = 0;
+                  #pragma omp for schedule(static, chunk_size) nowait
+                  for (int i = 0; i < n; i++){
+                     double x_tmp = x[i];
+                     double x_write = y_loc[i_loc] + omega * (delta * r_loc[i_loc] / A_data[A_i[i]] + x_tmp - y_loc[i_loc]);
+                    // #pragma omp atomic write
+                     x[i] = x_write;
+                     y_loc[i_loc] = x_tmp;
+                     r_inner_prod_loc += pow(r_loc[i_loc], 2.0);
+                     i_loc++;
+                  }
+                  r_norm2_glob[tid * cache_line] = r_inner_prod_loc;
                }
-               r_norm2_glob[tid * cache_line] = r_inner_prod_loc;
+               else {
+                  #pragma omp for schedule(static, chunk_size) nowait
+                  for (int i = 0; i < n; i++){
+                     double x_tmp = x[i];
+                     double x_write = y_loc[i_loc] + omega * (delta * r_loc[i_loc] / A_data[A_i[i]] + x_tmp - y_loc[i_loc]);
+                    // #pragma omp atomic write
+                     x[i] = x_write;
+                     y_loc[i_loc] = x_tmp;
+                     i_loc++;
+                  }
+               }
             }
             else {
-               #pragma omp for nowait schedule(static, chunk_size)
-               for (int i = 0; i < n; i++){
-             //  for (int i = ns; i < ne; i++){
-                  double x_tmp = x[i];
-                  double x_write = y_loc[i-ns] + omega * (delta * r_loc[i-ns] / A_data[A_i[i]] + x[i] - y_loc[i-ns]);
-                 // #pragma omp atomic write
-                  x[i] = x_write;
-                  y_loc[i-ns] = x_tmp;
+               if (all_data->input.check_resnorm_flag == 1 && loc_iters > 1){
+                  r_inner_prod_loc = 0;
+                  for (int i = ns; i < ne; i++){
+                     double x_tmp = x[i];
+                     double x_write = y_loc[i_loc] + omega * (delta * r_loc[i_loc] / A_data[A_i[i]] + x_tmp - y_loc[i_loc]);
+                    // #pragma omp atomic write
+                     x[i] = x_write;
+                     y_loc[i_loc] = x_tmp;
+                     r_inner_prod_loc += pow(r_loc[i_loc], 2.0);
+                     i_loc++;
+                  }
+                  r_norm2_glob[tid * cache_line] = r_inner_prod_loc;
+               }
+               else {
+                  for (int i = ns; i < ne; i++){
+                     double x_tmp = x[i];
+                     double x_write = y_loc[i_loc] + omega * (delta * r_loc[i_loc] / A_data[A_i[i]] + x_tmp - y_loc[i_loc]);
+                     //#pragma omp atomic write
+                     x[i] = x_write;
+                     y_loc[i_loc] = x_tmp;
+                     i_loc++;
+                  }
                }
             }
             all_data->output.vec_wtime[tid] += omp_get_wtime() - vec_start;
+
+            if (all_data->input.async_flag == 0){
+               #pragma omp barrier
+            }
          }
          else {
             HYPRE_Real **u = all_data->vector.u;
@@ -449,8 +534,10 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                }
                all_data->output.vec_wtime[tid] += omp_get_wtime() - vec_start;
                if (all_data->input.check_resnorm_flag == 1 && loc_iters > 1){
-                  ns = row_ns[thread_level][tid];
-                  ne = row_ne[thread_level][tid];
+                 // ns = row_ns[thread_level][tid];
+                 // ne = row_ne[thread_level][tid];
+                  ns = A_ns[thread_level][tid];
+                  ne = A_ne[thread_level][tid];
                   innerprod_start = omp_get_wtime();
                   for (int i = ns; i < ne; i++){
                      int ii = i-ns;
@@ -466,20 +553,11 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
          omega = 1.0 / (1.0 - omega / mu22);
          loc_iters++; 
 
-         if (delay_flag == 1){
-#ifdef WINDOWS
-            this_thread::sleep_for(chrono::microseconds(usec));
-#else
-            usleep(usec);
-#endif
-         }
-
          if (all_data->input.async_flag == 0){
             if (loc_iters == all_data->input.num_cycles){
                break;
             }
             if (all_data->input.check_resnorm_flag == 1 && loc_iters > 1){
-               //TODO: compute global residual 2-norm using reduction
                if (tid == 0){
                   innerprod_start = omp_get_wtime();
                   r_inner_prod_glob = 0;

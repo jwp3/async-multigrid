@@ -28,6 +28,17 @@ void SMEM_Solve(AllData *all_data)
    HYPRE_BoomerAMGSetPrintLevel(all_data->hypre.solver, 0);
    HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 1);
 
+   int num_threads = all_data->input.num_threads;
+   unsigned int *usec_vec = (unsigned int *)calloc(num_threads, sizeof(unsigned int));
+   srand(0);
+   int num_delayed = (int)ceil((double)num_threads * all_data->input.delay_frac);
+   int count_delayed = 0;
+   for (int t = num_threads-1; t >= 0; t--){
+      if (count_delayed == num_delayed) break;
+      count_delayed++;
+      usec_vec[t] = all_data->input.delay_usec;
+   }
+
    HYPRE_Real *r;
    if (all_data->input.solver == PAR_BPX){
       r = &(all_data->vector.rr[0]);
@@ -94,7 +105,40 @@ void SMEM_Solve(AllData *all_data)
       {
          int tid = omp_get_thread_num();
          double omega = 2.0;
+         srand(tid);
+         unsigned int usec = 0;
+         int delay_flag = 0;
+         int delay_thread = num_threads-1;
+         if (all_data->input.delay_flag == DELAY_SOME || all_data->input.delay_flag == DELAY_ALL){
+            delay_flag = 1;
+            usec = usec_vec[tid];
+         }
+         else if (tid == delay_thread && all_data->input.delay_flag == DELAY_ONE){
+            delay_flag = 1;
+            usec = all_data->input.delay_usec;
+         }
+         else if (tid == delay_thread && all_data->input.delay_flag == FAIL_ONE){
+            usec = all_data->input.delay_usec;
+         }
+
          for (int k = k_start; k <= all_data->input.num_cycles; k++){
+            if (tid == delay_thread && all_data->input.delay_flag == FAIL_ONE){
+               if (k == all_data->input.fail_iter){
+                  delay_flag = 1;
+               }
+               else {
+                  delay_flag = 0;
+               }
+            }
+            
+            if (delay_flag == 1){
+#ifdef WINDOWS
+               this_thread::sleep_for(chrono::microseconds(usec));
+#else
+               usleep(usec);
+#endif
+            }
+
             if (all_data->input.solver == MULTADD){
                if (all_data->input.thread_part_type == ALL_LEVELS){
                   SMEM_Sync_Add_Vcycle(all_data);

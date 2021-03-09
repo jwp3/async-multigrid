@@ -77,7 +77,7 @@ int main (int argc, char *argv[])
    all_data.input.print_level_stats_flag = 0;
    all_data.input.print_reshist_flag = 0;
    all_data.input.read_type = READ_SOL;
-   all_data.input.eig_power_max_iters = 50;
+   all_data.input.eig_power_max_iters = 20;
    all_data.input.cheby_flag = 0;
    all_data.input.precond_flag = 0;
    all_data.input.delay_usec = 0;
@@ -85,10 +85,12 @@ int main (int argc, char *argv[])
    all_data.input.omp_parfor_flag = 1;
    all_data.input.delay_frac = 0.0;
    all_data.input.construct_R_flag = 1;
+   all_data.input.hypre_solver_flag = 0;
+   all_data.input.fail_iter = -1;
 
-   int num_cycles = 20;
-   int start_cycle = num_cycles;
-   int c = 1;
+   int max_num_iters = 20;
+   int start_num_iters = max_num_iters;
+   int incr_num_iters = 1;
    int warmup = 0;
    int only_setup_flag = 0;
    int strongscale_flag = 0;
@@ -96,6 +98,7 @@ int main (int argc, char *argv[])
    /* Parse command line */
    int arg_index = 0;
    int print_usage = 0;
+   int background_program = 0;
 
    while (arg_index < argc)
    {
@@ -218,6 +221,9 @@ int main (int argc, char *argv[])
             all_data.input.async_flag = 1;
          }
       }
+      else if (strcmp(argv[arg_index], "-use_hypre_solver") == 0){
+         all_data.input.hypre_solver_flag = 1;
+      }
       else if (strcmp(argv[arg_index], "-smooth_interp") == 0)
       {
          arg_index++;
@@ -238,20 +244,25 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.hypre.strong_threshold = atof(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-num_cycles") == 0)
+      else if (strcmp(argv[arg_index], "-num_iters") == 0)
       {
          arg_index++;
-         num_cycles = start_cycle = atoi(argv[arg_index]);
+         max_num_iters = start_num_iters = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-start_cycle") == 0)
+      else if (strcmp(argv[arg_index], "-max_num_iters") == 0)
       {
          arg_index++;
-         start_cycle = atoi(argv[arg_index]);
+         max_num_iters = atoi(argv[arg_index]);
       }
-      else if (strcmp(argv[arg_index], "-incr_cycle") == 0)
+      else if (strcmp(argv[arg_index], "-start_num_iters") == 0)
       {
          arg_index++;
-         c = atoi(argv[arg_index]);
+         start_num_iters = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-incr_num_iters") == 0)
+      {
+         arg_index++;
+         incr_num_iters = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-tol") == 0)
       {
@@ -470,16 +481,34 @@ int main (int argc, char *argv[])
          all_data.input.delay_flag = DELAY_ALL;
          all_data.input.delay_frac = 1.0;
       }
-      else if (strcmp(argv[arg_index], "-delay_all") == 0){
+      else if (strcmp(argv[arg_index], "-fail_one") == 0){
          arg_index++;
          all_data.input.delay_usec = atoi(argv[arg_index]);
-         all_data.input.delay_flag = DELAY_ALL;
-         all_data.input.delay_frac = 1.0;
+         arg_index++;
+         all_data.input.fail_iter = atoi(argv[arg_index]);
+         all_data.input.delay_flag = FAIL_ONE;
       }
       else if (strcmp(argv[arg_index], "-no_construct_R") == 0){
          all_data.input.construct_R_flag = 0;
       }
+      else if (strcmp(argv[arg_index], "-background_program") == 0){
+         background_program = 1; 
+      }
+      else if (strcmp(argv[arg_index], "-no_omp_parfor") == 0){
+         all_data.input.omp_parfor_flag = 0;
+      }
       arg_index++;
+   }
+
+   if (background_program == 1){
+      omp_set_num_threads(all_data.input.num_threads);
+      while(1){
+         #pragma omp parallel
+         {
+            RandDouble(-1.0, 1.0);
+         }
+      }
+      return 0;
    }
 
    if (all_data.input.solver == MULT ||
@@ -518,139 +547,71 @@ int main (int argc, char *argv[])
    }
    omp_set_num_threads(all_data.input.num_threads);
 
-//   vector<int> t_vec;
-//   if (strongscale_flag == 1){
-//      t_vec.push_back(1);
-//      t_vec.push_back(2);
-//      int t = 4;
-//      while (1){
-//         t_vec.push_back(t);
-//         if (t == 36) break;
-//         t += 4;
-//      }
-//   }
-//   else {
-//      t_vec.push_back(all_data.input.num_threads);
-//   }
-
-//   if (all_data.input.hypre_test_error_flag == 1){
-//      int relax_type;
-//      if (all_data.input.smoother == L1_JACOBI){
-//         relax_type = 16;
-//      }
-//      else if (all_data.input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
-//	       all_data.input.smoother == GAUSS_SEIDEL){
-//         relax_type = 3;
-//      }
-//      else{
-//         relax_type = 0;
-//      }
-//      HYPRE_ParCSRHybridSetStrongThreshold(solver, strong_threshold);
-//      HYPRE_BoomerAMGSetRelaxType(solver, 0);
-//      HYPRE_BoomerAMGSetRelaxWt(solver, all_data.input.smooth_weight);
-//      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &b);
-//      HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
-//      HYPRE_IJVectorInitialize(b);
-//
-//      HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, all_data.grid.n[0]-1, &x);
-//      HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
-//      HYPRE_IJVectorInitialize(x);
-//
-//      double *rhs_values, *x_values;
-//      int    *rows;
-//
-//      rhs_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
-//      x_values =  (double*) calloc(all_data.grid.n[0], sizeof(double));
-//      rows = (int*) calloc(all_data.grid.n[0], sizeof(int));
-//
-//      for (int i = 0; i < all_data.grid.n[0]; i++){
-//         rhs_values[i] = 1.0;
-//         x_values[i] = 0.0;
-//         rows[i] = i;
-//      }
-//
-//      HYPRE_IJVectorSetValues(b, all_data.grid.n[0], rows, rhs_values);
-//      HYPRE_IJVectorSetValues(x, all_data.grid.n[0], rows, x_values);
-//
-//      free(x_values);
-//      free(rhs_values);
-//      free(rows);
-//
-//      HYPRE_IJVectorAssemble(b);
-//      HYPRE_IJVectorGetObject(b, (void **)&par_b);
-//      HYPRE_IJVectorAssemble(x);
-//      HYPRE_IJVectorGetObject(x, (void **)&par_x);
-//
-//      HYPRE_BoomerAMGSolve(solver, parcsr_A, par_b, par_x);
-//   }
-
-  // if (time_barrier_flag == 1 && all_data.input.thread_part_type == ONE_LEVEL){
-  //    double start, barrier_wtime;
-  //    all_data.barrier.counter = 0;
-  //    all_data.barrier.flag = 0;
-  //    omp_init_lock(&(all_data.barrier.lock));
-  //    start = omp_get_wtime();
-  //    #pragma omp parallel
-  //    {
-  //       for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){
-  //          SMEM_LevelBarrier(&all_data, all_data.thread.barrier_flags, 0);
-  //         // SMEM_SRCLevelBarrier(&all_data, &(all_data.barrier.flag), 0);
-  //         // #pragma omp flush(all_data)
-  //       }
-  //    }
-  //    printf("my time = %e\n", omp_get_wtime() - start);
-  //    omp_destroy_lock(&(all_data.barrier.lock));
-  //    start = omp_get_wtime();
-  //    #pragma omp parallel
-  //    {
-  //       for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){
-  //          #pragma omp barrier
-  //          SMEM_LevelBarrier(&all_data, all_data.thread.barrier_flags, 0);
-  //       }
-  //    }
-  //    printf("OpenMP time = %e\n", omp_get_wtime() - start);
-  //    return 0;
-  // }
-
    srand(time(NULL));
    if (warmup == 1){
       num_runs++;
    }
-   for (int cycle = start_cycle; cycle <= num_cycles; cycle += c){   
-      all_data.input.num_cycles = cycle;
+   for (int num_iters = start_num_iters; num_iters <= max_num_iters; num_iters += incr_num_iters){   
+      all_data.input.num_cycles = num_iters;
       for (int run = 1; run <= num_runs; run++){
-         InitSolve(&all_data);
-         if (all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX ||
-             all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
-            SMEM_ExtendedSystemSolve(&all_data);
+         if (all_data.input.hypre_solver_flag == 1){
+            start = omp_get_wtime();
+            HYPRE_Solver pcg_solver;
+            HYPRE_BoomerAMGSetMaxIter(all_data.hypre.solver, 1);
+            HYPRE_BoomerAMGSetPrintLevel(all_data.hypre.solver, 0);
+            HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &pcg_solver);
+            HYPRE_PCGSetPrintLevel(pcg_solver, 0);
+            HYPRE_PCGSetTwoNorm(pcg_solver, 1);
+            HYPRE_PCGSetMaxIter(pcg_solver, all_data.input.num_cycles);
+            HYPRE_PCGSetTol(pcg_solver, all_data.input.tol);
+            HYPRE_PCGSetPrintLevel(pcg_solver, 0);
+            HYPRE_PCGSetPrecond(pcg_solver,
+                                (HYPRE_PtrToSolverFcn) HYPRE_BoomerAMGSolve,
+                                (HYPRE_PtrToSolverFcn) HYPRE_BoomerAMGSetup,
+                                all_data.hypre.solver);
+            start = omp_get_wtime();
+            HYPRE_ParCSRPCGSetup(pcg_solver, all_data.hypre.parcsr_A, all_data.hypre.par_b, all_data.hypre.par_x);
+            all_data.output.setup_wtime += omp_get_wtime() - start;
+            start = omp_get_wtime();
+            HYPRE_ParCSRPCGSolve(pcg_solver, all_data.hypre.parcsr_A, all_data.hypre.par_b, all_data.hypre.par_x);
+            all_data.output.solve_wtime = omp_get_wtime() - start;
+            int num_iterations;
+            double final_res_norm;
+            HYPRE_PCGGetNumIterations(pcg_solver, &num_iterations);
+            HYPRE_PCGGetFinalRelativeResidualNorm(pcg_solver, &final_res_norm);
+            printf("Hypre PCG: %d %e %e\n", num_iterations, final_res_norm, all_data.output.solve_wtime);
          }
-        // else if (all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
-        //    SMEM_ImplicitExtendedSystemSolve(&all_data);
-        // }
          else {
-            SMEM_Solve(&all_data);
-           // if (all_data.input.mfem_test_error_flag == 1){
-           //    for (int i = 0; i < all_data.grid.n[0]; i++){
-           //       all_data.output.mfem_e_norm2 += pow(all_data.mfem.u[i] - all_data.vector.u[0][i], 2.0);
-           //      // printf("%e, %e, %e, %e\n",
-           //      //        all_data.mfem.u[i], par_x->local_vector->data[i], all_data.vector.u[0][i],
-           //      //        all_data.mfem.u[i] - par_x->local_vector->data[i]);
-           //    }
-           // }
-           // if (all_data.input.hypre_test_error_flag == 1){
-           //    for (int i = 0; i < all_data.grid.n[0]; i++){
-           //       all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
-           //    }
-           // }
-         }
-         if (warmup == 1){
-            if (all_data.input.print_output_flag == 1 && run > 1){
-               PrintOutput(all_data);
+            InitSolve(&all_data);
+            if (all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX ||
+                all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+               SMEM_ExtendedSystemSolve(&all_data);
             }
-         }
-         else {
-            if (all_data.input.print_output_flag == 1){
-               PrintOutput(all_data);
+            else {
+               SMEM_Solve(&all_data);
+              // if (all_data.input.mfem_test_error_flag == 1){
+              //    for (int i = 0; i < all_data.grid.n[0]; i++){
+              //       all_data.output.mfem_e_norm2 += pow(all_data.mfem.u[i] - all_data.vector.u[0][i], 2.0);
+              //      // printf("%e, %e, %e, %e\n",
+              //      //        all_data.mfem.u[i], par_x->local_vector->data[i], all_data.vector.u[0][i],
+              //      //        all_data.mfem.u[i] - par_x->local_vector->data[i]);
+              //    }
+              // }
+              // if (all_data.input.hypre_test_error_flag == 1){
+              //    for (int i = 0; i < all_data.grid.n[0]; i++){
+              //       all_data.output.hypre_e_norm2 += pow(par_x->local_vector->data[i] - all_data.vector.u[0][i], 2.0);
+              //    }
+              // }
+            }
+            if (warmup == 1){
+               if (all_data.input.print_output_flag == 1 && run > 1){
+                  PrintOutput(all_data);
+               }
+            }
+            else {
+               if (all_data.input.print_output_flag == 1){
+                  PrintOutput(all_data);
+               }
             }
          }
       }

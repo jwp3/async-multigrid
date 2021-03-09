@@ -17,23 +17,6 @@ SMEM_CPP_FILES = $(SRC_DIR)Laplacian.cpp \
 		 $(SRC_DIR)SMEM_ExtendedSystem.cpp \
 		 $(SRC_DIR)SMEM_Cheby.cpp \
 
-SMEM_HPP_FILES = $(SRC_DIR)Main.hpp \
-		 $(SRC_DIR)Laplacian.hpp \
-                 $(SRC_DIR)Elasticity.hpp \
-                 $(SRC_DIR)Maxwell.hpp \
-                 $(SRC_DIR)Misc.hpp \
-                 $(SRC_DIR)SEQ_MatVec.hpp \
-                 $(SRC_DIR)SEQ_Smooth.hpp \
-                 $(SRC_DIR)SEQ_AMG.hpp \
-                 $(SRC_DIR)SMEM_Setup.hpp \
-                 $(SRC_DIR)SMEM_MatVec.hpp \
-                 $(SRC_DIR)SMEM_Smooth.hpp \
-                 $(SRC_DIR)SMEM_Sync_AMG.hpp \
-                 $(SRC_DIR)SMEM_Async_AMG.hpp \
-                 $(SRC_DIR)SMEM_Solve.hpp \
-                 $(SRC_DIR)SMEM_ExtendedSystem.hpp \
-                 $(SRC_DIR)SMEM_Cheby.hpp \
-
 DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 		 $(SRC_DIR)DMEM_Misc.cpp \
 		 $(SRC_DIR)DMEM_BuildMatrix.cpp \
@@ -47,26 +30,32 @@ DMEM_CPP_FILES = $(SRC_DIR)Misc.cpp \
 		 $(SRC_DIR)DMEM_Smooth.cpp \
 		 $(SRC_DIR)DMEM_Eig.cpp \
 
+#nvcc -O2 -ccbin=mpixlC -gencode arch=compute_60,"code=sm_60" -expt-extended-lambda -dc --std=c++11 -Xcompiler -Wno-deprecated-register --x cu -Xcompiler "-O2 " -DHAVE_CONFIG_H
+
 SMEM_OBJ = $(SMEM_CPP_FILES:$(SRC_DIR)%.cpp=$(OBJ_DIR)%.o) obj/SMEM_Main.o
 
-CPP_COMPILE = g++ -fopenmp -O3 -std=c++0x -g
+CPP_COMPILE = g++ -fopenmp -O3 -g
 ICPC_COMPILE = icpc -qopenmp -std=c++11 -O3 -Wall
 MPIICPC_COMPILE = mpiicpc -qopenmp -std=c++11 -O3 #-mkl -g -w3
 MPICXX_COMPILE =  mpicxx -g -fopenmp -std=c++0x -O3 #-Wall
 
 COMPILE_CORI = CC -qopenmp -std=c++11 -O3 -mkl
-COMPILE_QUARTZ =  mpicxx -fopenmp -std=c++0x -O3
+COMPILE_QUARTZ =  mpicxx -fopenmp -std=c++0x -O3 -g -D USE_MFEM
 COMPILE_LASSEN = nvcc -g -O3 -std=c++11 -x=cu --expt-extended-lambda -arch=sm_70 -ccbin mpicxx
-COMPILE_JORDI = $(CPP_COMPILE) -D WINDOWS
 
-INCLUDE_CORI = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
-INCLUDE_GOTHAM = -I/home/jwp3local/async-multigrid/mfem/mfem-3.4 -I/home/jwp3local/async-multigrid/mfem/hypre-2.11.2/src/hypre/include
+COMPILE_JORDI = $(CPP_COMPILE) -D WINDOWS
 
 INCLUDE_JORDI = \
  -I./mfem/hypre/src/hypre/include \
  -I./mfem/metis-5.1.0/include \
  -I./eigen/Eigen \
  -I/usr/include \
+
+INCLUDE_CORI = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
+
+INCLUDE_GOTHAM = -I./mfem/mfem-3.4 \
+ -I./mfem/hypre/src/hypre/include \
+ -I./mfem/metis-5.1.0/include \
 
 INCLUDE_QUARTZ = \
  -I./mfem_quartz/mfem-4.0 \
@@ -85,10 +74,19 @@ LIBS_JORDI = \
  ./mfem/metis-5.1.0/lib/libmetis.a \
  /usr/lib/libmpi.dll.a \
 
+LIBS_GOTHAM = \
+ ./mfem/mfem-3.4/libmfem.a \
+ -L./mfem/mfem-3.4/ \
+ ./mfem/hypre/src/lib/libHYPRE.a \
+ ./mfem/metis-5.1.0/lib/libmetis.a \
+ -lrt -lmfem \
+
 LIBS_QUARTZ = \
  ./mfem_quartz/mfem-4.0/libmfem.a \
+ -L./mfem_quartz/mfem-4.0/ \
  ./mfem_quartz/hypre/src/lib/libHYPRE.a \
  ./mfem_quartz/metis-5.1.0/lib/libmetis.a \
+ -lrt -lmfem \
 
 LIBS_LASSEN = \
  -L./mfem_lassen/mfem-4.0 \
@@ -106,7 +104,11 @@ COMPILE = $(COMPILE_JORDI)
 LIBS = $(LIBS_JORDI)
 INCLUDE = $(INCLUDE_JORDI)
 
+all: SMEM_jordi
+
 SMEM_jordi: SMEM_Main_jordi
+
+SMEM_gotham: clean_smem_gotham SMEM_Main_gotham
 
 SMEM_lassen: clean_smem_lassen SMEM_Main_lassen
 
@@ -123,12 +125,11 @@ DMEM_quartz: clean_quartz DMEM_Main_quartz2
 SMEM_Main_jordi: $(SMEM_OBJ)
 	$(COMPILE) $(INCLUDE) $^ $(LIBS) -o $@ 
 
-#SMEM_Main_jordi: $(SRC_DIR)SMEM_Main.cpp
-#	$(COMPILE_JORDI) -c $(SMEM_CPP_FILES) $(SRC_DIR)SMEM_Main.cpp $(INCLUDE_JORDI)
-#	mkdir -p build
-#	mv $(subst src, .,$(SMEM_CPP_FILES:.cpp=.o)) build/
-#	mv SMEM_Main.o build/ 
-#	$(COMPILE_JORDI) $(SRC_DIR)SMEM_Main.cpp $(LIBS_JORDI) $(INCLUDE_JORDI) -o SMEM_Main_jordi
+SMEM_Main: $(SRC_DIR)SMEM_Main.cpp
+	$(COMPILE) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) -DEIGEN_DONT_VECTORIZE=1 $(LIBS) $(INCLUDE) -o SMEM_Main
+
+SMEM_Main_gotham: $(SRC_DIR)SMEM_Main.cpp
+	$(MPIICPC_COMPILE) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_GOTHAM) $(INCLUDE_GOTHAM) -o SMEM_Main_gotham
 
 SMEM_Main_quartz: $(SRC_DIR)SMEM_Main.cpp
 	$(COMPILE_QUARTZ) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o SMEM_Main_quartz
@@ -149,10 +150,16 @@ DMEM_Main_quartz2: $(SRC_DIR)DMEM_Main.cpp
 	$(COMPILE_QUARTZ) $(SRC_DIR)DMEM_Main.cpp $(DMEM_CPP_FILES) $(LIBS_QUARTZ) $(INCLUDE_QUARTZ) -o DMEM_Main_quartz2
 
 TextToBin: $(SRC_DIR)TextToBin.cpp
-	$(COMPILE_QUARTZ) $(SRC_DIR)TextToBin.cpp -o TextToBin
+	$(COMPILE) $(SRC_DIR)TextToBin.cpp -o TextToBin
 
 clean_smem_jordi:
 	rm -f SMEM_Main_jordi
+
+clean_gotham:
+	rm -f DMEM_Main_gotham
+
+clean_smem_gotham:
+	rm -f SMEM_Main_gotham
 
 clean_lassen:
 	rm -f DMEM_Main_lassen

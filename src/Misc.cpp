@@ -131,6 +131,10 @@ void PrintOutput(AllData all_data)
                 all_data.grid.mean_grid_wait[level]/(double)all_data.grid.num_levels,
                 all_data.grid.max_grid_wait[level]/(double)all_data.grid.num_levels,
                 all_data.grid.min_grid_wait[level]/(double)all_data.grid.num_levels);
+
+         if (all_data.input.format_output_flag == 0){
+            printf("\n");
+         }
       }
    }
 
@@ -785,7 +789,7 @@ void PrintCSRMatrix(hypre_CSRMatrix *A, char *filename, int bin_file)
 void ReadBinary_fread_HypreParCSR(FILE *mat_file,
                                   hypre_ParCSRMatrix **A_ptr,
                                   int symm_flag,
-                                  int include_disconnected_points_flag)
+                                  int remove_disconnected_points_flag)
 {
    using namespace std;
    size_t size;
@@ -814,7 +818,7 @@ void ReadBinary_fread_HypreParCSR(FILE *mat_file,
       col = buffer[k].j;
       elem = buffer[k].val;
 
-      if (fabs(elem) > 0){
+      //if (fabs(elem) > 0){
          col_count[col-1]++;
          row_count[row-1]++;
          line_flag[k] = 1;
@@ -822,13 +826,13 @@ void ReadBinary_fread_HypreParCSR(FILE *mat_file,
          if (symm_flag == 1 && row != col){
             nnz++;
          }
-      }
+      //}
    }
 
    // TODO: fix this
    int num_rows_old = num_rows;
    vector<int> flags_prefix_sum(num_rows, 0);
-   if (include_disconnected_points_flag == 0){
+   if (remove_disconnected_points_flag == 1){
       vector<int> disconnected_point_flag(num_rows, 0);
       int num_disconnected_points = 0;
       for (int k = 1; k < file_lines; k++){

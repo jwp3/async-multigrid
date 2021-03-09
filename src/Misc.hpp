@@ -72,6 +72,6 @@ void PrintCSRMatrix(hypre_CSRMatrix *A, char *filename, int bin_file);
 void ReadBinary_fread_HypreParCSR(FILE *mat_file,
                                   hypre_ParCSRMatrix **A_ptr,
                                   int symm_flag,
-                                  int include_disconnected_points_flag);
+                                  int remove_disconnected_points_flag);
 
 #endif

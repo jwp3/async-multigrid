@@ -397,13 +397,13 @@ void SMEM_Async_Add_AMG(AllData *all_data)
 	    else {
 	       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
 	       for (int i = ns; i < ne; i++){
-		  #pragma omp atomic write
+		  //#pragma omp atomic write
                   all_data->vector.r[fine_grid][i] = all_data->level_vector[thread_level].r[fine_grid][i];
                }
                ns = all_data->thread.A_ns[fine_grid][tid];
                ne = all_data->thread.A_ne[fine_grid][tid];
                for (int i = ns; i < ne; i++){
-		  #pragma omp atomic read
+		  //#pragma omp atomic read
                   all_data->level_vector[thread_level].r[fine_grid][i] = all_data->vector.r[fine_grid][i];
                }
 	    }

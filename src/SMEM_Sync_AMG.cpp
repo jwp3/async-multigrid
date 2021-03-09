@@ -184,7 +184,7 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
    if (all_data->input.solver == PAR_BPX){
       #pragma omp for
       for (int i = 0; i < all_data->grid.N; i++){
-         all_data->vector.xx[i] = all_data->vector.rr[i] / all_data->matrix.A_diag_ext[i];
+         all_data->vector.xx[i] = all_data->input.smooth_weight * all_data->vector.rr[i] / all_data->matrix.A_diag_ext[i];
       }
    }
    else {
