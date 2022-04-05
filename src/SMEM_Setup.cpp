@@ -7,6 +7,8 @@
 #include "SMEM_Cheby.hpp"
 #include "Sparse"
 #include "Cholesky"
+#include "BuildHypreMatrix.hpp"
+#include "BuildMfemMatrix.hpp"
 
 //TODO: replace PARDISO and EIGEN
 
@@ -66,6 +68,13 @@ void SMEM_Setup(AllData *all_data)
                         all_data->hypre.par_x);
    all_data->output.hypre_setup_wtime = omp_get_wtime() - start;
 
+   //HYPRE_BoomerAMGSetMaxIter(all_data->hypre.solver, 50);
+   //HYPRE_BoomerAMGSolve(all_data->hypre.solver,
+   //                     all_data->hypre.parcsr_A,
+   //                     all_data->hypre.par_b,
+   //                     all_data->hypre.par_x);
+   //exit(1);
+
    if (all_data->input.hypre_solver_flag == 1) return;
    
    if (all_data->input.format_output_flag == 0){
@@ -75,25 +84,22 @@ void SMEM_Setup(AllData *all_data)
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
    all_data->grid.num_levels = (int)hypre_ParAMGDataNumLevels(amg_data);
 
-  // char buffer[100];
-  // hypre_ParCSRMatrix **P_array = hypre_ParAMGDataPArray(amg_data);
-  // hypre_ParCSRMatrix **R_array = hypre_ParAMGDataRArray(amg_data);
-  // hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
-  // for (int level = 0; level < all_data->grid.num_levels; level++){
-  //    if (level < all_data->grid.num_levels-1){
-  //       sprintf(buffer, "P_%d.txt", level+1);
-  //       PrintCSRMatrix(hypre_ParCSRMatrixDiag(P_array[level]), buffer, 0);
-  //       sprintf(buffer, "R_%d.txt", level+1);
-  //       PrintCSRMatrix(hypre_ParCSRMatrixDiag(R_array[level]), buffer, 0);
-  //    }
-  //    sprintf(buffer, "A_%d.txt", level+1);
-  //    PrintCSRMatrix(hypre_ParCSRMatrixDiag(A_array[level]), buffer, 0);
-  // }
+   //char buffer[100];
+   //hypre_ParCSRMatrix **P_array = hypre_ParAMGDataPArray(amg_data);
+   //hypre_ParCSRMatrix **R_array = hypre_ParAMGDataRArray(amg_data);
+   //hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
+   //for (int level = 0; level < all_data->grid.num_levels; level++){
+   //   if (level < all_data->grid.num_levels-1){
+   //      sprintf(buffer, "P_%d.txt", level+1);
+   //      PrintCSRMatrix(hypre_ParCSRMatrixDiag(P_array[level]), buffer, 0);
+   //      sprintf(buffer, "R_%d.txt", level+1);
+   //      PrintCSRMatrix(hypre_ParCSRMatrixDiag(R_array[level]), buffer, 0);
+   //   }
+   //   sprintf(buffer, "A_%d.txt", level+1);
+   //   PrintCSRMatrix(hypre_ParCSRMatrixDiag(A_array[level]), buffer, 0);
+   //}
   // return;
 
-   start = omp_get_wtime();   
-   InitAlgebra(all_data);
-   //printf("InitAlgebra %e\n", omp_get_wtime() - start);
 
    all_data->barrier.local_sense = (int *)calloc(num_threads, sizeof(int));
   // all_data->barrier.counter = (int *)calloc(all_data->grid.num_levels, sizeof(int));
@@ -129,6 +135,16 @@ void SMEM_Setup(AllData *all_data)
 
    if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
       start = omp_get_wtime();
+      hypre_GaussElimSetup(amg_data, all_data->grid.num_levels-1, 99);
+      //printf("GaussElim %e\n", omp_get_wtime() - start);
+   }
+
+   start = omp_get_wtime();
+   InitAlgebra(all_data);
+   //printf("InitAlgebra %e\n", omp_get_wtime() - start);
+
+   if (all_data->input.solver != EXPLICIT_EXTENDED_SYSTEM_BPX){
+      start = omp_get_wtime();
       ComputeWork(all_data);
       //printf("ComputeWork %e\n", omp_get_wtime() - start);
       start = omp_get_wtime();
@@ -138,10 +154,6 @@ void SMEM_Setup(AllData *all_data)
       start = omp_get_wtime();
       PartitionGrids(all_data);
       //printf("InitAlgebra %e\n", omp_get_wtime() - start);
-      
-      start = omp_get_wtime();
-      hypre_GaussElimSetup(amg_data, all_data->grid.num_levels-1, 9);
-      //printf("GaussElim %e\n", omp_get_wtime() - start);
    }
 
 
@@ -157,7 +169,14 @@ void SMEM_Setup(AllData *all_data)
       }
    }
 
+   start = omp_get_wtime();
+   if (all_data->input.cheby_flag == 1){
+      ChebySetup(all_data);
+   }
+   //printf("Cheby %e\n", omp_get_wtime() - start);
+
    all_data->output.num_cycles = 0;
+
 }
 
 void InitAlgebra(AllData *all_data)
@@ -185,7 +204,14 @@ void InitAlgebra(AllData *all_data)
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
    all_data->matrix.R =
       (hypre_CSRMatrix **)malloc(all_data->grid.num_levels * sizeof(hypre_CSRMatrix *));
-   all_data->matrix.L1_row_norm = (double **)malloc(all_data->grid.num_levels * sizeof(double *));
+   if (all_data->input.smoother == L1_JACOBI ||
+       all_data->input.smoother == ASYNC_L1_JACOBI ||
+       all_data->input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL){
+      all_data->matrix.L1_row_norm = (double **)malloc(all_data->grid.num_levels * sizeof(double *));
+   }
+   else {
+      all_data->matrix.A_diag = (double **)malloc(all_data->grid.num_levels * sizeof(double *));
+   }
    all_data->vector.y_expand = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
 
    for (int level = 0; level < all_data->grid.num_levels; level++){
@@ -193,11 +219,21 @@ void InitAlgebra(AllData *all_data)
       all_data->grid.n[level] = hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
       HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
       HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
-      all_data->matrix.L1_row_norm[level] = (double *)malloc(all_data->grid.n[level] * sizeof(double));
-      for (int i = 0; i < all_data->grid.n[level]; i++){
-         all_data->matrix.L1_row_norm[level][i] = 0;
-         for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-            all_data->matrix.L1_row_norm[level][i] += fabs(A_data[jj]);
+      if (all_data->input.smoother == L1_JACOBI ||
+          all_data->input.smoother == ASYNC_L1_JACOBI ||
+          all_data->input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL){
+         all_data->matrix.L1_row_norm[level] = (double *)malloc(all_data->grid.n[level] * sizeof(double));
+         for (int i = 0; i < all_data->grid.n[level]; i++){
+            all_data->matrix.L1_row_norm[level][i] = 0;
+            for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               all_data->matrix.L1_row_norm[level][i] += fabs(A_data[jj]);
+            }
+         }
+      }
+      else {
+         all_data->matrix.A_diag[level] = (double *)malloc(all_data->grid.n[level] * sizeof(double));
+         for (int i = 0; i < all_data->grid.n[level]; i++){
+            all_data->matrix.A_diag[level][i] = A_data[A_i[i]] / all_data->input.smooth_weight;
          }
       }
       all_data->vector.i[level].resize(all_data->grid.n[0]);
@@ -248,6 +284,7 @@ void InitAlgebra(AllData *all_data)
       all_data->vector.u_prev = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
       all_data->vector.z = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
       all_data->vector.e = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
+      all_data->vector.u_smooth = (HYPRE_Real **)malloc(all_data->grid.num_levels * sizeof(HYPRE_Real *));
    
       if (all_data->input.thread_part_type == ALL_LEVELS/* &&
           all_data->input.num_threads > 1*/){
@@ -317,6 +354,8 @@ void InitAlgebra(AllData *all_data)
                all_data->vector.z[level] =
                   (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
                all_data->vector.e[level] =
+                  (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
+               all_data->vector.u_smooth[level] =
                   (HYPRE_Real *)calloc(n, sizeof(HYPRE_Real));
             }
             else {
@@ -395,15 +434,30 @@ void InitAlgebra(AllData *all_data)
          } 
          all_data->vector.xx = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
          all_data->vector.rr = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
-         all_data->matrix.A_diag_ext = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
-         int k = 0;
-         for (int level = 0; level < all_data->grid.num_levels; level++){
-            int num_rows = all_data->grid.n[level];
-            HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
-            HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
-            for (int i = 0; i < num_rows; i++){
-               all_data->matrix.A_diag_ext[k] = A_data[A_i[i]];
-               k++;
+
+         if (all_data->input.smoother == L1_JACOBI ||
+             all_data->input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL){
+            all_data->matrix.L1_row_norm_ext = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
+            int k = 0;
+            for (int level = 0; level < all_data->grid.num_levels; level++){
+               int num_rows = all_data->grid.n[level];
+               for (int i = 0; i < num_rows; i++){
+                  all_data->matrix.L1_row_norm_ext[k] = all_data->matrix.L1_row_norm[level][i];
+                  k++;
+               }
+            }
+         }
+         else {
+            all_data->matrix.A_diag_ext = (HYPRE_Real *)calloc(all_data->grid.N, sizeof(HYPRE_Real));
+            int k = 0;
+            for (int level = 0; level < all_data->grid.num_levels; level++){
+               int num_rows = all_data->grid.n[level];
+               HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[level]);
+               HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[level]);
+               for (int i = 0; i < num_rows; i++){
+                  all_data->matrix.A_diag_ext[k] = A_data[A_i[i]] / all_data->input.smooth_weight;
+                  k++;
+               }
             }
          }
       }
@@ -528,9 +582,6 @@ void InitAlgebra(AllData *all_data)
      // PrintCSRMatrix(all_data->matrix.AA, buffer, 0);
       
    }
-   if (all_data->input.cheby_flag == 1){
-      ChebySetup(all_data);
-   }
    //char buffer[100];
    //sprintf(buffer, "A.txt");
    //PrintCSRMatrix(all_data->matrix.A[0], buffer, 0);
@@ -645,74 +696,161 @@ void PartitionLevels(AllData *all_data)
          }
       }
       else{
-         for (int level = finest_level; level < num_levels; level++){
-            int balanced_threads;
-            if (num_threads == 1){
-              // printf("%d ", tid);
-               all_data->thread.thread_levels[tid].push_back(level);
-               all_data->thread.level_threads[level].push_back(tid);
-               all_data->thread.barrier_root[level] = tid;
-               all_data->thread.barrier_flags[level][tid] = 0;
-            }
-            else{ 
-	       if (level == num_levels-1 || num_threads == 1){
-                  balanced_threads = num_threads;
-               }
-               else {
-                 // balanced_threads = max((int)ceil(all_data->grid.frac_level_work[level] *
-                 //                                       (double)all_data->input.num_threads), 1);
-                 // while (balanced_threads >= num_threads){
-                 //    balanced_threads--;
-                 // }
-                 // while (1){
-                 //    int candidate = balanced_threads-1;
-                 //    double diff_current =
-                 //       fabs(all_data->grid.frac_level_work[level] -
-                 //            (double)balanced_threads/(double)all_data->input.num_threads);
-                 //    double diff_candidate =
-                 //       fabs(all_data->grid.frac_level_work[level] -
-                 //            (double)candidate/(double)all_data->input.num_threads);
-                 //    if (diff_current <= diff_candidate ||
-                 //        balanced_threads == 1){
-                 //       break;
-                 //    }
-                 //    balanced_threads--;
-                 // }
+         //for (int level = finest_level; level < num_levels; level++){
+         //   int balanced_threads;
+         //   if (num_threads == 1){
+         //     // printf("%d ", tid);
+         //      all_data->thread.thread_levels[tid].push_back(level);
+         //      all_data->thread.level_threads[level].push_back(tid);
+         //      all_data->thread.barrier_root[level] = tid;
+         //      all_data->thread.barrier_flags[level][tid] = 0;
+         //   }
+         //   else{ 
+	 //      if (level == num_levels-1 || num_threads == 1){
+         //         balanced_threads = num_threads;
+         //      }
+         //      else {
+         //        // balanced_threads = max((int)ceil(all_data->grid.frac_level_work[level] *
+         //        //                                       (double)all_data->input.num_threads), 1);
+         //        // while (balanced_threads >= num_threads){
+         //        //    balanced_threads--;
+         //        // }
+         //        // while (1){
+         //        //    int candidate = balanced_threads-1;
+         //        //    double diff_current =
+         //        //       fabs(all_data->grid.frac_level_work[level] -
+         //        //            (double)balanced_threads/(double)all_data->input.num_threads);
+         //        //    double diff_candidate =
+         //        //       fabs(all_data->grid.frac_level_work[level] -
+         //        //            (double)candidate/(double)all_data->input.num_threads);
+         //        //    if (diff_current <= diff_candidate ||
+         //        //        balanced_threads == 1){
+         //        //       break;
+         //        //    }
+         //        //    balanced_threads--;
+         //        // }
 
-                  balanced_threads = max((int)floor(all_data->grid.frac_level_work[level] *
-                                                        (double)all_data->input.num_threads), 1);
-                  while (1){
-                     int candidate = balanced_threads+1;
-                     double diff_current =
-                        fabs(all_data->grid.frac_level_work[level] -
-                             (double)balanced_threads/(double)all_data->input.num_threads);
-                     double diff_candidate =
-                        fabs(all_data->grid.frac_level_work[level] -
-                             (double)candidate/(double)all_data->input.num_threads);
-                     if (diff_current <= diff_candidate ||
-                         (double)candidate/(double)all_data->input.num_threads > all_data->grid.frac_level_work[level]){
-                        break;
-                     }
-                     balanced_threads++;
+         //         balanced_threads = max((int)floor(all_data->grid.frac_level_work[level] *
+         //                                               (double)all_data->input.num_threads), 1);
+         //         while (1){
+         //            int candidate = balanced_threads+1;
+         //            double diff_current =
+         //               fabs(all_data->grid.frac_level_work[level] -
+         //                    (double)balanced_threads/(double)all_data->input.num_threads);
+         //            double diff_candidate =
+         //               fabs(all_data->grid.frac_level_work[level] -
+         //                    (double)candidate/(double)all_data->input.num_threads);
+         //            if (diff_current <= diff_candidate ||
+         //                (double)candidate/(double)all_data->input.num_threads > all_data->grid.frac_level_work[level]){
+         //               break;
+         //            }
+         //            balanced_threads++;
+         //         }
+         //      }
+         //      for (int t = tid; t < tid + balanced_threads; t++){
+         //        // printf("%d ", t);
+         //         all_data->thread.thread_levels[t].push_back(level);
+         //         all_data->thread.level_threads[level].push_back(t);
+         //      }
+         //      for (int t = tid; t < tid + balanced_threads; t++){
+         //         all_data->thread.barrier_flags[level][t] = 0;
+         //      }
+         //      num_threads -= balanced_threads;
+	 //      all_data->thread.barrier_root[level] = tid;
+         //      tid += balanced_threads;
+         //   }
+	 //   //printf("\tlevel %d: %f, %f, %d\n",
+         //   //       level,
+         //   //       all_data->grid.frac_level_work[level],
+         //   //       (double)balanced_threads/(double)all_data->input.num_threads,
+         //   //       balanced_threads);
+         //   //printf("\n");
+         //}
+
+         vector<int> threads_per_level(num_levels, 0);
+         int level = 0;
+         for (int t = 0; t < num_threads; t++){
+            threads_per_level[level]++;
+            level = level < num_levels-1 ? level+1 : 0;
+         }
+
+         double prev_max_diff = DBL_MAX;
+         while(1){
+            double max_diff = 0.0;
+            int k_max = 0;
+            /* first find max difference */
+            for (int k = 0; k < num_levels; k++){
+               double frac = (double)threads_per_level[k]/(double)num_threads;
+               double diff = all_data->grid.frac_level_work[k] - frac;
+               if (fabs(diff) > fabs(max_diff)){
+                  if (max_diff < 0.0 && threads_per_level[k] == 1){
+                  }
+                  else {
+                     max_diff = diff;
+                     k_max = k;
                   }
                }
-               for (int t = tid; t < tid + balanced_threads; t++){
-                 // printf("%d ", t);
-                  all_data->thread.thread_levels[t].push_back(level);
-                  all_data->thread.level_threads[level].push_back(t);
-               }
-               for (int t = tid; t < tid + balanced_threads; t++){
-                  all_data->thread.barrier_flags[level][t] = 0;
-               }
-               num_threads -= balanced_threads;
-	       all_data->thread.barrier_root[level] = tid;
-               tid += balanced_threads;
             }
-	   // printf("\tlevel %d: %f, %f\n",
-           //           level,
-           //           all_data->grid.frac_level_work[level],
-           //           (double)balanced_threads/(double)all_data->input.num_threads);
-           // printf("\n");
+            double min_diff = DBL_MAX;
+            int k_min = 0;
+            int min_not_found = 1;
+            /* find min difference based on result from max */
+            for (int k = 0; k < num_levels; k++){
+               if (k != k_max){
+                  double frac = (double)threads_per_level[k]/(double)num_threads;
+                  double diff = all_data->grid.frac_level_work[k] - frac;
+                  if (max_diff > 0.0){ /* if we need to increase the number of threads */
+                     if (diff < 0.0 &&  /* we need to find another level that decreases the number of threads */
+                         threads_per_level[k] > 1 && /* target level must have at least two threads */
+                         fabs(diff) < fabs(min_diff)){ /*now we can compute min */
+                        min_diff = diff;
+                        k_min = k;
+                        min_not_found = 0;
+                     }
+                  }
+                  else { /* if we need to decrease number of threads */ 
+                     if (diff > 0.0 &&
+                         fabs(diff) < fabs(min_diff)){
+                        min_diff = diff;
+                        k_min = k;
+                        min_not_found = 0;
+                     }
+                  }
+               }
+            }
+            //printf("%e %e\n", max_diff, prev_max_diff);
+            if (fabs(max_diff) >= fabs(prev_max_diff) || min_not_found){
+               break;
+            }
+            prev_max_diff = max_diff;
+            //printf("%d %d %d\n", min_not_found, k_min, threads_per_level[k_min]);
+            if (max_diff > 0.0){
+               threads_per_level[k_min]--;
+               threads_per_level[k_max]++; 
+            }
+            else {
+               threads_per_level[k_min]++;
+               threads_per_level[k_max]--;
+            }
+            //for (int k = 0; k < num_levels; k++){
+            //   printf("\tlevel %d: %f, %f, %d\n",
+            //          k,
+            //          all_data->grid.frac_level_work[k],
+            //          (double)threads_per_level[k]/(double)all_data->input.num_threads,
+            //          threads_per_level[k]);
+            //}
+         }
+         int t = 0;
+         for (int k = 0; k < num_levels; k++){
+            all_data->thread.barrier_root[k] = t;
+            for (int tt = 0; tt < threads_per_level[k]; tt++){
+               all_data->thread.thread_levels[t].push_back(k);
+               all_data->thread.level_threads[k].push_back(t);
+               all_data->thread.barrier_flags[k][t] = 0;
+               if (t < num_threads-1){
+                  t++;
+               }
+            }
          }
       }
    }
@@ -916,16 +1054,24 @@ void ComputeWork(AllData *all_data)
       finest_level = 0;
       all_data->grid.level_work[level] = 0;
       if (all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX){
+         //all_data->grid.level_work[coarsest_level] += hypre_CSRMatrixNumRows(all_data->matrix.A[coarsest_level]);
          for (int inner_level = coarsest_level-1; inner_level >= level; inner_level--){
+            fine_grid = inner_level;
+            coarse_grid = inner_level + 1;
             all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.P[inner_level]);
-            all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[inner_level]);
+            //all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]);
+            //all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[coarse_grid]);
          }
          for (int inner_level = finest_level; inner_level < level; inner_level++){
+            fine_grid = inner_level;
+            coarse_grid = inner_level + 1;
             all_data->grid.level_work[level] += hypre_CSRMatrixNumNonzeros(all_data->matrix.R[inner_level]);
-            all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[inner_level+1]);
+            //all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[fine_grid]);
+            //all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[coarse_grid]);
          }
-         all_data->grid.level_work[level] += 2 * hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
-         all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+         all_data->grid.level_work[level] += 2*hypre_CSRMatrixNumNonzeros(all_data->matrix.A[level]);
+         //all_data->grid.level_work[level] += hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
+         //all_data->grid.level_work[level] += 6*hypre_CSRMatrixNumRows(all_data->matrix.A[level]);
       }
       else {
          if (all_data->input.res_compute_type == GLOBAL){
@@ -1021,7 +1167,6 @@ void ComputeWork(AllData *all_data)
    }
    for (int level = 0; level < all_data->grid.num_levels; level++){
       all_data->grid.frac_level_work[level] = (double)all_data->grid.level_work[level] / (double)all_data->grid.tot_work;
-     // printf("hello %e\n", all_data->grid.frac_level_work[level]);
    }
 }
 
@@ -1438,53 +1583,70 @@ void SMEM_BuildMatrix(AllData *all_data)
    HYPRE_IJMatrix A;
    HYPRE_IJVector b;
    HYPRE_IJVector x;
+   HYPRE_ParVector rhs;
 
-   if (all_data->input.test_problem == LAPLACE_3D27PT){
-      Laplacian_3D_27pt(&(all_data->hypre.parcsr_A),
-                        all_data->matrix.nx,
-                        all_data->matrix.ny,
-                        all_data->matrix.nz);
-   }
-   else if (all_data->input.test_problem == LAPLACE_3D7PT){
-      Laplacian_3D_7pt(&(all_data->hypre.parcsr_A),
-                       all_data->matrix.nx,
-                       all_data->matrix.ny,
-                       all_data->matrix.nz);
-   }
-   else if (all_data->input.test_problem == MFEM_LAPLACE){
-#ifdef USE_MFEM
-      MFEM_Laplacian(all_data, &A);
-#else
-      
-#endif
+   //if (all_data->input.test_problem == LAPLACE_3D27PT){
+   //   Laplacian_3D_27pt(&(all_data->hypre.parcsr_A),
+   //                     all_data->matrix.nx,
+   //                     all_data->matrix.ny,
+   //                     all_data->matrix.nz);
+   //}
+   //else if (all_data->input.test_problem == LAPLACE_3D7PT){
+   //   Laplacian_3D_7pt(&(all_data->hypre.parcsr_A),
+   //                    all_data->matrix.nx,
+   //                    all_data->matrix.ny,
+   //                    all_data->matrix.nz);
+   //}
+   if (all_data->input.test_problem == LAPLACE_2D5PT){
+      Laplacian_2D_5pt(&A, all_data->matrix.n);
       HYPRE_IJMatrixAssemble(A);
       HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
-   else if (all_data->input.test_problem == MFEM_ELAST){
+   else if ((all_data->input.test_problem == MFEM_LAPLACE) ||
+            (all_data->input.test_problem == MFEM_LAPLACE_AMR)){
 #ifdef USE_MFEM
-      MFEM_Elasticity(all_data, &A);
+      BuildMfemMatrix(all_data,
+                      &(all_data->hypre.parcsr_A),
+                      &(all_data->hypre.par_b),
+                      MPI_COMM_WORLD);
 #else
-
+      printf("ERROR: must compile with mfem to use mfem test problems\n");
+      MPI_Finalize();
+      exit(1); 
 #endif
-      HYPRE_IJMatrixAssemble(A);
-      HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
+      //HYPRE_IJMatrixAssemble(A);
+      //HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
+   }
+   else if ((all_data->input.test_problem == MFEM_ELAST) ||
+            (all_data->input.test_problem == MFEM_ELAST_AMR)){
+#ifdef USE_MFEM
+      BuildMfemMatrix(all_data,
+                      &(all_data->hypre.parcsr_A),
+                      &(all_data->hypre.par_b),
+                      MPI_COMM_WORLD);
+#else
+      printf("ERROR: must compile with mfem to use mfem test problems\n");
+#endif
+      //HYPRE_IJMatrixAssemble(A);
+      //HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
    else if (all_data->input.test_problem == MFEM_MAXWELL){
 #ifdef USE_MFEM
-      MFEM_Maxwell(all_data, &A);
+      BuildMfemMatrix(all_data,
+                      &(all_data->hypre.parcsr_A),
+                      &(all_data->hypre.par_b),
+                      MPI_COMM_WORLD);
 #else
-
+      printf("ERROR: must compile with mfem to use mfem test problems\n");
 #endif
-      HYPRE_IJMatrixAssemble(A);
-      HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
+      //HYPRE_IJMatrixAssemble(A);
+      //HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
    }
    else if (all_data->input.test_problem == MATRIX_FROM_FILE){
       FILE *mat_file = fopen(all_data->input.mat_file_str, "rb");
       if (mat_file != NULL){
          ReadBinary_fread_HypreParCSR(mat_file, &(all_data->hypre.parcsr_A), 1, 0);
          fclose(mat_file);
-         char buffer[100] = "A.txt";
-         PrintCSRMatrix(hypre_ParCSRMatrixDiag(all_data->hypre.parcsr_A), buffer, 0);
       }
       else {
          printf("ERROR: incorrect matrix file \"%s\"\n", all_data->input.mat_file_str);
@@ -1492,11 +1654,20 @@ void SMEM_BuildMatrix(AllData *all_data)
          exit(1);
       }
    }
-   else{
-      Laplacian_2D_5pt(&A, all_data->matrix.n);
-      HYPRE_IJMatrixAssemble(A);
-      HYPRE_IJMatrixGetObject(A, (void**) &(all_data->hypre.parcsr_A));
+   else {
+      BuildHypreMatrix(all_data,
+                       &(all_data->hypre.parcsr_A),
+                       &rhs,
+                       MPI_COMM_WORLD,
+                       all_data->matrix.nx, all_data->matrix.ny, all_data->matrix.nz,
+                       all_data->matrix.difconv_cx, all_data->matrix.difconv_cy, all_data->matrix.difconv_cz,
+                       all_data->matrix.difconv_ax, all_data->matrix.difconv_ay, all_data->matrix.difconv_az,
+                       all_data->matrix.vardifconv_eps,
+                       all_data->matrix.difconv_atype);
    }
+
+   //char buffer[100] = "A.txt";
+   //PrintCSRMatrix(hypre_ParCSRMatrixDiag(all_data->hypre.parcsr_A), buffer, 0);
 }
 
 void SMEM_SetHypreParameters(AllData *all_data)
@@ -1515,16 +1686,20 @@ void SMEM_SetHypreParameters(AllData *all_data)
    HYPRE_BoomerAMGSetPMaxElmts(all_data->hypre.solver, all_data->hypre.P_max_elmts);
    HYPRE_BoomerAMGSetNumFunctions(all_data->hypre.solver, all_data->hypre.num_functions);
    HYPRE_BoomerAMGSetMeasureType(all_data->hypre.solver, 1);
-   if (all_data->input.smoother == L1_JACOBI ||
-       all_data->input.smoother == ASYNC_L1_JACOBI){
-      HYPRE_BoomerAMGSetRelaxType(all_data->hypre.solver, 18);
-      HYPRE_BoomerAMGSetAddRelaxType(all_data->hypre.solver, 18);
-   }
-   else {
-      HYPRE_BoomerAMGSetRelaxType(all_data->hypre.solver, 0);
-      HYPRE_BoomerAMGSetRelaxWt(all_data->hypre.solver, all_data->input.smooth_weight);
-      HYPRE_BoomerAMGSetAddRelaxType(all_data->hypre.solver, 0);
-      HYPRE_BoomerAMGSetAddRelaxWt(all_data->hypre.solver, all_data->input.smooth_weight);
+   HYPRE_BoomerAMGSetRelaxType(all_data->hypre.solver, all_data->hypre.relax_type);
+   HYPRE_BoomerAMGSetAddRelaxType(all_data->hypre.solver, all_data->hypre.relax_type);
+   HYPRE_BoomerAMGSetRelaxWt(all_data->hypre.solver, all_data->input.smooth_weight);
+   HYPRE_BoomerAMGSetAddRelaxWt(all_data->hypre.solver, all_data->input.smooth_weight);
+   HYPRE_BoomerAMGSetCycleRelaxType(all_data->hypre.solver, all_data->hypre.relax_type, 3);
+   HYPRE_BoomerAMGSetNumSweeps(all_data->hypre.solver, all_data->input.num_pre_smooth_sweeps);
+   //HYPRE_BoomerAMGSetCycleRelaxType(all_data->hypre.solver, 99, 3);
+
+   if (all_data->input.solver == BPX ||
+       all_data->input.solver == PAR_BPX ||
+       all_data->input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX ||
+       all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
+      HYPRE_BoomerAMGSetAdditive(all_data->hypre.solver, 0);
+      HYPRE_BoomerAMGSetSimple(all_data->hypre.solver, all_data->input.simple_jacobi_flag);
    }
    //HYPRE_BoomerAMGSetAdditive(all_data->hypre.solver, 0);
 
@@ -1541,36 +1716,44 @@ void SMEM_SetHypreParameters(AllData *all_data)
    HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
    HYPRE_IJVectorInitialize(x);
 
-
-   double *rhs_values, *x_values;
    int *rows;
-
-   rhs_values = (double*) calloc(num_rows, sizeof(double));
-   x_values = (double*) calloc(num_rows, sizeof(double));
    rows = (int*)calloc(num_rows, sizeof(int));
-
-   srand(0);
    for (int i = 0; i < num_rows; i++){
-      rhs_values[i] = 1.0;//RandDouble(-1.0, 1.0);
-      x_values[i] = 0.0;
       rows[i] = i;
    }
 
-   if (all_data->input.test_problem == MFEM_ELAST){
+   double *rhs_values, *x_values;
+   rhs_values = (double*) calloc(num_rows, sizeof(double));
+   x_values = (double*) calloc(num_rows, sizeof(double));
+
+   srand(0);
+
+   //if ((all_data->input.test_problem == MFEM_ELAST) ||
+   //    (all_data->input.test_problem == MFEM_ELAST_AMR) ||
+   //    (all_data->input.test_problem == MFEM_LAPLACE) ||
+   //    (all_data->input.test_problem == MFEM_LAPLACE_AMR)){
+   //   //for (int i = 0; i < num_rows; i++){
+   //   //   rhs_values[i] = all_data->hypre.b_values[i];
+   //   //}
+   //}
+   //else {
       for (int i = 0; i < num_rows; i++){
-         rhs_values[i] = all_data->hypre.b_values[i];
+         rhs_values[i] = RandDouble(-1.0, 1.0);
       }
+      HYPRE_IJVectorSetValues(b, num_rows, rows, rhs_values);
+      HYPRE_IJVectorAssemble(b);
+      HYPRE_IJVectorGetObject(b, (void **)&(all_data->hypre.par_b));
+   //}
+
+   for (int i = 0; i < num_rows; i++){
+      x_values[i] = 0.0;
    }
 
-   HYPRE_IJVectorSetValues(b, num_rows, rows, rhs_values);
    HYPRE_IJVectorSetValues(x, num_rows, rows, x_values);
+   HYPRE_IJVectorAssemble(x);
+   HYPRE_IJVectorGetObject(x, (void **)&(all_data->hypre.par_x));
 
    free(x_values);
    free(rhs_values);
    free(rows);
-
-   HYPRE_IJVectorAssemble(b);
-   HYPRE_IJVectorGetObject(b, (void **)&(all_data->hypre.par_b));
-   HYPRE_IJVectorAssemble(x);
-   HYPRE_IJVectorGetObject(x, (void **)&(all_data->hypre.par_x));
 }

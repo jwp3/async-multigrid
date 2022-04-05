@@ -34,6 +34,7 @@ void SEQ_Vcycle(AllData *all_data)
                   all_data->vector.y[fine_grid],
                   all_data->input.num_pre_smooth_sweeps,
                   fine_grid,
+                  CYCLE_PHASE_DOWN,
                   0, 0);
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
       residual_start = omp_get_wtime();
@@ -99,6 +100,7 @@ void SEQ_Vcycle(AllData *all_data)
                   all_data->vector.y[fine_grid],
                   all_data->input.num_post_smooth_sweeps,
                   fine_grid,
+                  CYCLE_PHASE_UP,
                   0, 0);
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
       all_data->grid.local_num_correct[level]++;
@@ -164,6 +166,7 @@ void SEQ_Add_Vcycle(AllData *all_data)
                         all_data->vector.y[fine_grid],
                         all_data->input.num_fine_smooth_sweeps,
                         fine_grid,
+                        CYCLE_PHASE_DOWN,
                         0, 0); 
          }
          else{
@@ -181,6 +184,7 @@ void SEQ_Add_Vcycle(AllData *all_data)
                         all_data->vector.y[coarse_grid],
                         all_data->input.num_coarse_smooth_sweeps,
                         coarse_grid,
+                        CYCLE_PHASE_DOWN,
                         0, 0);
             SEQ_MatVec(all_data,
                        all_data->matrix.P[fine_grid],
@@ -200,6 +204,7 @@ void SEQ_Add_Vcycle(AllData *all_data)
                         all_data->vector.y[fine_grid],
                         all_data->input.num_fine_smooth_sweeps,
                         fine_grid,
+                        CYCLE_PHASE_DOWN,
                         0, 0);
          }
       }
@@ -366,6 +371,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                                  all_data->vector.y[fine_grid],
                                  all_data->input.num_fine_smooth_sweeps,
                                  fine_grid,
+                                 CYCLE_PHASE_DOWN,
                                  0, 0); 
                   }
                   else{
@@ -383,6 +389,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                                  all_data->vector.y[coarse_grid],
                                  all_data->input.num_coarse_smooth_sweeps,
                                  coarse_grid,
+                                 CYCLE_PHASE_DOWN,
                                  0, 0);
                      SEQ_MatVec(all_data,
                                 all_data->matrix.P[fine_grid],
@@ -402,6 +409,7 @@ void SEQ_Add_Vcycle_Sim(AllData *all_data)
                                  all_data->vector.y[fine_grid],
                                  all_data->input.num_fine_smooth_sweeps,
                                  fine_grid,
+                                 CYCLE_PHASE_DOWN,
                                  0, 0);
                   }
                }
@@ -657,6 +665,7 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
                               all_data->vector.y[fine_grid],
                               all_data->input.num_fine_smooth_sweeps,
                               fine_grid,
+                              CYCLE_PHASE_DOWN,
                               0, 0); 
                }
                else{
@@ -674,6 +683,7 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
                               all_data->vector.y[coarse_grid],
                               all_data->input.num_coarse_smooth_sweeps,
                               coarse_grid,
+                              CYCLE_PHASE_DOWN,
                               0, 0);
                   SEQ_MatVec(all_data,
                              all_data->matrix.P[fine_grid],
@@ -693,6 +703,7 @@ void SEQ_Add_Vcycle_SimRand(AllData *all_data)
                               all_data->vector.y[fine_grid],
                               all_data->input.num_fine_smooth_sweeps,
                               fine_grid,
+                              CYCLE_PHASE_DOWN,
                               0, 0);
                }
             }

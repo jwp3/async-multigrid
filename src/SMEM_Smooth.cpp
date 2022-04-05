@@ -232,13 +232,39 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
 
    HYPRE_Int n = hypre_CSRMatrixNumRows(A);
    int t = omp_get_thread_num();
+   int num_threads = omp_get_num_threads();
    int ns = all_data->thread.A_ns[level][t];
    int ne = all_data->thread.A_ne[level][t];
 
+   
+   //int size = n/num_threads;
+   //int rest = n - size*num_threads;
+   //if (t < rest)
+   //{
+   //   ns = t*size+t;
+   //   ne = (t+1)*size+t+1;
+   //}
+   //else
+   //{
+   //   ns = t*size+rest;
+   //   ne = (t+1)*size+rest;
+   //}
+
    double smooth_weight = 1.0;//all_data->input.smooth_weight;
+
+   double *diag_scale;
+   if (all_data->input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL){
+      hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
+      diag_scale = hypre_ParAMGDataL1Norms(amg_data)[level];
+      //diag_scale = all_data->matrix.L1_row_norm[level];
+   }
+   else {
+      diag_scale = all_data->matrix.A_diag[level];
+   }
 
    for (int k = 0; k < num_sweeps; k++){
       if (k == 0 && all_data->grid.zero_flags[level] == 1){
+         for (int i = ns; i < ne; i++) u[i] = 0.0;
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -248,13 +274,15 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
                      res -= A->data[jj] * u[ii];
                   }
                }
-               u[i] = smooth_weight * res / A->data[A->i[i]];
+               u[i] = smooth_weight * res / diag_scale[i];
             }
          }
       }
       else{
-         #pragma omp for
-         for (int i = 0; i < n; i++) u_prev[i] = u[i]; 
+         //#pragma omp for
+         //for (int i = 0; i < n; i++) u_prev[i] = u[i]; 
+         for (int i = ns; i < ne; i++) u_prev[i] = u[i];
+         SMEM_Barrier(all_data, all_data->thread.global_barrier_flags);
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -267,7 +295,7 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidel(AllData *all_data,
                      res -= A->data[jj] * u_prev[ii];
                   }
                }
-               u[i] += smooth_weight * res / A->data[A->i[i]];
+               u[i] += smooth_weight * res / diag_scale[i];
             }
          }
       }
@@ -296,6 +324,7 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidelT(AllData *all_data,
 
    for (int k = 0; k < num_sweeps; k++){
       if (k == 0 && all_data->grid.zero_flags[level] == 1){
+         for (int i = ne-1; i >= ns; i--) u[i] = 0.0;
          for (int i = ne-1; i >= ns; i--){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -310,8 +339,8 @@ void SMEM_Sync_Parfor_HybridJacobiGaussSeidelT(AllData *all_data,
          }
       }
       else{
-         #pragma omp for
-         for (int i = 0; i < n; i++) u_prev[i] = u[i];
+         for (int i = ne-1; i >= ns; i--) u_prev[i] = u[i];
+         SMEM_Barrier(all_data, all_data->thread.global_barrier_flags);
 	 for (int i = ne-1; i >= ns; i--){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -372,6 +401,7 @@ void SMEM_Sync_Jacobi(AllData *all_data,
             }
          }
       }
+      //#pragma omp barrier
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
    }
 }
@@ -517,6 +547,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
 
    for (int k = 0; k < num_sweeps; k++){
       if (k == 0 && all_data->grid.zero_flags[level] == 1){
+         for (int i = ns; i < ne; i++) u[i] = 0.0;
          for (int i = ns; i < ne; i++){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -549,6 +580,7 @@ void SMEM_Sync_HybridJacobiGaussSeidel(AllData *all_data,
             }
          }
       }
+      //#pragma omp barrier
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
    }
 }
@@ -570,6 +602,7 @@ void SMEM_Sync_HybridJacobiGaussSeidelT(AllData *all_data,
 
    for (int k = 0; k < num_sweeps; k++){
       if (k == 0 && all_data->grid.zero_flags[level] == 1){
+         for (int i = ne-1; i >= ns; i--) u[i] = 0.0;
          for (int i = ne-1; i >= ns; i--){
             if (A->data[A->i[i]] != 0.0){
                res = f[i];
@@ -584,7 +617,7 @@ void SMEM_Sync_HybridJacobiGaussSeidelT(AllData *all_data,
          }
       }
       else{
-         for (int i = ns; i < ne; i++) u_prev[i] = u[i];
+         for (int i = ne-1; i >= ns; i--) u_prev[i] = u[i];
          SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
 	 for (int i = ne-1; i >= ns; i--){
             if (A->data[A->i[i]] != 0.0){
@@ -602,6 +635,7 @@ void SMEM_Sync_HybridJacobiGaussSeidelT(AllData *all_data,
             }
          }
       }
+      //#pragma omp barrier
       SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, level);
    }
 }

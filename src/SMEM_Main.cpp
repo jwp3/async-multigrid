@@ -24,28 +24,41 @@ int main (int argc, char *argv[])
    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
-   all_data.matrix.n = 10;
-   all_data.matrix.nx = all_data.matrix.n;
-   all_data.matrix.ny = all_data.matrix.n;
-   all_data.matrix.nz = all_data.matrix.n;
    /* Hypre parameters */
    all_data.hypre.max_levels = 25;
    all_data.hypre.agg_num_levels = 0;
-   all_data.hypre.coarsen_type = 9;
+   all_data.hypre.coarsen_type = 10;
    all_data.hypre.interp_type = 6;
    all_data.hypre.print_level = 0;
    all_data.hypre.strong_threshold = .25;
    all_data.hypre.num_functions = 1;
    all_data.hypre.P_max_elmts = 0;
+   all_data.input.simple_jacobi_flag = -1;
    int solver_id = 0;
    int hypre_solve_flag = 0;
    int hypre_num_threads = 1;
+   all_data.input.hypre_memory = HYPRE_MEMORY_HOST;
+
+   int n = 40;
+   double c = 1.0, a = 1.0;
+   all_data.matrix.nx = n;
+   all_data.matrix.ny = n;
+   all_data.matrix.nz = n;
+   all_data.matrix.difconv_ax = a;
+   all_data.matrix.difconv_ay = a;
+   all_data.matrix.difconv_az = a;
+   all_data.matrix.difconv_cx = c;
+   all_data.matrix.difconv_cy = c;
+   all_data.matrix.difconv_cz = c;
+   all_data.matrix.difconv_atype = -1;
+   all_data.matrix.vardifconv_eps = 1.0;
 
    /* mfem parameters */
    all_data.mfem.ref_levels = 1;
    all_data.mfem.order = 1;
    all_data.mfem.amr_refs = 0;
    all_data.mfem.max_amr_dofs = (int)pow((double)all_data.matrix.n, 3.0);
+   strcpy(all_data.mfem.mesh_file, "./mfem_haswell/mfem-3.4/data/beam-tri.mesh");
 
    all_data.input.test_problem = LAPLACE_2D5PT;
    all_data.input.tol = 1e-9;
@@ -67,6 +80,7 @@ int main (int argc, char *argv[])
    all_data.input.smooth_weight = 1;
    all_data.input.smoother = JACOBI;
    all_data.input.smooth_interp_type = JACOBI;
+   all_data.hypre.relax_type = 0;
    all_data.input.solver = MULT;
    all_data.input.hypre_test_error_flag = 0;
    all_data.input.mfem_test_error_flag = 0;
@@ -77,16 +91,19 @@ int main (int argc, char *argv[])
    all_data.input.print_level_stats_flag = 0;
    all_data.input.print_reshist_flag = 0;
    all_data.input.read_type = READ_SOL;
-   all_data.input.eig_power_max_iters = 20;
+   all_data.input.cheby_eig_max_iters = 20;
+   all_data.input.cheby_eig_tol = 1e-9;
    all_data.input.cheby_flag = 0;
    all_data.input.precond_flag = 0;
    all_data.input.delay_usec = 0;
-   all_data.input.delay_flag = DELAY_NONE;
+   all_data.input.delay_type = DELAY_NONE;
    all_data.input.omp_parfor_flag = 1;
    all_data.input.delay_frac = 0.0;
    all_data.input.construct_R_flag = 1;
    all_data.input.hypre_solver_flag = 0;
    all_data.input.fail_iter = -1;
+   all_data.input.cheby_eig_type = CHEBY_EIG_POWER;
+   all_data.input.rhs_type = RHS_RAND;
 
    int max_num_iters = 20;
    int start_num_iters = max_num_iters;
@@ -125,6 +142,48 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.matrix.nz = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-c") == 0){
+         arg_index++;
+         c = atof(argv[arg_index]);
+         all_data.matrix.difconv_cx = c;
+         all_data.matrix.difconv_cy = c;
+         all_data.matrix.difconv_cz = c;
+      }
+      else if (strcmp(argv[arg_index], "-cx") == 0){
+         arg_index++;
+         all_data.matrix.difconv_cx = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-cy") == 0){
+         arg_index++;
+         all_data.matrix.difconv_cy = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-cz") == 0){
+         arg_index++;
+         all_data.matrix.difconv_cz = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-a") == 0){
+         arg_index++;
+         a = atof(argv[arg_index]);
+         all_data.matrix.difconv_ax = a;
+         all_data.matrix.difconv_ay = a;
+         all_data.matrix.difconv_az = a;
+      }
+      else if (strcmp(argv[arg_index], "-ax") == 0){
+         arg_index++;
+         all_data.matrix.difconv_ax = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-ay") == 0){
+         arg_index++;
+         all_data.matrix.difconv_ay = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-az") == 0){
+         arg_index++;
+         all_data.matrix.difconv_az = atof(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-atype") == 0){
+         arg_index++;
+         all_data.matrix.difconv_atype = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-problem") == 0)
       {
          arg_index++;
@@ -133,26 +192,46 @@ int main (int argc, char *argv[])
          }
          else if (strcmp(argv[arg_index], "27pt") == 0){
             all_data.input.test_problem = LAPLACE_3D27PT;
+            all_data.matrix.difconv_ax = 0.0;
+            all_data.matrix.difconv_ay = 0.0;
+            all_data.matrix.difconv_az = 0.0;
          }
 	 else if (strcmp(argv[arg_index], "7pt") == 0){
             all_data.input.test_problem = LAPLACE_3D7PT;
+            all_data.matrix.difconv_ax = 0.0;
+            all_data.matrix.difconv_ay = 0.0;
+            all_data.matrix.difconv_az = 0.0;
+         }
+         else if (strcmp(argv[arg_index], "difconv") == 0){
+            all_data.input.test_problem = DIFCONV_3D7PT;
+         }
+         else if (strcmp(argv[arg_index], "vardifconv") == 0){
+            all_data.input.test_problem = VARDIFCONV_3D7PT;
          }
          else if (strcmp(argv[arg_index], "mfem_laplace") == 0){
             all_data.input.test_problem = MFEM_LAPLACE;
-            strcpy(all_data.mfem.mesh_file, "./mfem_haswell/mfem-4.0/data/ball-nurbs.mesh");
+            all_data.input.rhs_type = RHS_FROM_PROBLEM;
          }
          else if (strcmp(argv[arg_index], "mfem_elast") == 0){
             all_data.input.test_problem = MFEM_ELAST;
-            strcpy(all_data.mfem.mesh_file, "./mfem_haswell/mfem-4.0/data/beam-hex.mesh");
-            all_data.hypre.num_functions = 3;
+            all_data.input.rhs_type = RHS_FROM_PROBLEM;
          }
 	 else if (strcmp(argv[arg_index], "mfem_maxwell") == 0){
             all_data.input.test_problem = MFEM_MAXWELL;
+            all_data.input.rhs_type = RHS_FROM_PROBLEM;
          }
          else if (strcmp(argv[arg_index], "file") == 0){
             all_data.input.test_problem = MATRIX_FROM_FILE;
             arg_index++;
             strcpy(all_data.input.mat_file_str, argv[arg_index]);
+         }
+         else if (strcmp(argv[arg_index], "mfem_elast_amr") == 0){
+            all_data.input.test_problem = MFEM_ELAST_AMR;
+            all_data.input.rhs_type = RHS_FROM_PROBLEM;
+         }
+         else if (strcmp(argv[arg_index], "mfem_laplace_amr") == 0){
+            all_data.input.test_problem = MFEM_LAPLACE_AMR;
+            all_data.input.rhs_type = RHS_FROM_PROBLEM;
          }
       }
       else if (strcmp(argv[arg_index], "-smoother") == 0)
@@ -161,22 +240,33 @@ int main (int argc, char *argv[])
          if (strcmp(argv[arg_index], "j") == 0){
             all_data.input.smoother = JACOBI;
             all_data.input.smooth_interp_type = JACOBI;
+            all_data.hypre.relax_type = 0;
          }
          else if (strcmp(argv[arg_index], "gs") == 0){
             all_data.input.smoother = GAUSS_SEIDEL;
+            all_data.hypre.relax_type = 1;
          }
          else if (strcmp(argv[arg_index], "hybrid_jgs") == 0){
             all_data.input.smoother = HYBRID_JACOBI_GAUSS_SEIDEL;
+            all_data.hypre.relax_type = 3;
          }
          else if (strcmp(argv[arg_index], "async_gs") == 0){
             all_data.input.smoother = ASYNC_GAUSS_SEIDEL;
+            all_data.hypre.relax_type = 5;
          }
          else if (strcmp(argv[arg_index], "semi_async_gs") == 0){
             all_data.input.smoother = SEMI_ASYNC_GAUSS_SEIDEL;
+            all_data.hypre.relax_type = 5;
          }
          else if (strcmp(argv[arg_index], "L1j") == 0){
             all_data.input.smoother = L1_JACOBI;
             all_data.input.smooth_interp_type = L1_JACOBI;
+            all_data.hypre.relax_type = 18;
+         }
+         else if (strcmp(argv[arg_index], "L1_hybrid_jgs") == 0){
+            all_data.input.smoother = L1_HYBRID_JACOBI_GAUSS_SEIDEL;
+            all_data.input.smooth_interp_type = L1_HYBRID_JACOBI_GAUSS_SEIDEL;
+            all_data.hypre.relax_type = 13;
          }
       }
       else if (strcmp(argv[arg_index], "-solver") == 0)
@@ -229,9 +319,11 @@ int main (int argc, char *argv[])
          arg_index++;
          if (strcmp(argv[arg_index], "j") == 0){
             all_data.input.smooth_interp_type = JACOBI;
+            all_data.hypre.relax_type = 0;
          }
          else if (strcmp(argv[arg_index], "L1j") == 0){
             all_data.input.smooth_interp_type = L1_JACOBI;
+            all_data.hypre.relax_type = 18;
          }
       }
       else if (strcmp(argv[arg_index], "-smooth_weight") == 0)
@@ -311,6 +403,11 @@ int main (int argc, char *argv[])
          arg_index++;
          all_data.hypre.interp_type = atoi(argv[arg_index]);
       }
+      else if (strcmp(argv[arg_index], "-num_func") == 0)
+      {
+         arg_index++;
+         all_data.hypre.num_functions = atoi(argv[arg_index]);
+      }
       else if (strcmp(argv[arg_index], "-mfem_ref_levels") == 0)
       {
          arg_index++;
@@ -320,6 +417,11 @@ int main (int argc, char *argv[])
       {
          arg_index++;
          all_data.mfem.amr_refs = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-mfem_max_amr_dofs") == 0)
+      {
+         arg_index++;
+         all_data.mfem.max_amr_dofs = atoi(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-mfem_order") == 0)
       {
@@ -456,9 +558,13 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-only_setup") == 0){
          only_setup_flag = 1;
       }
-      else if (strcmp(argv[arg_index], "-eig_power_max_iters") == 0){
+      else if (strcmp(argv[arg_index], "-cheby_eig_max_iters") == 0){
          arg_index++;
-         all_data.input.eig_power_max_iters = atoi(argv[arg_index]);
+         all_data.input.cheby_eig_max_iters = atoi(argv[arg_index]);
+      }
+      else if (strcmp(argv[arg_index], "-cheby_eig_tol") == 0){
+         arg_index++;
+         all_data.input.cheby_eig_tol = atof(argv[arg_index]);
       }
       else if (strcmp(argv[arg_index], "-warmup") == 0){
          warmup = 1;
@@ -466,19 +572,19 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-delay_one") == 0){
          arg_index++;
          all_data.input.delay_usec = atoi(argv[arg_index]);
-         all_data.input.delay_flag = DELAY_ONE;
+         all_data.input.delay_type = DELAY_ONE;
       }
       else if (strcmp(argv[arg_index], "-delay_some") == 0){
          arg_index++;
          all_data.input.delay_usec = atoi(argv[arg_index]);
          arg_index++;
          all_data.input.delay_frac = atof(argv[arg_index]);
-         all_data.input.delay_flag = DELAY_SOME;
+         all_data.input.delay_type = DELAY_SOME;
       }
       else if (strcmp(argv[arg_index], "-delay_all") == 0){
          arg_index++;
          all_data.input.delay_usec = atoi(argv[arg_index]);
-         all_data.input.delay_flag = DELAY_ALL;
+         all_data.input.delay_type = DELAY_ALL;
          all_data.input.delay_frac = 1.0;
       }
       else if (strcmp(argv[arg_index], "-fail_one") == 0){
@@ -486,7 +592,7 @@ int main (int argc, char *argv[])
          all_data.input.delay_usec = atoi(argv[arg_index]);
          arg_index++;
          all_data.input.fail_iter = atoi(argv[arg_index]);
-         all_data.input.delay_flag = FAIL_ONE;
+         all_data.input.delay_type = FAIL_ONE;
       }
       else if (strcmp(argv[arg_index], "-no_construct_R") == 0){
          all_data.input.construct_R_flag = 0;
@@ -497,6 +603,27 @@ int main (int argc, char *argv[])
       else if (strcmp(argv[arg_index], "-no_omp_parfor") == 0){
          all_data.input.omp_parfor_flag = 0;
       }
+      else if (strcmp(argv[arg_index], "-cheby_eig") == 0)
+      {
+         arg_index++;
+         if (strcmp(argv[arg_index], "power") == 0){
+            all_data.input.cheby_eig_type = CHEBY_EIG_POWER;
+         }
+         else if (strcmp(argv[arg_index], "hypre_lobpcg") == 0){
+            all_data.input.cheby_eig_type = CHEBY_EIG_HYPRE_LOBPCG;
+         }
+         else if (strcmp(argv[arg_index], "slepc") == 0){
+            all_data.input.cheby_eig_type = CHEBY_EIG_SLEPC;
+         }
+      }
+      else if (strcmp(argv[arg_index], "-simple_jacobi") == 0){
+         all_data.input.simple_jacobi_flag = 1;
+      }
+      else if (strcmp(argv[arg_index], "-hypre_rlx") == 0){
+         arg_index++;
+         all_data.hypre.relax_type = atoi(argv[arg_index]);
+      }
+
       arg_index++;
    }
 
@@ -531,6 +658,18 @@ int main (int argc, char *argv[])
        all_data.input.solver == PAR_BPX){
       all_data.input.res_compute_type = LOCAL; 
    }
+
+   if (all_data.input.solver == IMPLICIT_EXTENDED_SYSTEM_BPX ||
+       all_data.input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX ||
+       all_data.input.solver == BPX ||
+       all_data.input.solver == PAR_BPX){
+      if (all_data.input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL) {
+         all_data.hypre.relax_type = 0;
+      }
+      else if (all_data.input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL) {
+         all_data.hypre.relax_type = 18;
+      }
+   }
    
    srand(0);
    omp_set_num_threads(1);
@@ -545,9 +684,10 @@ int main (int argc, char *argv[])
       MPI_Finalize();
       return 0;
    }
+
    omp_set_num_threads(all_data.input.num_threads);
 
-   srand(time(NULL));
+   //srand(time(NULL));
    if (warmup == 1){
       num_runs++;
    }

@@ -143,6 +143,7 @@ void PrintOutput(AllData all_data)
 			"\tProblem setup time = %e\n"
                         "\tHypre setup time = %e\n"
                         "\tRemaining setup time = %e\n"
+                        "\tPreconditioned system Eigenvalues = (%e, %e)\n"
                         "Solve stats:\n"
                         "\tRelative Residual 2-norm = %e\n"
                         "\tTotal solve time = %e\n"
@@ -160,6 +161,7 @@ void PrintOutput(AllData all_data)
       strcpy(print_str, 
              "%e %e %e "
              "%e %e "
+             "%e %e "
              "%f %f %f "
              "%e %e %e "
              "%e %e %e "
@@ -173,6 +175,7 @@ void PrintOutput(AllData all_data)
 
    printf(print_str,
           all_data.output.prob_setup_wtime, all_data.output.hypre_setup_wtime, all_data.output.setup_wtime,
+          all_data.cheby.alpha, all_data.cheby.beta,
           all_data.output.r_norm2/all_data.output.r0_norm2, all_data.output.solve_wtime,
           mean_updates, min_updates, max_updates,
           mean_smooth_wtime, min_smooth_wtime, max_smooth_wtime,
@@ -445,6 +448,7 @@ void SMEM_Barrier(AllData *all_data,
    int tid = omp_get_thread_num();
    int num_threads = omp_get_num_threads();
 
+   #pragma omp write
    barrier_flags[tid] = 1;
    #pragma omp flush (barrier_flags)
    while (1){
@@ -452,19 +456,26 @@ void SMEM_Barrier(AllData *all_data,
          int s = 0;
         // #pragma omp flush (barrier_flags)
          for (int t = 0; t < num_threads; t++){
-            s += barrier_flags[t];
+            #pragma omp read
+            int bt = barrier_flags[t];
+            if (bt == 1){
+               s += bt;
+            }
          }
          if (s == num_threads){
             for (int t = 0; t < num_threads; t++){
+               #pragma omp write
                barrier_flags[t] = num_threads;
             }
-           // #pragma omp flush (barrier_flags)
+            #pragma omp flush (barrier_flags)
             return;
          }
       }
       else{
         // #pragma omp flush (barrier_flags)
-         if (barrier_flags[tid] == num_threads){
+         #pragma omp read
+         int bt = barrier_flags[tid];
+         if (bt == num_threads){
             return;
          }
       }

@@ -16,6 +16,11 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
    double prolong_start;
 
    hypre_ParAMGData *amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
+   hypre_ParCSRMatrix **A_array = hypre_ParAMGDataAArray(amg_data);
+   hypre_ParVector **F_array = hypre_ParAMGDataFArray(amg_data);
+   hypre_ParVector **U_array = hypre_ParAMGDataUArray(amg_data);
+   hypre_ParVector *Vtemp = hypre_ParAMGDataVtemp(amg_data);
+   hypre_ParVector *Ztemp = hypre_ParAMGDataZtemp(amg_data);
 
    for (int level = 0; level < all_data->grid.num_levels-1; level++){
       fine_grid = level;
@@ -43,15 +48,17 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                   all_data->vector.y[fine_grid],
                   all_data->input.num_pre_smooth_sweeps,
                   fine_grid,
+                  CYCLE_PHASE_DOWN,
                   0, 0);
+
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
       residual_start = omp_get_wtime();
       SMEM_Sync_Residual(all_data,
-                                all_data->matrix.A[fine_grid],
-                                f_fine,
-                                all_data->vector.u[fine_grid],
-                                all_data->vector.y[fine_grid],
-                                all_data->vector.r_fine[fine_grid]);
+                         all_data->matrix.A[fine_grid],
+                         f_fine,
+                         all_data->vector.u[fine_grid],
+                         all_data->vector.y[fine_grid],
+                         all_data->vector.r_fine[fine_grid]);
       all_data->output.residual_wtime[tid] += omp_get_wtime() - residual_start;
       restrict_start = omp_get_wtime();
       SMEM_Sync_Parfor_Restrict(all_data,
@@ -60,24 +67,38 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                                 all_data->vector.f[coarse_grid],
                                 fine_grid, coarse_grid);
       all_data->output.restrict_wtime[tid] += omp_get_wtime() - restrict_start;
+
      // #pragma omp for
      // for (int i = 0; i < all_data->grid.n[coarse_grid]; i++){
      //    all_data->vector.u[coarse_grid][i] = 0;
      // }
    }
+
    int coarsest_level = all_data->grid.num_levels-1;
-   if (tid == 0){
-      smooth_start = omp_get_wtime();
-      for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
-         hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataFArray(amg_data)[coarsest_level]))[i] = all_data->vector.f[coarsest_level][i];
-      }
-      hypre_GaussElimSolve(amg_data, coarsest_level, 9);
-      for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
-         all_data->vector.u[coarsest_level][i] = hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataUArray(amg_data)[coarsest_level]))[i];
-      }
-      all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
-   }
-   #pragma omp barrier
+
+   //if (tid == 0){
+   //   smooth_start = omp_get_wtime();
+   //   for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
+   //      hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataFArray(amg_data)[coarsest_level]))[i] = all_data->vector.f[coarsest_level][i];
+   //   }
+   //   hypre_GaussElimSolve(amg_data, coarsest_level, 9);
+   //   for (int i = 0; i < all_data->grid.n[coarsest_level]; i++){
+   //      all_data->vector.u[coarsest_level][i] = hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataUArray(amg_data)[coarsest_level]))[i];
+   //   }
+   //   all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
+   //}
+   //#pragma omp barrier
+
+   SMEM_Smooth(all_data,
+               all_data->matrix.A[coarsest_level],
+               all_data->vector.f[coarsest_level],
+               all_data->vector.u[coarsest_level],
+               all_data->vector.u_prev[coarsest_level],
+               all_data->vector.y[coarsest_level],
+               all_data->input.num_pre_smooth_sweeps + all_data->input.num_post_smooth_sweeps,
+               coarsest_level,
+               CYCLE_PHASE_DOWN,
+               0, 0);
 
    for (int level = all_data->grid.num_levels-2; level > -1; level--){
       all_data->grid.zero_flags[level] = 0;
@@ -117,6 +138,7 @@ void SMEM_Sync_Parfor_Vcycle(AllData *all_data)
                   all_data->vector.y[fine_grid],
                   all_data->input.num_post_smooth_sweeps,
                   fine_grid,
+                  CYCLE_PHASE_UP,
                   0, 0);
       all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
    }
@@ -182,9 +204,17 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
    int coarsest_level = all_data->grid.num_levels-1;
    smooth_start = omp_get_wtime();
    if (all_data->input.solver == PAR_BPX){
-      #pragma omp for
-      for (int i = 0; i < all_data->grid.N; i++){
-         all_data->vector.xx[i] = all_data->input.smooth_weight * all_data->vector.rr[i] / all_data->matrix.A_diag_ext[i];
+      if (all_data->input.smoother == L1_JACOBI){
+         #pragma omp for
+         for (int i = 0; i < all_data->grid.N; i++){
+            all_data->vector.xx[i] = all_data->input.smooth_weight * all_data->vector.rr[i] / all_data->matrix.L1_row_norm_ext[i];
+         }
+      }
+      else {
+         #pragma omp for
+         for (int i = 0; i < all_data->grid.N; i++){
+            all_data->vector.xx[i] = all_data->input.smooth_weight * all_data->vector.rr[i] / all_data->matrix.A_diag_ext[i];
+         }
       }
    }
    else {
@@ -204,6 +234,7 @@ void SMEM_Sync_Parfor_BPXcycle(AllData *all_data)
                         all_data->vector.y[level],
                         all_data->input.num_pre_smooth_sweeps,
                         level,
+                        CYCLE_PHASE_DOWN,
                         0, 0);
         // }
       }
@@ -322,6 +353,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                      all_data->vector.y[coarse_grid],
                      all_data->input.num_coarse_smooth_sweeps,
                      coarse_grid,
+                     CYCLE_PHASE_DOWN,
                      0, 0);
          SMEM_Sync_Parfor_MatVec(all_data,
                                  all_data->matrix.P[fine_grid],
@@ -341,6 +373,7 @@ void SMEM_Sync_Parfor_AFACx_Vcycle(AllData *all_data)
                      all_data->vector.y[fine_grid],
                      all_data->input.num_fine_smooth_sweeps,
                      fine_grid,
+                     CYCLE_PHASE_DOWN,
                      0, 0);
          all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          if (tid == 0){
@@ -405,6 +438,7 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
                      all_data->level_vector[thread_level].y[fine_grid],
                      all_data->input.num_fine_smooth_sweeps,
                      thread_level,
+                     CYCLE_PHASE_DOWN,
                      ns, ne);
          all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
          for (int i = ns; i < ne; i++){
@@ -472,14 +506,15 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
             }
             SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
             SMEM_Smooth(all_data,
-                           all_data->matrix.A[thread_level],
-                           all_data->level_vector[thread_level].r[thread_level],
-                           all_data->level_vector[thread_level].e[thread_level],
-                           all_data->level_vector[thread_level].u_prev[thread_level],
-                           all_data->level_vector[thread_level].y[thread_level],
-                           all_data->input.num_fine_smooth_sweeps,
-                           thread_level,
-                           ns, ne);
+                        all_data->matrix.A[thread_level],
+                        all_data->level_vector[thread_level].r[thread_level],
+                        all_data->level_vector[thread_level].e[thread_level],
+                        all_data->level_vector[thread_level].u_prev[thread_level],
+                        all_data->level_vector[thread_level].y[thread_level],
+                        all_data->input.num_fine_smooth_sweeps,
+                        thread_level,
+                        CYCLE_PHASE_DOWN,
+                        ns, ne);
          }
          else{
             ns = all_data->thread.A_ns[fine_grid][tid];
@@ -501,6 +536,7 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
                         all_data->level_vector[thread_level].y[coarse_grid],
                         all_data->input.num_coarse_smooth_sweeps,
                         thread_level,
+                        CYCLE_PHASE_DOWN,
                         ns, ne);
             ns = all_data->thread.A_ns[fine_grid][tid];
             ne = all_data->thread.A_ne[fine_grid][tid];
@@ -526,6 +562,7 @@ void SMEM_Sync_Add_Vcycle(AllData *all_data)
                         all_data->level_vector[thread_level].y[fine_grid],
                         all_data->input.num_fine_smooth_sweeps,
                         thread_level,
+                        CYCLE_PHASE_DOWN,
                         ns, ne);
             ns = all_data->thread.A_ns[thread_level][tid];
             ne = all_data->thread.A_ne[thread_level][tid];

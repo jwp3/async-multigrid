@@ -45,11 +45,18 @@ COMPILE_LASSEN = nvcc -g -O3 -std=c++11 -x=cu --expt-extended-lambda -arch=sm_70
 
 COMPILE_JORDI = $(CPP_COMPILE) -D WINDOWS
 
+export SLEPC_DIR=/cygdrive/c/Users/jwolf/Dropbox/gatech/AsyncMultigrid/async-multigrid/slepc-3.15.0
+export PETSC_DIR=/cygdrive/c/Users/jwolf/Dropbox/gatech/AsyncMultigrid/async-multigrid/petsc
+export PETSC_ARCH=arch-mswin-c-debug
+
 INCLUDE_JORDI = \
+ -I./mfem/mfem-3.4 \
  -I./mfem/hypre/src/hypre/include \
  -I./mfem/metis-5.1.0/include \
  -I./eigen/Eigen \
  -I/usr/include \
+ ${SLEPC_INCLUDE} \
+ ${PETSC_CC_INCLUDES} \
 
 INCLUDE_CORI = -I/global/homes/j/jwolfson/async-multigrid/src/hypre_include -I/global/homes/j/jwolfson/async-multigrid/mfem
 
@@ -70,8 +77,11 @@ INCLUDE_LASSEN = \
  -I./mfem_lassen/metis-5.1.0/include \
 
 LIBS_JORDI = \
+ ./mfem/mfem-3.4/libmfem.a \
  ./mfem/hypre/src/lib/libHYPRE.a \
  ./mfem/metis-5.1.0/lib/libmetis.a \
+ -L/usr/lib \
+ ${SLEPC_EPS_LIB} \
  /usr/lib/libmpi.dll.a \
 
 LIBS_GOTHAM = \
@@ -123,7 +133,7 @@ DMEM_lassen2: clean_lassen2 DMEM_Main_lassen2
 DMEM_quartz: clean_quartz DMEM_Main_quartz2
 
 SMEM_Main_jordi: $(SMEM_OBJ)
-	$(COMPILE) $(INCLUDE) $^ $(LIBS) -o $@ 
+	$(COMPILE) $(INCLUDE) $^ $(LIBS) -o $@
 
 SMEM_Main: $(SRC_DIR)SMEM_Main.cpp
 	$(COMPILE) $(SRC_DIR)SMEM_Main.cpp $(SMEM_CPP_FILES) -DEIGEN_DONT_VECTORIZE=1 $(LIBS) $(INCLUDE) -o SMEM_Main
@@ -181,3 +191,6 @@ clean_smem_quartz2:
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.cpp | $(OBJ_DIR)
 	$(COMPILE) $(INCLUDE) -c $< -o $@
+
+include ${SLEPC_DIR}/lib/slepc/conf/slepc_common
+include ${PETSC_DIR}/lib/petsc/conf/variables

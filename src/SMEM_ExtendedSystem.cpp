@@ -55,13 +55,15 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    }
 
    unsigned int *usec_vec = (unsigned int *)calloc(num_threads, sizeof(unsigned int));
-   srand(0);
+   int *sleep_flag_vec = (int *)calloc(num_threads, sizeof(int));
    int num_delayed = (int)ceil((double)num_threads * all_data->input.delay_frac);
    int count_delayed = 0;
+   srand(0);
    for (int t = num_threads-1; t >= 0; t--){
       if (count_delayed == num_delayed) break;
       count_delayed++;
-      usec_vec[t] = all_data->input.delay_usec;
+      usec_vec[t] = (int)RandDouble(0.0, (double)all_data->input.delay_usec);
+      sleep_flag_vec[t] = 1;
    }
 
    int min_relax, max_relax = 0;
@@ -70,8 +72,8 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
    int resnorm_converge_flag = 0;
    int glob_done_iters = 0;
 
+   amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
    if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
-      amg_data = (hypre_ParAMGData *)all_data->hypre.solver;
       A_array = hypre_ParAMGDataAArray(amg_data);
       P_array = hypre_ParAMGDataPArray(amg_data);
       R_array = hypre_ParAMGDataRArray(amg_data);
@@ -159,7 +161,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
       int i_loc, jj_loc, loc_iters = 1;
       iters[tid * cache_line] = 1; 
       unsigned int usec;
-      int delay_flag;
+      int sleep_flag;
       
       HYPRE_Real *A_data_loc, *y_loc, *r_loc, **y, **r, **z, *b_loc;
       HYPRE_Int *A_i_loc, *A_j_loc;
@@ -240,17 +242,17 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
 
       srand(tid);
       usec = 0;
-      delay_flag = 0;      
+      sleep_flag = 0;
       int delayed_thread = num_threads-1;
-      if (all_data->input.delay_flag == DELAY_SOME || all_data->input.delay_flag == DELAY_ALL){
-         delay_flag = 1;
+      if (all_data->input.delay_type == DELAY_SOME || all_data->input.delay_type == DELAY_ALL){
+         sleep_flag = sleep_flag_vec[tid];
          usec = usec_vec[tid];
       }
-      else if (tid == delayed_thread && all_data->input.delay_flag == DELAY_ONE){
-         delay_flag = 1;
+      else if (tid == delayed_thread && all_data->input.delay_type == DELAY_ONE){
+         sleep_flag = 1;
          usec = all_data->input.delay_usec;
       }
-      else if (tid == delayed_thread && all_data->input.delay_flag == FAIL_ONE){
+      else if (tid == delayed_thread && all_data->input.delay_type == FAIL_ONE){
          usec = all_data->input.delay_usec;
       }
 
@@ -258,16 +260,17 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
       double start = omp_get_wtime();
       if (all_data->input.num_cycles > 1)
       while(1){
-         if (tid == delayed_thread && all_data->input.delay_flag == FAIL_ONE){
+         if (tid == delayed_thread && all_data->input.delay_type == FAIL_ONE){
             if (loc_iters == all_data->input.fail_iter){
-               delay_flag = 1;
+               sleep_flag = 1;
             }
             else {
-               delay_flag = 0;
+               sleep_flag = 0;
             }
          }
 
-         if (delay_flag == 1){
+         if (sleep_flag == 1){
+            usec = (int)RandDouble(0.0, 2.0 * (double)all_data->input.delay_usec);
 #ifdef WINDOWS
             this_thread::sleep_for(chrono::microseconds(usec));
 #else
@@ -299,6 +302,10 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             }
             all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
 
+            if (all_data->input.async_flag == 0){
+               #pragma omp barrier
+            }
+
             vec_start = omp_get_wtime();
             i_loc = 0;
             if (all_data->input.omp_parfor_flag == 1){
@@ -308,7 +315,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   for (int i = 0; i < n; i++){
                      double x_tmp = x[i];
                      double x_write = y_loc[i_loc] + omega * (delta * r_loc[i_loc] / A_data[A_i[i]] + x_tmp - y_loc[i_loc]);
-                    // #pragma omp atomic write
+                     //#pragma omp atomic write
                      x[i] = x_write;
                      y_loc[i_loc] = x_tmp;
                      r_inner_prod_loc += pow(r_loc[i_loc], 2.0);
@@ -321,7 +328,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   for (int i = 0; i < n; i++){
                      double x_tmp = x[i];
                      double x_write = y_loc[i_loc] + omega * (delta * r_loc[i_loc] / A_data[A_i[i]] + x_tmp - y_loc[i_loc]);
-                    // #pragma omp atomic write
+                     //#pragma omp atomic write
                      x[i] = x_write;
                      y_loc[i_loc] = x_tmp;
                      i_loc++;
@@ -334,7 +341,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                   for (int i = ns; i < ne; i++){
                      double x_tmp = x[i];
                      double x_write = y_loc[i_loc] + omega * (delta * r_loc[i_loc] / A_data[A_i[i]] + x_tmp - y_loc[i_loc]);
-                    // #pragma omp atomic write
+                     //#pragma omp atomic write
                      x[i] = x_write;
                      y_loc[i_loc] = x_tmp;
                      r_inner_prod_loc += pow(r_loc[i_loc], 2.0);
@@ -364,6 +371,7 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             HYPRE_Real **f = all_data->vector.f;
             HYPRE_Real **e = all_data->vector.e;
             HYPRE_Real **z = all_data->vector.z;
+            HYPRE_Real **u_smooth = all_data->vector.u_smooth;
             //HYPRE_Real **y = all_data->vector.y;
             //HYPRE_Real **r = all_data->vector.r;
 
@@ -478,42 +486,114 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                HYPRE_Real **z1 = all_data->level_vector[thread_level].z1;
                HYPRE_Real **z2 = all_data->level_vector[thread_level].z2;
 
-              // ns = A_ns[thread_level][tid];
-              // ne = A_ne[thread_level][tid];
-              // A_matvec_start = omp_get_wtime();
-              // SMEM_MatVec(all_data,
-              //             A[thread_level],
-              //             z1[thread_level],
-              //             z[thread_level],
-              //             ns, ne);
-              // all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
-              // SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
-
-              // ns = row_ns[thread_level][tid];
-              // ne = row_ne[thread_level][tid];
-
                ns = A_ns[thread_level][tid];
                ne = A_ne[thread_level][tid];
+               A_matvec_start = omp_get_wtime();
+               SMEM_MatVec(all_data,
+                           A[thread_level],
+                           z1[thread_level],
+                           z[thread_level],
+                           ns, ne);
+               all_data->output.A_matvec_wtime[tid] += omp_get_wtime() - A_matvec_start;
+
                HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[thread_level]);
                HYPRE_Int *A_j = hypre_CSRMatrixJ(all_data->matrix.A[thread_level]);
                HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[thread_level]);
-               vec_start = omp_get_wtime();
-               for (int i = ns; i < ne; i++){
-                  double Axi = 0.0;
-                  for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
-                     Axi += A_data[jj] * z1[thread_level][A_j[jj]];
-                  }
-                  z[thread_level][i] = Axi + z2[thread_level][i];
 
-                  int ii = i-ns; 
-                 // z[thread_level][i] += z2[thread_level][i];
-                  r[thread_level][ii] = f[thread_level][i] - z[thread_level][i];
+               double *diag_scale;
+               if (all_data->input.smoother == L1_JACOBI ||
+                   all_data->input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL){
+                  diag_scale = hypre_ParAMGDataL1Norms(amg_data)[thread_level];
+                  //diag_scale = all_data->matrix.L1_row_norm[thread_level];
+               }
+               else {
+                  diag_scale = all_data->matrix.A_diag[thread_level];
+               }
+
+               vec_start = omp_get_wtime();
+               ////if (thread_level == coarsest_level){
+               ////   for (int i = ns; i < ne; i++){
+               ////      int ii = i-ns;
+               ////      z[thread_level][i] += z2[thread_level][i];
+               ////      r[thread_level][ii] = f[thread_level][i] - z[thread_level][i];
+               ////      hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataFArray(amg_data)[coarsest_level]))[i] = r[thread_level][ii];
+               ////   }
+               ////   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               ////   if (tid == num_threads-1){
+               ////      hypre_GaussElimSolve(amg_data, coarsest_level, 9);
+               ////   }
+               ////   SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               ////   for (int i = ns; i < ne; i++){
+               ////      int ii = i-ns;
+               ////      double u_prev = u[thread_level][i];
+               ////      double ui = y[thread_level][ii] + omega * (delta * hypre_VectorData(hypre_ParVectorLocalVector(hypre_ParAMGDataUArray(amg_data)[coarsest_level]))[i] + u[thread_level][i] - y[thread_level][ii]);
+               ////     // #pragma omp atomic write
+               ////      u[thread_level][i] = ui;
+               ////      y[thread_level][ii] = u_prev;
+               ////   }
+               ////}
+               ////else {
+               //   for (int i = ns; i < ne; i++){
+               //      //double Axi = 0.0;
+               //      //for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+               //      //   Axi += A_data[jj] * z1[thread_level][A_j[jj]];
+               //      //}
+               //      //z[thread_level][i] = Axi + z2[thread_level][i];
+
+               //      int ii = i-ns; 
+               //      z[thread_level][i] += z2[thread_level][i];
+               //      r[thread_level][ii] = f[thread_level][i] - z[thread_level][i];
+               //      double u_prev = u[thread_level][i];
+               //      double ui = y[thread_level][ii] + omega * (delta * r[thread_level][ii] / diag_scale[i] + u[thread_level][i] - y[thread_level][ii]);
+               //     // #pragma omp atomic write
+               //      u[thread_level][i] = ui;
+               //      y[thread_level][ii] = u_prev;
+               //   }
+               ////}
+
+               if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
+                   all_data->input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL){
+                  for (int i = ns; i < ne; i++){
+                     u_smooth[thread_level][i] = 0;
+                     int ii = i-ns;
+                     z[thread_level][i] += z2[thread_level][i];
+                     r[thread_level][ii] = f[thread_level][i] - z[thread_level][i];
+                  }
+                  for (int i = ns; i < ne; i++){
+                     int ii = i-ns;
+                     double res = r[thread_level][ii];
+                     for (int jj = A_i[i]; jj < A_i[i+1]; jj++){
+                        int ii = A_j[jj];
+                        //if (ii >= ns && ii < ne){
+                           res -= A_data[jj] * u_smooth[thread_level][ii];
+                        //}
+                        //else {
+                        //   res -= A_data[jj] * u_smooth_prev[ii];
+                        //}
+                     }
+                     u_smooth[thread_level][i] += res / diag_scale[i];
+                  }
+
+                  //SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
+               }
+               else {
+                  for (int i = ns; i < ne; i++){
+                     int ii = i-ns;
+                     z[thread_level][i] += z2[thread_level][i];
+                     r[thread_level][ii] = f[thread_level][i] - z[thread_level][i];
+                     u_smooth[thread_level][i] = r[thread_level][ii] / diag_scale[i];
+                  }
+               }
+
+               for (int i = ns; i < ne; i++){
+                  int ii = i-ns;
                   double u_prev = u[thread_level][i];
-                  double ui = y[thread_level][ii] + omega * (delta * r[thread_level][ii] / A_data[A_i[i]] + u[thread_level][i] - y[thread_level][ii]);
-                 // #pragma omp atomic write
+                  double ui = y[thread_level][ii] + omega * (delta * u_smooth[thread_level][i] + u[thread_level][i] - y[thread_level][ii]);
+                  // #pragma omp atomic write
                   u[thread_level][i] = ui;
                   y[thread_level][ii] = u_prev;
                }
+
                all_data->output.vec_wtime[tid] += omp_get_wtime() - vec_start;
 
                SMEM_LevelBarrier(all_data, all_data->thread.barrier_flags, thread_level);
@@ -626,6 +706,24 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
          }
       }
       all_data->grid.local_num_correct[tid] = loc_iters;
+
+      if (all_data->input.solver == EXPLICIT_EXTENDED_SYSTEM_BPX){
+         free(y_loc);
+         free(r_loc);
+         free(b_loc);
+         free(A_i_loc);
+         free(A_j_loc);
+         free(A_data_loc);
+      }
+      else {
+         for (int q = 0; q < all_data->thread.thread_levels[tid].size(); q++){
+            thread_level = all_data->thread.thread_levels[tid][q];
+            free(y[thread_level]);
+            free(r[thread_level]);
+         }
+         free(y);
+         free(r);
+      }
    }
    all_data->output.solve_wtime = omp_get_wtime() - start;
 
@@ -665,9 +763,9 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
      // }
       u = hypre_VectorData(hypre_ParVectorLocalVector(U_array[0]));
       f = hypre_VectorData(hypre_ParVectorLocalVector(F_array[0]));
-     // for (int i = 0; i < all_data->grid.n[0]; i++){
-     //    printf("%e\n", u[i]);
-     // }
+      //for (int i = 0; i < all_data->grid.n[0]; i++){
+      //   printf("%e %e\n", u[i], f[i]);
+      //}
       hypre_ParCSRMatrixMatvecOutOfPlace(-1.0,
                                          A_array[0],
                                          U_array[0],
@@ -704,9 +802,9 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
             all_data->vector.u[fine_grid][i] += all_data->vector.e[fine_grid][i];
          }
       }
-     // for (int i = 0; i < all_data->grid.n[0]; i++){
-     //    printf("%e\n", all_data->vector.u[0][i]);
-     // }
+      //for (int i = 0; i < all_data->grid.n[0]; i++){
+      //   printf("%e %e\n", all_data->vector.u[0][i], all_data->vector.f[0][i]);
+      //}
       SMEM_Sync_Parfor_Residual(all_data,
                                 all_data->matrix.A[0],
                                 all_data->vector.f[0],
@@ -715,6 +813,13 @@ void SMEM_ExtendedSystemSolve(AllData *all_data)
                                 all_data->vector.r[0]);
       all_data->output.r_norm2 = Parfor_Norm2(all_data->vector.r[0], all_data->grid.n[0]);
    }
+
+   free(level_converge);
+   free(iters);
+   free(wtime);
+   free(r_norm2_glob);
+   free(usec_vec);
+   free(sleep_flag_vec);
 
   // printf("ext. sys. rel. res. norm %e, rel. res. norm %e, time %e\n",
   // printf("%e %e %e %e %e %f %d %d\n",

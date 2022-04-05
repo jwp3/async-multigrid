@@ -12,8 +12,9 @@ void SMEM_Solve(AllData *all_data)
 {
    double delta = all_data->cheby.delta;
    double mu = all_data->cheby.mu;
-   double mu22 = pow(2.0 * mu, 2.0);
+   double mu24 = 4.0 * pow(mu, 2.0);
    double sum, r_inner_prod;
+   double prev_res_norm = 1.0;
    HYPRE_Real *u_outer, *y_outer;
    HYPRE_Int *A_i = hypre_CSRMatrixI(all_data->matrix.A[0]);
    HYPRE_Real *A_data = hypre_CSRMatrixData(all_data->matrix.A[0]);
@@ -30,13 +31,15 @@ void SMEM_Solve(AllData *all_data)
 
    int num_threads = all_data->input.num_threads;
    unsigned int *usec_vec = (unsigned int *)calloc(num_threads, sizeof(unsigned int));
-   srand(0);
+   int *sleep_flag_vec = (int *)calloc(num_threads, sizeof(int));
    int num_delayed = (int)ceil((double)num_threads * all_data->input.delay_frac);
    int count_delayed = 0;
+   srand(0);
    for (int t = num_threads-1; t >= 0; t--){
       if (count_delayed == num_delayed) break;
       count_delayed++;
-      usec_vec[t] = all_data->input.delay_usec;
+      usec_vec[t] = (int)RandDouble(0.0, (double)all_data->input.delay_usec);
+      sleep_flag_vec[t] = 1;
    }
 
    HYPRE_Real *r;
@@ -52,7 +55,7 @@ void SMEM_Solve(AllData *all_data)
       y_outer = (HYPRE_Real *)calloc(all_data->grid.n[0], sizeof(HYPRE_Real));
    }
 
-   int k_start = 0;
+   int k_start = 1;
 
    #pragma omp parallel
    {
@@ -64,6 +67,7 @@ void SMEM_Solve(AllData *all_data)
                                 r);
    }
    all_data->output.r0_norm2 = Parfor_Norm2(r, all_data->grid.n[0]);
+   prev_res_norm = all_data->output.r0_norm2;
 
    double start;
    if (all_data->input.async_flag == 1){
@@ -90,12 +94,12 @@ void SMEM_Solve(AllData *all_data)
       double *r_norm_loc = (double *)calloc(all_data->input.num_threads, sizeof(double));
       if (all_data->input.print_reshist_flag == 1 &&
           all_data->input.format_output_flag == 0){
-         printf("\nIters\tRel. Res. 2-norm\n"
-                "-----\t----------------\n");
+         printf("\nIters\tRel. Res. 2-norm\tConv. rate\n"
+                "-----\t----------------\t----------------\n");
       }
       if (all_data->input.print_reshist_flag == 1 &&
           all_data->input.format_output_flag == 0){
-         printf("%d\t%e\n", 0, 1.);
+         printf("%d\t%e\t\t%e\n", 0, 1., 1.);
       }
       if (all_data->input.thread_part_type == ALL_LEVELS){ 
          omp_init_lock(&(all_data->thread.lock));
@@ -107,31 +111,32 @@ void SMEM_Solve(AllData *all_data)
          double omega = 2.0;
          srand(tid);
          unsigned int usec = 0;
-         int delay_flag = 0;
+         int sleep_flag = 0;
          int delay_thread = num_threads-1;
-         if (all_data->input.delay_flag == DELAY_SOME || all_data->input.delay_flag == DELAY_ALL){
-            delay_flag = 1;
+         if (all_data->input.delay_type == DELAY_SOME || all_data->input.delay_type == DELAY_ALL){
+            sleep_flag = sleep_flag_vec[tid];
             usec = usec_vec[tid];
          }
-         else if (tid == delay_thread && all_data->input.delay_flag == DELAY_ONE){
-            delay_flag = 1;
+         else if (tid == delay_thread && all_data->input.delay_type == DELAY_ONE){
+            sleep_flag = 1;
             usec = all_data->input.delay_usec;
          }
-         else if (tid == delay_thread && all_data->input.delay_flag == FAIL_ONE){
+         else if (tid == delay_thread && all_data->input.delay_type == FAIL_ONE){
             usec = all_data->input.delay_usec;
          }
 
          for (int k = k_start; k <= all_data->input.num_cycles; k++){
-            if (tid == delay_thread && all_data->input.delay_flag == FAIL_ONE){
+            if (tid == delay_thread && all_data->input.delay_type == FAIL_ONE){
                if (k == all_data->input.fail_iter){
-                  delay_flag = 1;
+                  sleep_flag = 1;
                }
                else {
-                  delay_flag = 0;
+                  sleep_flag = 0;
                }
             }
             
-            if (delay_flag == 1){
+            if (sleep_flag == 1){
+               usec = (int)RandDouble(0.0, 2.0 * (double)all_data->input.delay_usec);
 #ifdef WINDOWS
                this_thread::sleep_for(chrono::microseconds(usec));
 #else
@@ -157,7 +162,7 @@ void SMEM_Solve(AllData *all_data)
             else if (all_data->input.solver == BPX || all_data->input.solver == PAR_BPX){
                SMEM_Sync_Parfor_BPXcycle(all_data);
             }
-            else{
+            else {
                SMEM_Sync_Parfor_Vcycle(all_data);
             }
 
@@ -179,17 +184,17 @@ void SMEM_Solve(AllData *all_data)
                      all_data->vector.u[0][i] = u_outer[i];
                   }
                }
-               omega = 1.0 / (1.0 - omega / mu22);
+               omega = 1.0 / (1.0 - omega / mu24);
             }
  
             double residual_start = omp_get_wtime();
             if (tid == 0) r_inner_prod = 0;
             SMEM_Sync_Residual(all_data,
-                                      all_data->matrix.A[0],
-                                      all_data->vector.f[0],
-                                      all_data->vector.u[0],
-                                      all_data->vector.y[0],
-                                      r);
+                               all_data->matrix.A[0],
+                               all_data->vector.f[0],
+                               all_data->vector.u[0],
+                               all_data->vector.y[0],
+                               r);
             if (all_data->input.check_resnorm_flag == 1){
                #pragma omp for reduction(+:r_inner_prod)
                for (int i = 0; i < all_data->grid.n[0]; i++){
@@ -225,7 +230,12 @@ void SMEM_Solve(AllData *all_data)
                }
             }
             if (all_data->input.print_reshist_flag && tid == 0){
-               printf("%d\t%e\n", k+1, all_data->output.r_norm2/all_data->output.r0_norm2);
+               double res_norm = all_data->output.r_norm2;
+               printf("%d\t%e\t\t%e\n",
+                      k,
+                      all_data->output.r_norm2/all_data->output.r0_norm2,
+                      res_norm / prev_res_norm);
+               prev_res_norm = res_norm;
             }
          }
       }
@@ -239,12 +249,16 @@ void SMEM_Solve(AllData *all_data)
       if (all_data->input.check_resnorm_flag == 0){
           all_data->output.r_norm2 = Parfor_Norm2(r, all_data->grid.n[0]); 
       }
+      free(r_norm_loc);
    }
 
    if (all_data->input.precond_flag == 1){
       free(u_outer);
       free(y_outer);
    }
+
+   free(usec_vec);
+   free(sleep_flag_vec);
 }
 
 void SMEM_Smooth(AllData *all_data,
@@ -255,6 +269,7 @@ void SMEM_Smooth(AllData *all_data,
                  HYPRE_Real *r,
                  int num_sweeps,
                  int level,
+                 int cycle_phase,
                  int ns, int ne)
 {
    int tid = omp_get_thread_num();
@@ -306,8 +321,14 @@ void SMEM_Smooth(AllData *all_data,
          }
       }
       else{
-         if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL){
-            SMEM_Sync_Parfor_HybridJacobiGaussSeidel(all_data, A, f, u, y, num_sweeps, level);
+         if (all_data->input.smoother == HYBRID_JACOBI_GAUSS_SEIDEL ||
+             all_data->input.smoother == L1_HYBRID_JACOBI_GAUSS_SEIDEL){
+            //if (cycle_phase == CYCLE_PHASE_DOWN){ 
+            //   SMEM_Sync_Parfor_HybridJacobiGaussSeidelT(all_data, A, f, u, y, num_sweeps, level);
+            //}
+            //else {
+               SMEM_Sync_Parfor_HybridJacobiGaussSeidel(all_data, A, f, u, y, num_sweeps, level);
+            //}
          }
          else if (all_data->input.smoother == ASYNC_GAUSS_SEIDEL){
             SMEM_Async_Parfor_GaussSeidel(all_data, A, f, u, num_sweeps, level);

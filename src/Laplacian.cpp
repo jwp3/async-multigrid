@@ -199,6 +199,21 @@ void Laplacian_3D_27pt(HYPRE_ParCSRMatrix *A_ptr,
 //               of essential boundary conditions, static condensation, and the
 //               optional connection to the GLVis tool for visualization.
 
+void sigmaFunc(const Vector &x, DenseMatrix &s)
+{
+   s.SetSize(3);
+   double a = 17.0 - 2.0 * x[0] * (1.0 + x[0]);
+   s(0,0) = 0.5 + x[0] * x[0] * (8.0 / a - 0.5);
+   s(0,1) = x[0] * x[1] * (8.0 / a - 0.5);
+   s(0,2) = 0.0;
+   s(1,0) = s(0,1);
+   s(1,1) = 0.5 * x[0] * x[0] + 8.0 * x[1] * x[1] / a;
+   s(1,2) = 0.0;
+   s(2,0) = 0.0;
+   s(2,1) = 0.0;
+   s(2,2) = a / 32.0;
+}
+
 void MFEM_Laplacian(AllData *all_data,
                     HYPRE_IJMatrix *Aij)
 {
@@ -207,119 +222,181 @@ void MFEM_Laplacian(AllData *all_data,
    // 2. Read the mesh from the given mesh file. We can handle triangular,
    //    quadrilateral, tetrahedral, hexahedral, surface and volume meshes with
    //    the same code.
-   Mesh *mesh = new Mesh(all_data->mfem.mesh_file, 1, 1);
-   int dim = mesh->Dimension();
+   Mesh mesh(all_data->mfem.mesh_file, 1, 1);
+   int dim = mesh.Dimension();
+   int sdim = mesh.SpaceDimension();
 
+   if (all_data->input.test_problem == MFEM_LAPLACE_AMR){
+      if (mesh.NURBSext){
+         for (int i = 0; i < 2; i++){
+            mesh.UniformRefinement();
+         }
+         mesh.SetCurvature(2);
+      }
+   }
    // 3. Refine the mesh to increase the resolution.
    for (int l = 0; l < all_data->mfem.ref_levels; l++){
-      mesh->UniformRefinement();
+      mesh.UniformRefinement();
    }
-   if (mesh->NURBSext)
-   {
-      mesh->SetCurvature(max(all_data->mfem.order, 1));
+   if (all_data->input.test_problem == MFEM_LAPLACE){
+      if (mesh.NURBSext){
+         mesh.SetCurvature(max(all_data->mfem.order, 1));
+      }
    }
-  // mesh->SetCurvature(2);
 
    // 4. Define a finite element space on the mesh. Here we use continuous
    //    Lagrange finite elements of the specified order. If order < 1, we
    //    instead use an isoparametric/isogeometric space.
-   FiniteElementCollection *fec;
-   fec = new H1_FECollection(all_data->mfem.order, dim);
-   FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
+   H1_FECollection fec(all_data->mfem.order, dim);
+   FiniteElementSpace fespace(&mesh, &fec);
   // cout << "Number of finite element unknowns: "
   //      << fespace->GetTrueVSize() << endl;
-
-   // 5. Determine the list of true (i.e. conforming) essential boundary dofs.
-   //    In this example, the boundary conditions are defined by marking all
-   //    the boundary attributes from the mesh as essential (Dirichlet) and
-   //    converting them to a list of true dofs.
-   Array<int> ess_tdof_list;
-   if (mesh->bdr_attributes.Size())
-   {
-      Array<int> ess_bdr(mesh->bdr_attributes.Max());
-      ess_bdr = 1;
-      fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-   }
 
    // 6. Set up the linear form b(.) which corresponds to the right-hand side of
    //    the FEM linear system, which in this case is (1,phi_i) where phi_i are
    //    the basis functions in the finite element fespace.
    ConstantCoefficient one(1.0);
-   LinearForm *b = new LinearForm(fespace);
-   BilinearFormIntegrator *integ = new DiffusionIntegrator(one);
-   b->AddDomainIntegrator(new DomainLFIntegrator(one));
+   ConstantCoefficient zero(0.0);
+   LinearForm b(&fespace);
+   b.AddDomainIntegrator(new DomainLFIntegrator(one));
 
    // 7. Define the solution vector x as a finite element grid function
    //    corresponding to fespace. Initialize x with initial guess of zero,
    //    which satisfies the boundary conditions.
-   GridFunction x(fespace);
+   GridFunction x(&fespace);
    x = 0.0;
 
    // 8. Set up the bilinear form a(.,.) on the finite element space
    //    corresponding to the Laplacian operator -Delta, by adding the Diffusion
    //    domain integrator.
-   BilinearForm *a = new BilinearForm(fespace);
-   a->AddDomainIntegrator(new DiffusionIntegrator(one));
+   MatrixFunctionCoefficient sigma(3, sigmaFunc);
+   BilinearForm a(&fespace);
+   BilinearFormIntegrator *integ = new DiffusionIntegrator(one);
+   //BilinearFormIntegrator *integ = new DiffusionIntegrator(sigma);
+
+   a.AddDomainIntegrator(integ);
 
    // 9. Assemble the bilinear form and the corresponding linear system,
    //    applying any necessary transformations such as: eliminating boundary
    //    conditions, applying conforming constraints for non-conforming AMR,
    //    static condensation, etc.
-   if (static_cond) { a->EnableStaticCondensation(); }
+   if (static_cond) { a.EnableStaticCondensation(); }
 
    SparseMatrix A;
    Vector X, B;
 
-   int count_refs = all_data->mfem.amr_refs;
-   while(1){
-      std::vector<int> rand_inds;
-      
-      a->Assemble();
-      b->Assemble();
+   if (all_data->input.test_problem == MFEM_LAPLACE_AMR){
+      Array<int> ess_bdr(mesh.bdr_attributes.Max());
+      ess_bdr = 1;
 
-      a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
-      if (count_refs == 0) break;
-      Vector *E = new Vector(mesh->GetNE()); 
-      for (int i = 0; i < mesh->GetNE(); i++){
-         rand_inds.push_back(i);
-	 (*E)[i] = 0.0;
-      }
-      std::random_shuffle(rand_inds.begin(), rand_inds.end());
-      for (int i = 0; i < mesh->GetNE(); i++){
-         if (count_refs == 0) break;
-         (*E)[rand_inds.back()] = 2.0;
-         count_refs--;
-         rand_inds.pop_back();
-      }
-      mesh->RefineByError(*E, 1.0);
-      
-      fespace->Update();
-      x.Update();
+      FiniteElementSpace flux_fespace(&mesh, &fec, sdim);
+      ZienkiewiczZhuEstimator estimator(*integ, x, flux_fespace);
+      estimator.SetAnisotropic();
 
-      a->Update();
-      b->Update();
+      ThresholdRefiner refiner(estimator);
+      refiner.SetTotalErrorFraction(0.7);
+
+      while(1){
+
+         b.Assemble();
+
+         // 14. Set Dirichlet boundary values in the GridFunction x.
+         //     Determine the list of Dirichlet true DOFs in the linear system.
+         Array<int> ess_tdof_list;
+         x.ProjectBdrCoefficient(zero, ess_bdr);
+         fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+         // 15. Assemble the stiffness matrix.
+         a.Assemble();
+
+         // 15. Create the linear system: eliminate boundary conditions, constrain
+         //     hanging nodes and possibly apply other transformations. The system
+         //     will be solved for true (unconstrained) DOFs only.
+         const int copy_interior = 1;
+         a.FormLinearSystem(ess_tdof_list, x, b, A, X, B, copy_interior);
+
+         int cdofs = fespace.GetTrueVSize();
+         if (all_data->input.format_output_flag == 0) printf("\tnum rows = %d\n", cdofs);
+         if (cdofs >= all_data->mfem.max_amr_dofs){
+            break;
+         }
+
+         // 16. Define a simple symmetric Gauss-Seidel preconditioner and use it to
+         //     solve the linear system with PCG.
+         DSmoother M(A);
+         PCG(A, M, B, X, 3, 2000, 1e-6, 0.0);
+         //CG(A, B, X, 3, 2000, 1e-12, 0.0);
+
+         // 17. After solving the linear system, reconstruct the solution as a
+         //     finite element GridFunction. Constrained nodes are interpolated
+         //     from true DOFs (it may therefore happen that x.Size() >= X.Size()).
+         a.RecoverFEMSolution(X, b, x);
+
+         // 19. Call the refiner to modify the mesh. The refiner calls the error
+         //     estimator to obtain element errors, then it selects elements to be
+         //     refined and finally it modifies the mesh. The Stop() method can be
+         //     used to determine if a stopping criterion was met.
+         refiner.Apply(mesh);
+         if (refiner.Stop()){
+            break;
+         }
+
+         // 20. Update the space to reflect the new state of the mesh. Also,
+         //     interpolate the solution x so that it lies in the new space but
+         //     represents the same function. This saves solver iterations later
+         //     since we'll have a good initial guess of x in the next step.
+         //     Internally, FiniteElementSpace::Update() calculates an
+         //     interpolation matrix which is then used by GridFunction::Update().
+         fespace.Update();
+         x.Update();
+
+         // 21. Inform also the bilinear and linear forms that the space has
+         //     changed.
+         a.Update();
+         b.Update();
+      }
+   }
+   else {
+      // 5. Determine the list of true (i.e. conforming) essential boundary dofs.
+      //    In this example, the boundary conditions are defined by marking all
+      //    the boundary attributes from the mesh as essential (Dirichlet) and
+      //    converting them to a list of true dofs.
+      Array<int> ess_tdof_list;
+      if (mesh.bdr_attributes.Size())
+      {
+         Array<int> ess_bdr(mesh.bdr_attributes.Max());
+         ess_bdr = 1;
+         fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+      }
+
+      a.Assemble();
+      b.Assemble();
+
+      a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
    }
 
-   if (all_data->input.mfem_test_error_flag == 1){
-      for (int i = 0; i < A.Height(); i++){
-         B[i] = 1.0;   
-      }
+  // if (all_data->input.mfem_test_error_flag == 1){
+  //    for (int i = 0; i < A.Height(); i++){
+  //       B[i] = 1.0;   
+  //    }
 
-     // TODO: fix PCG
-     // GSSmoother M(A);
-     // PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
-    
-      all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double)); 
-      for (int i = 0; i < A.Height(); i++){
-         all_data->mfem.u[i] = X[i];
-      }
-   }
+  //    GSSmoother M(A);
+  //    PCG(A, M, B, X, all_data->input.mfem_solve_print_flag, 200, 1e-12, 0.0);
+  //  
+  //    all_data->mfem.u = (double *)malloc(A.Height() * sizeof(double)); 
+  //    for (int i = 0; i < A.Height(); i++){
+  //       all_data->mfem.u[i] = X[i];
+  //    }
+  // }
 
    HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, A.Height()-1, 0, A.Height()-1, Aij);
    HYPRE_IJMatrixSetObjectType(*Aij, HYPRE_PARCSR);
    HYPRE_IJMatrixInitialize(*Aij);
 
+   all_data->hypre.b_values = (HYPRE_Real *)malloc(A.Height() * sizeof(HYPRE_Real));
+
    for (int i = 0; i < A.Height(); i++){
+      all_data->hypre.b_values[i] = B[i];
 
       Array<int> mfem_cols;
       Vector mfem_srow;
@@ -342,11 +419,6 @@ void MFEM_Laplacian(AllData *all_data,
   // cout << "Size of linear system: " << A.Height() << endl;
 
    // 14. Free the used memory.
-   delete a;
-   delete b;
-   delete fespace;
-   delete fec;
-   delete mesh;
 }
 
 #endif

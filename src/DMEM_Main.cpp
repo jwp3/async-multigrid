@@ -360,8 +360,8 @@ int main (int argc, char *argv[])
         // solvers.push_back(dmem_all_data.input.solver);
         // num_solvers++;
       }
-      else if (strcmp(argv[arg_index], "-pcg") == 0){
-         dmem_all_data.input.outer_solver = PCG;
+      else if (strcmp(argv[arg_index], "-hypre_pcg") == 0){
+         dmem_all_data.input.outer_solver = HYPRE_PCG;
       }
       else if (strcmp(argv[arg_index], "-simple_jacobi") == 0){
          dmem_all_data.input.simple_jacobi_flag = 1;
@@ -785,7 +785,7 @@ int main (int argc, char *argv[])
                printf("asynchronous ");
             }
          }
-         if (dmem_all_data.input.outer_solver == PCG){
+         if (dmem_all_data.input.outer_solver == HYPRE_PCG){
             if (my_id == 0){
                printf("PCG\n");
             }

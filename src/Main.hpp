@@ -81,7 +81,7 @@
 #define RICHARD_ACCEL 1
 
 #define NO_OUTER_SOLVER 0
-#define PCG 1
+#define HYPRE_PCG 1
 
 #define ONE_LEVEL 0
 #define ALL_LEVELS 1
@@ -138,6 +138,11 @@
 #define DELAY_SOME 2
 #define DELAY_ALL 3
 #define FAIL_ONE 4
+
+#define CHEBY_EIG_POWER 0
+#define CHEBY_EIG_HYPRE_LOBPCG 1
+#define CHEBY_EIG_SLEPC 2
+
 
 using namespace std;
 #ifdef USE_MFEM
@@ -212,17 +217,20 @@ typedef struct{
    int print_level_stats_flag;
    int smooth_interp_type;
    int read_type;
-   int eig_power_max_iters;
+   int cheby_eig_max_iters;
+   double cheby_eig_tol;
    int cheby_flag;
    int precond_flag;
    unsigned int delay_usec; 
-   int delay_flag;
+   int delay_type;
    char mat_file_str[1024];
    int omp_parfor_flag;
    double delay_frac;
    int construct_R_flag;
    int hypre_solver_flag;
    int fail_iter;
+   int cheby_eig_type;
+   double cheby_eig_sign;
 }InputData;
 
 typedef struct{
@@ -300,6 +308,7 @@ typedef struct{
    hypre_CSRMatrix *AA;
    HYPRE_Real *A_diag_ext;
    double **L1_row_norm;
+   double *L1_row_norm_ext;
    int n;
    int nx;
    int ny;

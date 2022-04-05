@@ -55,6 +55,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                         all_data->level_vector[thread_level].y[fine_grid],
                         all_data->input.num_fine_smooth_sweeps,
                         thread_level,
+                        CYCLE_PHASE_DOWN,
                         ns, ne);
             all_data->output.smooth_wtime[tid] += omp_get_wtime() - smooth_start;
 	    if (all_data->input.async_type == FULL_ASYNC){
@@ -145,6 +146,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                               all_data->level_vector[thread_level].y[thread_level],
                               all_data->input.num_fine_smooth_sweeps,
                               thread_level,
+                              CYCLE_PHASE_DOWN,
                               ns, ne);
                }
                else{
@@ -167,6 +169,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                               all_data->level_vector[thread_level].y[coarse_grid],
                               all_data->input.num_coarse_smooth_sweeps,
                               thread_level,
+                              CYCLE_PHASE_DOWN,
                               ns, ne);
                   ns = all_data->thread.A_ns[fine_grid][tid];
                   ne = all_data->thread.A_ne[fine_grid][tid];
@@ -192,6 +195,7 @@ void SMEM_Async_Add_AMG(AllData *all_data)
                               all_data->level_vector[thread_level].y[fine_grid],
                               all_data->input.num_fine_smooth_sweeps,
                               thread_level,
+                              CYCLE_PHASE_DOWN,
                               ns, ne);
                   ns = all_data->thread.A_ns[thread_level][tid];
                   ne = all_data->thread.A_ne[thread_level][tid];

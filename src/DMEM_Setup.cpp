@@ -126,7 +126,7 @@ void DMEM_Setup(DMEM_AllData *dmem_all_data)
                         &(dmem_all_data->hypre.solver));
    }
 
-   if (dmem_all_data->input.outer_solver == PCG){
+   if (dmem_all_data->input.outer_solver == HYPRE_PCG){
       glob_num_smooth_sweeps = dmem_all_data->input.num_add_smooth_sweeps;
       precond_zero_init_guess = 1;
       cycle_type = dmem_all_data->input.solver;
